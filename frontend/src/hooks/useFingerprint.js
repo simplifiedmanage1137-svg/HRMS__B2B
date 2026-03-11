@@ -125,7 +125,7 @@ export const useFingerprint = () => {
       const fingerprintData = await scanFingerprint();
       
       // Send to your main backend
-      const response = await fetch('https://employee-management-system-1-qs2v.onrender.com/api/attendance/clock-in', {
+      const response = await fetch('http://localhost:5173//api/attendance/clock-in', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

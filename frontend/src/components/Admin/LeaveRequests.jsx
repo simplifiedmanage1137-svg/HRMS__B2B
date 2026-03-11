@@ -79,7 +79,7 @@ const LeaveRequests = () => {
   const fetchLeaveRequests = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('https://employee-management-system-1-qs2v.onrender.com/api/leaves');
+      const response = await axios.get('http://localhost:5000/api/leaves');
       console.log('Leave requests fetched:', response.data);
       setLeaveRequests(response.data);
       setFilteredRequests(response.data);
@@ -135,7 +135,7 @@ const LeaveRequests = () => {
     setProcessing(true);
 
     try {
-      const response = await axios.put(`https://employee-management-system-1-qs2v.onrender.com/api/leaves/${id}/status`, {
+      const response = await axios.put(`http://localhost:5000/api/leaves/${id}/status`, {
         status,
         comments
       });

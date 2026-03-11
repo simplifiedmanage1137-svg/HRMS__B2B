@@ -112,7 +112,7 @@ const ApplyLeave = () => {
 
   const fetchEmployeeDetails = async () => {
     try {
-      const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com/api/employees/profile/${user.employeeId}`);
+      const response = await axios.get(`http://localhost:5000/api/employees/profile/${user.employeeId}`);
       
       // Calculate months completed from joining date
       const joiningDate = new Date(response.data.joining_date);
@@ -150,7 +150,7 @@ const ApplyLeave = () => {
 const fetchLeaveBalance = async () => {
   try {
     setLoading(true);
-    const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com/api/leaves/balance/${user.employeeId}`);
+    const response = await axios.get(`http://localhost:5000/api/leaves/balance/${user.employeeId}`);
     
     console.log('🔍 LEAVE BALANCE RESPONSE:', response.data); // YEH DEKHO
     
@@ -174,7 +174,7 @@ const fetchLeaveBalance = async () => {
 
   const fetchRecentLeaves = async () => {
     try {
-      const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com/api/leaves?employee_id=${user.employeeId}`);
+      const response = await axios.get(`http://localhost:5000/api/leaves?employee_id=${user.employeeId}`);
       setRecentLeaves(response.data.slice(0, 3));
     } catch (error) {
       console.error('Error fetching recent leaves:', error);
@@ -295,7 +295,7 @@ const fetchLeaveBalance = async () => {
         applied_date: new Date().toISOString().split('T')[0]
       };
 
-      const response = await axios.post('https://employee-management-system-1-qs2v.onrender.com/api/leaves/apply', leaveData, {
+      const response = await axios.post('http://localhost:5000/api/leaves/apply', leaveData, {
         headers: {
           'employee-id': user.employeeId
         }

@@ -35,7 +35,7 @@ export const AuthProvider = ({ children }) => {
         try {
             console.log('📤 Attempting login with:', { email });
             
-            const response = await axios.post('https://employee-management-system-1-qs2v.onrender.com/api/auth/login', {
+            const response = await axios.post('http://localhost:5000/api/auth/login', {
                 email,
                 password
             }, {

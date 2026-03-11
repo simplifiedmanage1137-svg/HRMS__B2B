@@ -27,7 +27,7 @@ const EmployeeProfileView = ({ show, onHide, employeeId }) => {
             setError('');
             console.log('📤 Fetching employee details for ID:', employeeId);
             
-            const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com/api/employees/${employeeId}`);
+            const response = await axios.get(`http://localhost:5000/api/employees/${employeeId}`);
             console.log('✅ Employee data received:', response.data);
             
             // Log specific fields to debug

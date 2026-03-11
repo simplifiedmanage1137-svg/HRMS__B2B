@@ -102,7 +102,7 @@ const AttendanceReports = () => {
   // ============== FETCH ALL EMPLOYEES ==============
   const fetchAllEmployees = async () => {
     try {
-      const response = await axios.get('https://employee-management-system-1-qs2v.onrender.com/api/employees');
+      const response = await axios.get('http://localhost:5000/api/employees');
       setAllEmployees(response.data);
       
       const depts = ['all', ...new Set(response.data.map(emp => emp.department).filter(Boolean))];
@@ -120,7 +120,7 @@ const AttendanceReports = () => {
       setLoading(true);
       
       const response = await axios.get(
-        `https://employee-management-system-1-qs2v.onrender.com/api/attendance/report?start=${selectedDate}&end=${selectedDate}`
+        `http://localhost:5000/api/attendance/report?start=${selectedDate}&end=${selectedDate}`
       );
       
       const attendanceData = response.data.attendance || [];
@@ -173,7 +173,7 @@ const AttendanceReports = () => {
       const startDateStr = startDate.toISOString().split('T')[0];
       const endDateStr = endDate.toISOString().split('T')[0];
       
-      let url = `https://employee-management-system-1-qs2v.onrender.com/api/attendance/report?start=${startDateStr}&end=${endDateStr}`;
+      let url = `http://localhost:5000/api/attendance/report?start=${startDateStr}&end=${endDateStr}`;
       if (department !== 'all') {
         url += `&department=${department}`;
       }
@@ -184,7 +184,7 @@ const AttendanceReports = () => {
       // Fetch leave data
       let leaveData = [];
       try {
-        const leaveResponse = await axios.get('https://employee-management-system-1-qs2v.onrender.com/api/leaves');
+        const leaveResponse = await axios.get('http://localhost:5000/api/leaves');
         leaveData = leaveResponse.data.filter(leave => 
           leave.status === 'approved' && 
           new Date(leave.end_date) >= startDate && 
@@ -442,7 +442,7 @@ const AttendanceReports = () => {
   // ============== GET LEAVE BALANCE FOR EMPLOYEE ==============
   const getLeaveBalance = async (employeeId) => {
     try {
-      const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com/api/leaves/balance/${employeeId}`);
+      const response = await axios.get(`http://localhost:5000/api/leaves/balance/${employeeId}`);
       return response.data.available || '0';
     } catch (error) {
       console.error('Error fetching leave balance:', error);

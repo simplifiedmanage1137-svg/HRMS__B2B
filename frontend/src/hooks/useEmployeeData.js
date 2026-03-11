@@ -14,7 +14,7 @@ export const useEmployeeData = (employeeId) => {
     
     try {
       setLoading(true);
-      const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com/api/employees/profile/${employeeId}`);
+      const response = await axios.get(`http://localhost:5173//api/employees/profile/${employeeId}`);
       setEmployee(response.data);
       setError('');
     } catch (error) {
