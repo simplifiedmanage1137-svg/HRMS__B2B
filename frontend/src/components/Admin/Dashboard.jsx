@@ -103,7 +103,7 @@ const AdminDashboard = () => {
     try {
       setLoading(true);
       
-      const employeesRes = await axios.get('http://localhost:5000/api/employees');
+      const employeesRes = await axios.get('https://employee-management-system-1-qs2v.onrender.com//api/employees');
       const employees = employeesRes.data;
       
       setTotalEmployees(employees.length);
@@ -115,7 +115,7 @@ const AdminDashboard = () => {
       
       const balancesPromises = employees.map(async (emp) => {
         try {
-          const balanceRes = await axios.get(`http://localhost:5000/api/leaves/balance/${emp.employee_id}`);
+          const balanceRes = await axios.get(`https://employee-management-system-1-qs2v.onrender.com//api/leaves/balance/${emp.employee_id}`);
           return {
             ...emp,
             leaveBalance: balanceRes.data
@@ -156,7 +156,7 @@ const AdminDashboard = () => {
   const refreshAttendanceData = async () => {
     try {
       const today = new Date().toISOString().split('T')[0];
-      const attendanceRes = await axios.get(`http://localhost:5000/api/attendance/report?start=${today}&end=${today}`);
+      const attendanceRes = await axios.get(`https://employee-management-system-1-qs2v.onrender.com//api/attendance/report?start=${today}&end=${today}`);
       
       const attendanceData = attendanceRes.data.attendance || [];
       setTodayAttendance(attendanceData);
@@ -171,7 +171,7 @@ const AdminDashboard = () => {
 
   const refreshLeaveRequests = async () => {
     try {
-      const leavesRes = await axios.get('http://localhost:5000/api/leaves');
+      const leavesRes = await axios.get('https://employee-management-system-1-qs2v.onrender.com//api/leaves');
       setLeaveRequests(leavesRes.data.filter(leave => leave.status === 'pending'));
     } catch (error) {
       console.error('Error refreshing leave requests:', error);

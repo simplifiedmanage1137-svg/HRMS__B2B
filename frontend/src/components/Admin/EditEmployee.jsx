@@ -65,7 +65,7 @@ const EditEmployee = () => {
             setLoading(true);
             console.log('📤 Fetching employee details for ID:', id);
             
-            const response = await axios.get(`http://localhost:5000/api/employees/${id}`);
+            const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com//api/employees/${id}`);
             console.log('✅ Employee data:', response.data);
             
             // Format dates for input fields
@@ -89,7 +89,7 @@ const EditEmployee = () => {
             setDocLoading(true);  // ✅ Ab defined hai
             console.log('📄 Fetching documents for employee ID:', id);
             
-            const response = await axios.get(`http://localhost:5000/api/employees/${id}/documents`);
+            const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com//api/employees/${id}/documents`);
             console.log('✅ Documents response:', response.data);
             
             // Process documents - filter out null/empty values
@@ -152,7 +152,7 @@ const EditEmployee = () => {
     const handleDownloadDocument = async (doc) => {
         try {
             const response = await axios.get(
-                `http://localhost:5000/api/employees/${formData.employee_id}/documents/${doc.type}`,
+                `https://employee-management-system-1-qs2v.onrender.com//api/employees/${formData.employee_id}/documents/${doc.type}`,
                 {
                     responseType: 'blob',
                     headers: { 'Accept': '*/*' }
@@ -196,7 +196,7 @@ const EditEmployee = () => {
         setSuccess('');
 
         try {
-            await axios.put(`http://localhost:5000/api/employees/${id}`, formData);
+            await axios.put(`https://employee-management-system-1-qs2v.onrender.com//api/employees/${id}`, formData);
             setSuccess('Employee updated successfully!');
             
             // Redirect after 2 seconds

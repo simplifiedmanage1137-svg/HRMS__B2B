@@ -27,7 +27,7 @@ const SendUpdateRequest = () => {
 
   const fetchEmployees = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/admin-updates/employees');
+      const response = await axios.get('https://employee-management-system-1-qs2v.onrender.com//api/admin-updates/employees');
       if (Array.isArray(response.data)) {
         setEmployees(response.data);
       }
@@ -70,7 +70,7 @@ const SendUpdateRequest = () => {
         }
       });
 
-      await axios.post('http://localhost:5000/api/admin-updates/send-request', {
+      await axios.post('https://employee-management-system-1-qs2v.onrender.com//api/admin-updates/send-request', {
         employee_id: selectedEmployee,
         requested_fields: selectedFields,      // Store categories
         requested_field_names: fieldsToUpdate,  // Store actual field names

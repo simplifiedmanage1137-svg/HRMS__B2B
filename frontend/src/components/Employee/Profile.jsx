@@ -67,7 +67,7 @@ const Profile = () => {
             
             let empData = user?.employeeData;
             if (!empData && user?.employeeId) {
-                const response = await axios.get(`http://localhost:5000/api/employees/profile/${user?.employeeId}`);
+                const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com//api/employees/profile/${user?.employeeId}`);
                 empData = response.data;
             }
             
@@ -85,7 +85,7 @@ const Profile = () => {
 
     const fetchLeaveBalance = async () => {
         try {
-            const response = await axios.get(`http://localhost:5000/api/leaves/balance/${user?.employeeId}`);
+            const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com//api/leaves/balance/${user?.employeeId}`);
             setLeaveBalance(response.data);
         } catch (error) {
             console.error('Error fetching leave balance:', error);
@@ -94,7 +94,7 @@ const Profile = () => {
 
     const fetchLeaveRequests = async () => {
         try {
-            const response = await axios.get(`http://localhost:5000/api/leaves?employee_id=${user?.employeeId}`);
+            const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com//api/leaves?employee_id=${user?.employeeId}`);
             setLeaveRequests(response.data || []);
         } catch (error) {
             console.error('Error fetching leave requests:', error);
@@ -206,7 +206,7 @@ const Profile = () => {
                                         <div className="mb-2">
                                             {employee.profile_image && !imageError ? (
                                                 <img 
-                                                    src={`http://localhost:5000/uploads/profiles/${encodeURIComponent(employee.profile_image)}`}
+                                                    src={`https://employee-management-system-1-qs2v.onrender.com//uploads/profiles/${encodeURIComponent(employee.profile_image)}`}
                                                     alt="Profile"
                                                     className="rounded-circle border"
                                                     style={{ 

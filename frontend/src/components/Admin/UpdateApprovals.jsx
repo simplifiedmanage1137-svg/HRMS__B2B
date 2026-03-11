@@ -23,7 +23,7 @@ const UpdateApprovals = () => {
       console.log('📤 Fetching completed requests...');
       
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5000/api/admin-updates/completed-requests', {
+      const response = await axios.get('https://employee-management-system-1-qs2v.onrender.com//api/admin-updates/completed-requests', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -57,7 +57,7 @@ const UpdateApprovals = () => {
       console.log('📤 Approving request:', requestId);
       
       const token = localStorage.getItem('token');
-      const response = await axios.post('http://localhost:5000/api/admin-updates/handle-request', 
+      const response = await axios.post('https://employee-management-system-1-qs2v.onrender.com//api/admin-updates/handle-request', 
         {
           request_id: requestId,
           action: 'approve'
@@ -95,7 +95,7 @@ const UpdateApprovals = () => {
       console.log('📤 Rejecting request:', requestId);
       
       const token = localStorage.getItem('token');
-      const response = await axios.post('http://localhost:5000/api/admin-updates/handle-request', 
+      const response = await axios.post('https://employee-management-system-1-qs2v.onrender.com//api/admin-updates/handle-request', 
         {
           request_id: requestId,
           action: 'reject'

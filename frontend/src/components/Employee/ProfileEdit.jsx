@@ -35,7 +35,7 @@ const ProfileEdit = () => {
     const fetchEmployeeData = async () => {
         try {
             setLoading(true);
-            const response = await axios.get(`http://localhost:5000/api/employees/profile/${user?.employeeId}`);
+            const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com//api/employees/profile/${user?.employeeId}`);
             
             // Populate form data with existing values
             const employeeData = response.data;
@@ -80,7 +80,7 @@ const ProfileEdit = () => {
             // Get employee ID from user object
             const employeeId = user?.employeeId;
             
-            await axios.put(`http://localhost:5000/api/employees/${employeeId}`, formData);
+            await axios.put(`https://employee-management-system-1-qs2v.onrender.com//api/employees/${employeeId}`, formData);
             
             setSuccess('Profile updated successfully!');
             

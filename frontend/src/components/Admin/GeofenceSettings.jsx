@@ -20,7 +20,7 @@ const GeofenceSettings = () => {
 
   const fetchGeofences = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/geofence/list');
+      const response = await axios.get('https://employee-management-system-1-qs2v.onrender.com//api/geofence/list');
       setGeofences(response.data);
     } catch (error) {
       console.error('Error fetching geofences:', error);
@@ -30,9 +30,9 @@ const GeofenceSettings = () => {
   const handleSubmit = async () => {
     try {
       if (editingGeofence) {
-        await axios.put(`http://localhost:5000/api/geofence/${editingGeofence.id}`, formData);
+        await axios.put(`https://employee-management-system-1-qs2v.onrender.com//api/geofence/${editingGeofence.id}`, formData);
       } else {
-        await axios.post('http://localhost:5000/api/geofence', formData);
+        await axios.post('https://employee-management-system-1-qs2v.onrender.com//api/geofence', formData);
       }
       fetchGeofences();
       setShowModal(false);
@@ -45,7 +45,7 @@ const GeofenceSettings = () => {
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure?')) {
       try {
-        await axios.delete(`http://localhost:5000/api/geofence/${id}`);
+        await axios.delete(`https://employee-management-system-1-qs2v.onrender.com//api/geofence/${id}`);
         fetchGeofences();
       } catch (error) {
         console.error('Error deleting geofence:', error);

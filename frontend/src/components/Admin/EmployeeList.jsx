@@ -40,7 +40,7 @@ const EmployeeList = () => {
   const fetchEmployees = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('http://localhost:5000/api/employees');
+      const response = await axios.get('https://employee-management-system-1-qs2v.onrender.com//api/employees');
       setEmployees(response.data);
       setError('');
     } catch (error) {
@@ -57,7 +57,7 @@ const EmployeeList = () => {
       setDocLoading(true);
       setSelectedEmployeeForDocs(employee);
       
-      const response = await axios.get(`http://localhost:5000/api/employees/${employee.employee_id}/documents`);
+      const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com//api/employees/${employee.employee_id}/documents`);
       
       // Process documents - filter out null/empty values
       const docs = Object.entries(response.data)
@@ -122,7 +122,7 @@ const EmployeeList = () => {
       
       // For all document types, open in new tab using the API endpoint
       // Add ?inline=true so backend serves it with Content-Disposition: inline
-      const viewUrl = `http://localhost:5000/api/employees/${selectedEmployeeForDocs.employee_id}/documents/${doc.type}?inline=true`;
+      const viewUrl = `https://employee-management-system-1-qs2v.onrender.com//api/employees/${selectedEmployeeForDocs.employee_id}/documents/${doc.type}?inline=true`;
       
       // Open in new tab - backend will now return inline content when possible
       window.open(viewUrl, '_blank');
@@ -145,7 +145,7 @@ const EmployeeList = () => {
 
       // Make API call with responseType blob to force download
       const response = await axios.get(
-        `http://localhost:5000/api/employees/${selectedEmployeeForDocs.employee_id}/documents/${doc.type}`,
+        `https://employee-management-system-1-qs2v.onrender.com//api/employees/${selectedEmployeeForDocs.employee_id}/documents/${doc.type}`,
         {
           responseType: 'blob',
           headers: {
@@ -186,7 +186,7 @@ const EmployeeList = () => {
     
     setDeleting(true);
     try {
-      await axios.delete(`http://localhost:5000/api/employees/${selectedEmployee.id}`);
+      await axios.delete(`https://employee-management-system-1-qs2v.onrender.com//api/employees/${selectedEmployee.id}`);
       setShowDeleteModal(false);
       await fetchEmployees();
       showNotification(`Employee "${selectedEmployee.first_name} ${selectedEmployee.last_name}" deleted successfully!`, 'success');
