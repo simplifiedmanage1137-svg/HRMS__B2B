@@ -13,13 +13,9 @@ dotenv.config();
 
 // ============== MIDDLEWARE ==============
 app.use(cors({
-  origin: [
-    'http://localhost:5173', // local dev
-    'https://employee-management-git-55b0f3-tejaspawar9170-netizens-projects.vercel.app' // Vercel frontend
-  ],
-  credentials: true
+    origin: 'https://employee-management-system-1-qs2v.onrender.com',
+    credentials: true
 }));
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

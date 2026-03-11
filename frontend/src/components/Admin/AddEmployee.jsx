@@ -342,7 +342,7 @@ const generateEmployeeId = async () => {
   
   try {
     // Get all employees to check existing IDs
-    const response = await axios.get('https://employee-management-system-1-qs2v.onrender.com//api/employees');
+    const response = await axios.get('https://employee-management-system-1-qs2v.onrender.com/api/employees');
     const employees = response.data;
     
     console.log('Total employees:', employees.length);
@@ -414,7 +414,7 @@ const generateEmployeeId = async () => {
         setUploadProgress(Math.round(((i + 1) / validUploads.length) * 100));
         
         // FIXED: Use the correct URL format - employee_id as path parameter, not in query
-        const url = `https://employee-management-system-1-qs2v.onrender.com//api/employees/${empId}/documents`;
+        const url = `https://employee-management-system-1-qs2v.onrender.com/api/employees/${empId}/documents`;
         console.log(`Uploading to: ${url}`);
         console.log(`Document type: ${upload.type}, File:`, upload.file);
         
@@ -450,7 +450,7 @@ const generateEmployeeId = async () => {
   // Test API connection
   const testApiConnection = async () => {
     try {
-      const response = await axios.get('https://employee-management-system-1-qs2v.onrender.com//api/test');
+      const response = await axios.get('https://employee-management-system-1-qs2v.onrender.com/api/test');
       console.log('API Test:', response.data);
       return true;
     } catch (error) {
@@ -540,7 +540,7 @@ const handleFinalSubmit = async (e) => {
     setDebugInfo(employeeData);
 
     // Create employee
-    const response = await axios.post('https://employee-management-system-1-qs2v.onrender.com//api/employees', employeeData, {
+    const response = await axios.post('https://employee-management-system-1-qs2v.onrender.com/api/employees', employeeData, {
       headers: {
         'Content-Type': 'application/json'
       }

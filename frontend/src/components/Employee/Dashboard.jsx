@@ -224,7 +224,7 @@ const EmployeeDashboard = () => {
 
   const fetchEmployeeData = async () => {
     try {
-      const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com//api/employees/profile/${user.employeeId}`);
+      const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com/api/employees/profile/${user.employeeId}`);
       setEmployee(response.data);
     } catch (error) {
       console.error('Error fetching employee:', error);
@@ -236,7 +236,7 @@ const EmployeeDashboard = () => {
     try {
       console.log('Fetching leave balance for:', user.employeeId);
       
-      const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com//api/leaves/balance/${user.employeeId}`);
+      const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com/api/leaves/balance/${user.employeeId}`);
       console.log('Leave balance response:', response.data);
       
       // Ensure we have valid numbers
@@ -266,7 +266,7 @@ const EmployeeDashboard = () => {
 
   const fetchLeaveRequests = async () => {
     try {
-      const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com//api/leaves?employee_id=${user.employeeId}`);
+      const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com/api/leaves?employee_id=${user.employeeId}`);
       const leaves = response.data || [];
       setLeaveRequests(leaves.slice(0, 5)); // Show only 5 most recent
       
@@ -287,7 +287,7 @@ const EmployeeDashboard = () => {
     try {
       const today = new Date().toISOString().split('T')[0];
       const response = await axios.get(
-        `https://employee-management-system-1-qs2v.onrender.com//api/attendance/report?start=${today}&end=${today}&employee_id=${user.employeeId}`
+        `https://employee-management-system-1-qs2v.onrender.com/api/attendance/report?start=${today}&end=${today}&employee_id=${user.employeeId}`
       );
       
       if (response.data.attendance && response.data.attendance.length > 0) {
@@ -308,7 +308,7 @@ const EmployeeDashboard = () => {
       const endDateStr = endDate.toISOString().split('T')[0];
       
       const response = await axios.get(
-        `https://employee-management-system-1-qs2v.onrender.com//api/attendance/report?start=${startDateStr}&end=${endDateStr}&employee_id=${user.employeeId}`
+        `https://employee-management-system-1-qs2v.onrender.com/api/attendance/report?start=${startDateStr}&end=${endDateStr}&employee_id=${user.employeeId}`
       );
       
       const attendance = response.data.attendance || [];

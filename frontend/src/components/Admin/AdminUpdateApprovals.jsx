@@ -15,7 +15,7 @@ const AdminUpdateApprovals = () => {
   const fetchCompletedRequests = async () => {
     try {
       const response = await axios.get(
-        'https://employee-management-system-1-qs2v.onrender.com//api/admin-updates/completed-requests'
+        'https://employee-management-system-1-qs2v.onrender.com/api/admin-updates/completed-requests'
       );
       setCompletedRequests(response.data);
     } catch (error) {
@@ -26,7 +26,7 @@ const AdminUpdateApprovals = () => {
   const handleApprove = async (requestId) => {
     setLoading(true);
     try {
-      await axios.post('https://employee-management-system-1-qs2v.onrender.com//api/admin-updates/handle-request', {
+      await axios.post('https://employee-management-system-1-qs2v.onrender.com/api/admin-updates/handle-request', {
         requestId,
         action: 'approve'
       });
@@ -45,7 +45,7 @@ const AdminUpdateApprovals = () => {
   const handleReject = async (requestId) => {
     setLoading(true);
     try {
-      await axios.post('https://employee-management-system-1-qs2v.onrender.com//api/admin-updates/handle-request', {
+      await axios.post('https://employee-management-system-1-qs2v.onrender.com/api/admin-updates/handle-request', {
         requestId,
         action: 'reject'
       });

@@ -107,7 +107,7 @@ const EmployeeUpdateRequests = () => {
       console.log('📤 Fetching pending requests for employee:', user?.employeeId);
       
       const token = localStorage.getItem('token');
-      const response = await axios.get('https://employee-management-system-1-qs2v.onrender.com//api/employee-updates/pending-requests', {
+      const response = await axios.get('https://employee-management-system-1-qs2v.onrender.com/api/employee-updates/pending-requests', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -160,7 +160,7 @@ const EmployeeUpdateRequests = () => {
   const fetchCurrentEmployeeData = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com//api/employees/profile/${user?.employeeId}`, {
+      const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com/api/employees/profile/${user?.employeeId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       console.log('✅ Current employee data:', response.data);
@@ -177,7 +177,7 @@ const EmployeeUpdateRequests = () => {
       
       const token = localStorage.getItem('token');
       await axios.post(
-        `https://employee-management-system-1-qs2v.onrender.com//api/employee-updates/accept-request/${request.id}`,
+        `https://employee-management-system-1-qs2v.onrender.com/api/employee-updates/accept-request/${request.id}`,
         {},
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
@@ -235,7 +235,7 @@ const EmployeeUpdateRequests = () => {
 
       const token = localStorage.getItem('token');
       await axios.post(
-        'https://employee-management-system-1-qs2v.onrender.com//api/employee-updates/submit-update',
+        'https://employee-management-system-1-qs2v.onrender.com/api/employee-updates/submit-update',
         {
           requestId: selectedRequest.id,
           updatedData: updateData

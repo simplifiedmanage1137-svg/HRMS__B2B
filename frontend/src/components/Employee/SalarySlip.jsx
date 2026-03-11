@@ -131,7 +131,7 @@ const SalarySlip = () => {
 
   const fetchEmployeeData = async () => {
     try {
-      const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com//api/employees/profile/${user.employeeId}`);
+      const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com/api/employees/profile/${user.employeeId}`);
       setEmployee(response.data);
     } catch (error) {
       console.error('Error fetching employee:', error);
@@ -141,7 +141,7 @@ const SalarySlip = () => {
   const fetchSalarySlips = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com//api/salary/employee/${user.employeeId}`);
+      const response = await axios.get(`https://employee-management-system-1-qs2v.onrender.com/api/salary/employee/${user.employeeId}`);
       setSalarySlips(response.data.salarySlips || []);
       
       if (response.data.joiningInfo) {
@@ -229,7 +229,7 @@ const SalarySlip = () => {
     setMessage({ type: '', text: '' });
 
     try {
-      const response = await axios.post('https://employee-management-system-1-qs2v.onrender.com//api/salary/generate', {
+      const response = await axios.post('https://employee-management-system-1-qs2v.onrender.com/api/salary/generate', {
         employee_id: user.employeeId,
         month: parseInt(selectedMonth),
         year: parseInt(selectedYear)
