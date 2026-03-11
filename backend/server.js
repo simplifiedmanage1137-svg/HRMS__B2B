@@ -12,9 +12,14 @@ const app = express();
 dotenv.config();
 
 // ============== MIDDLEWARE ==============
+
+
+// Option 2: Configure specific origins (recommended for production)
 app.use(cors({
-    origin: 'https://employee-management-system-1-qs2v.onrender.com',
-    credentials: true
+  origin: ['https://employee-management-git-55b0f3-tejaspawar9170-netizens-projects.vercel.app'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
