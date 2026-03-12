@@ -1,11 +1,11 @@
 // components/Admin/AttendanceReports.jsx
 import React, { useState, useEffect } from 'react';
-import { 
-  Card, Table, Badge, Form, Row, Col, 
-  Button, Spinner, Alert 
+import {
+  Card, Table, Badge, Form, Row, Col,
+  Button, Spinner, Alert
 } from 'react-bootstrap';
-import { 
-  FaCalendarAlt, 
+import {
+  FaCalendarAlt,
   FaFileExcel,
   FaArrowLeft,
   FaArrowRight,
@@ -26,13 +26,13 @@ import { holidays as holidayData } from '../../data/holidays';
 const AttendanceReports = () => {
   // ============== STATE VARIABLES ==============
   const [activeView, setActiveView] = useState('daily');
-  
+
   // Daily View State
   const [dailyAttendance, setDailyAttendance] = useState([]);
   const [selectedDate, setSelectedDate] = useState(
     new Date().toISOString().split('T')[0]
   );
-  
+
   // Monthly View State
   const [monthlyAttendance, setMonthlyAttendance] = useState([]);
   const [allEmployees, setAllEmployees] = useState([]);
@@ -43,13 +43,13 @@ const AttendanceReports = () => {
   const [monthlyStats, setMonthlyStats] = useState({});
   const [daysInMonth, setDaysInMonth] = useState(0);
   const [exportFormat, setExportFormat] = useState('detailed');
-  
+
   // Current date for highlighting
   const currentDate = new Date();
   const currentDay = currentDate.getDate();
   const currentMonth = currentDate.getMonth() + 1;
   const currentYear = currentDate.getFullYear();
-  
+
   // Common State
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -104,10 +104,10 @@ const AttendanceReports = () => {
     try {
       const response = await axios.get('http://localhost:5000/api/employees');
       setAllEmployees(response.data);
-      
+
       const depts = ['all', ...new Set(response.data.map(emp => emp.department).filter(Boolean))];
       setDepartments(depts);
-      
+
     } catch (error) {
       console.error('Error fetching employees:', error);
       setMessage('Failed to load employees');
@@ -118,13 +118,13 @@ const AttendanceReports = () => {
   const fetchDailyAttendance = async () => {
     try {
       setLoading(true);
-      
+
       const response = await axios.get(
         `http://localhost:5000/api/attendance/report?start=${selectedDate}&end=${selectedDate}`
       );
-      
+
       const attendanceData = response.data.attendance || [];
-      
+
       // Process attendance data
       const processedAttendance = attendanceData.map(record => {
         if (record.clock_in && !record.clock_out) {
@@ -134,7 +134,7 @@ const AttendanceReports = () => {
           record.total_hours = currentHours.toFixed(2);
           record.status = 'working';
         }
-        
+
         if (record.late_minutes > 0) {
           const totalSeconds = Math.round(record.late_minutes * 60);
           if (totalSeconds < 60) {
@@ -142,18 +142,18 @@ const AttendanceReports = () => {
           } else {
             const mins = Math.floor(totalSeconds / 60);
             const secs = totalSeconds % 60;
-            record.late_display = mins > 0 ? 
-              (secs > 0 ? `${mins}m ${secs}s late` : `${mins}m late`) : 
+            record.late_display = mins > 0 ?
+              (secs > 0 ? `${mins}m ${secs}s late` : `${mins}m late`) :
               `${secs}s late`;
           }
         }
-        
+
         return record;
       });
-      
+
       setDailyAttendance(processedAttendance);
       setMessage('');
-      
+
     } catch (error) {
       console.error('Error fetching daily attendance:', error);
       setMessage('Failed to load attendance');
@@ -166,41 +166,41 @@ const AttendanceReports = () => {
   const fetchMonthlyAttendance = async () => {
     try {
       setLoading(true);
-      
+
       const startDate = new Date(selectedYear, selectedMonth - 1, 1);
       const endDate = new Date(selectedYear, selectedMonth, 0);
-      
+
       const startDateStr = startDate.toISOString().split('T')[0];
       const endDateStr = endDate.toISOString().split('T')[0];
-      
+
       let url = `http://localhost:5000/api/attendance/report?start=${startDateStr}&end=${endDateStr}`;
       if (department !== 'all') {
         url += `&department=${department}`;
       }
-      
+
       const response = await axios.get(url);
       const attendanceData = response.data.attendance || [];
-      
+
       // Fetch leave data
       let leaveData = [];
       try {
         const leaveResponse = await axios.get('http://localhost:5000/api/leaves');
-        leaveData = leaveResponse.data.filter(leave => 
-          leave.status === 'approved' && 
-          new Date(leave.end_date) >= startDate && 
+        leaveData = leaveResponse.data.filter(leave =>
+          leave.status === 'approved' &&
+          new Date(leave.end_date) >= startDate &&
           new Date(leave.start_date) <= endDate
         );
       } catch (error) {
         console.log('Could not fetch leave data');
       }
-      
+
       // Filter holidays for selected month and year
       const monthHolidays = holidayData.filter(holiday => {
         const holidayDate = new Date(holiday.date);
-        return holidayDate.getFullYear() === selectedYear && 
-               holidayDate.getMonth() + 1 === selectedMonth;
+        return holidayDate.getFullYear() === selectedYear &&
+          holidayDate.getMonth() + 1 === selectedMonth;
       });
-      
+
       // Process data with holiday support
       const processedData = processMonthlyAttendance(
         attendanceData,
@@ -210,11 +210,11 @@ const AttendanceReports = () => {
         startDate,
         endDate
       );
-      
+
       setMonthlyAttendance(processedData);
       calculateMonthlyStatistics(processedData);
       setMessage('');
-      
+
     } catch (error) {
       console.error('Error fetching monthly attendance:', error);
       setMessage('Failed to load monthly attendance');
@@ -227,7 +227,7 @@ const AttendanceReports = () => {
   const processMonthlyAttendance = (attendanceData, employees, leaveData, holidays, startDate, endDate) => {
     const daysInMonth = endDate.getDate();
     const processedData = [];
-    
+
     // Create attendance map
     const attendanceMap = {};
     attendanceData.forEach(record => {
@@ -237,13 +237,13 @@ const AttendanceReports = () => {
         attendanceMap[key] = record;
       }
     });
-    
+
     // Create leave map
     const leaveMap = {};
     leaveData.forEach(leave => {
       const leaveStart = new Date(leave.start_date);
       const leaveEnd = new Date(leave.end_date || leave.start_date);
-      
+
       for (let d = new Date(leaveStart); d <= leaveEnd; d.setDate(d.getDate() + 1)) {
         const dateStr = d.toISOString().split('T')[0];
         const key = `${leave.employee_id}-${dateStr}`;
@@ -253,7 +253,7 @@ const AttendanceReports = () => {
         };
       }
     });
-    
+
     // Create holiday map
     const holidayMap = {};
     holidays.forEach(holiday => {
@@ -263,23 +263,23 @@ const AttendanceReports = () => {
         region: holiday.region
       };
     });
-    
+
     // Filter employees by department
     let filteredEmployees = employees;
     if (department !== 'all') {
       filteredEmployees = employees.filter(emp => emp.department === department);
     }
-    
+
     filteredEmployees.forEach(employee => {
       for (let day = 1; day <= daysInMonth; day++) {
         const currentDate = new Date(selectedYear, selectedMonth - 1, day);
         const dateStr = currentDate.toISOString().split('T')[0];
-        
+
         const attendanceKey = `${employee.employee_id}-${dateStr}`;
         const dayAttendance = attendanceMap[attendanceKey];
         const dayLeave = leaveMap[attendanceKey];
         const dayHoliday = holidayMap[dateStr];
-        
+
         let status = 'absent';
         let statusBadge = 'danger';
         let statusIcon = '✗';
@@ -289,7 +289,7 @@ const AttendanceReports = () => {
         let lateMinutes = 0;
         let tooltip = 'Absent';
         let leaveType = null;
-        
+
         // PRIORITY: Holiday > Leave > Attendance
         if (dayHoliday) {
           status = 'holiday';
@@ -309,9 +309,9 @@ const AttendanceReports = () => {
           clockOut = dayAttendance.clock_out;
           totalHours = parseFloat(dayAttendance.total_hours) || 0;
           lateMinutes = dayAttendance.late_minutes || 0;
-          
+
           const isToday = dateStr === new Date().toISOString().split('T')[0];
-          
+
           if (isToday && clockIn && !clockOut) {
             status = 'working';
             statusBadge = 'info';
@@ -320,7 +320,7 @@ const AttendanceReports = () => {
             if (lateMinutes > 0) {
               tooltip += ` | Late: ${formatLateDisplay(lateMinutes)}`;
             }
-            
+
             const now = new Date();
             const clockInTime = new Date(clockIn);
             totalHours = (now - clockInTime) / (1000 * 60 * 60);
@@ -339,7 +339,7 @@ const AttendanceReports = () => {
               statusBadge = 'danger';
               statusIcon = '✗';
             }
-            
+
             tooltip = `In: ${formatShortTime(clockIn)} | Out: ${formatShortTime(clockOut)} | Hrs: ${totalHours.toFixed(1)}`;
             if (lateMinutes > 0) {
               tooltip += ` | Late: ${formatLateDisplay(lateMinutes)}`;
@@ -355,7 +355,7 @@ const AttendanceReports = () => {
             }
           }
         }
-        
+
         processedData.push({
           id: `${employee.employee_id}-${dateStr}`,
           employee_id: employee.employee_id,
@@ -378,14 +378,14 @@ const AttendanceReports = () => {
         });
       }
     });
-    
+
     return processedData;
   };
 
   // ============== CALCULATE MONTHLY STATISTICS ==============
   const calculateMonthlyStatistics = (data) => {
     const perEmployee = {};
-    
+
     data.forEach(record => {
       if (!perEmployee[record.employee_id]) {
         perEmployee[record.employee_id] = {
@@ -402,7 +402,7 @@ const AttendanceReports = () => {
           leave_types: []
         };
       }
-      
+
       if (record.status === 'present') perEmployee[record.employee_id].present++;
       else if (record.status === 'half_day') perEmployee[record.employee_id].half_day++;
       else if (record.status === 'absent') perEmployee[record.employee_id].absent++;
@@ -414,17 +414,17 @@ const AttendanceReports = () => {
       }
       else if (record.status === 'working') perEmployee[record.employee_id].working++;
       else if (record.status === 'holiday') perEmployee[record.employee_id].holiday++;
-      
+
       // Count late logins
       if (record.is_late) {
         perEmployee[record.employee_id].late_count++;
         perEmployee[record.employee_id].total_late_minutes += record.late_minutes || 0;
       }
-      
+
       const hours = parseFloat(record.total_hours || 0);
       perEmployee[record.employee_id].total_hours += hours;
     });
-    
+
     // Calculate average late minutes
     Object.keys(perEmployee).forEach(empId => {
       const emp = perEmployee[empId];
@@ -435,7 +435,7 @@ const AttendanceReports = () => {
       }
       emp.unique_leave_types = [...new Set(emp.leave_types)];
     });
-    
+
     setMonthlyStats(perEmployee);
   };
 
@@ -484,26 +484,26 @@ const AttendanceReports = () => {
   const calculateSalary = (employee, presentDays, halfDays, lateCount) => {
     const grossSalary = parseFloat(employee.gross_salary) || 0;
     const inHandSalary = parseFloat(employee.in_hand_salary) || 0;
-    
+
     // Calculate per day salary
     const perDaySalary = grossSalary / 30; // Assuming 30 days month
-    
+
     // Calculate actual salary based on attendance
     const totalWorkingDays = presentDays + (halfDays * 0.5);
     const actualSalary = totalWorkingDays * perDaySalary;
-    
+
     // Professional Tax (fixed ₹200)
     const profTax = PROFESSIONAL_TAX;
-    
+
     // Other deductions (can be customized based on late count, etc.)
     const otherDeductions = OTHER_DEDUCTIONS;
-    
+
     // Total deductions
     const totalDeductions = profTax + otherDeductions;
-    
+
     // Net salary to be paid
     const netSalaryToPay = actualSalary - totalDeductions;
-    
+
     return {
       grossSalary: grossSalary.toFixed(2),
       inHandSalary: inHandSalary.toFixed(2),
@@ -521,7 +521,7 @@ const AttendanceReports = () => {
       // Daily Export (keep existing format)
       const exportDate = new Date(selectedDate);
       const formattedDate = exportDate.toLocaleDateString();
-      
+
       const exportData = dailyAttendance.map((record, index) => ({
         'Sr No': index + 1,
         'Date': formattedDate,
@@ -534,15 +534,15 @@ const AttendanceReports = () => {
         'Total Hours': record.total_hours || '0.0',
         'Late Duration': record.late_display || '0',
         'Late (minutes)': record.late_minutes ? (record.late_minutes * 60).toFixed(0) : '0',
-        'Status': record.status === 'present' ? 'Present' : 
-                  record.status === 'half_day' ? 'Half Day' : 
-                  record.status === 'working' ? 'Working' : 
-                  record.status === 'on_leave' ? 'On Leave' : 
-                  record.status === 'holiday' ? 'Holiday' : 'Absent'
+        'Status': record.status === 'present' ? 'Present' :
+          record.status === 'half_day' ? 'Half Day' :
+            record.status === 'working' ? 'Working' :
+              record.status === 'on_leave' ? 'On Leave' :
+                record.status === 'holiday' ? 'Holiday' : 'Absent'
       }));
 
       const ws = XLSX.utils.json_to_sheet(exportData);
-      
+
       const colWidths = [
         { wch: 8 },   // Sr No
         { wch: 12 },  // Date
@@ -558,19 +558,19 @@ const AttendanceReports = () => {
         { wch: 12 }   // Status
       ];
       ws['!cols'] = colWidths;
-      
+
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Daily Attendance');
       XLSX.writeFile(wb, `Daily_Attendance_${selectedDate}.xlsx`);
-      
+
     } else {
       // Monthly Export - COMPLETE FORMAT
       const currentMonthData = months.find(m => m.value === selectedMonth);
       const monthShort = currentMonthData?.short || 'Month';
       const monthName = currentMonthData?.label || 'Month';
-      
+
       const exportData = [];
-      
+
       // Sort employees
       const sortedEmployees = [...allEmployees].sort((a, b) => {
         if (department !== 'all') {
@@ -583,7 +583,7 @@ const AttendanceReports = () => {
       for (const employee of sortedEmployees) {
         // Filter department if needed
         if (department !== 'all' && employee.department !== department) continue;
-        
+
         const empRecords = monthlyAttendance.filter(r => r.employee_id === employee.employee_id);
         const empStats = monthlyStats[employee.employee_id] || {
           present: 0,
@@ -592,25 +592,25 @@ const AttendanceReports = () => {
           on_leave: 0,
           late_count: 0
         };
-        
+
         // Get leave balance
         const leaveBalance = await getLeaveBalance(employee.employee_id);
-        
+
         // Calculate salary components
         const salary = calculateSalary(employee, empStats.present, empStats.half_day, empStats.late_count);
-        
+
         // Create row for this employee
         const row = {
           'Employee Name': `${employee.first_name || ''} ${employee.last_name || ''}`.trim(),
           'Date of Joining': employee.joining_date ? new Date(employee.joining_date).toLocaleDateString() : 'N/A',
           'Leave Balance': leaveBalance,
         };
-        
+
         // Add each day's status with month and date
         for (let day = 1; day <= daysInMonth; day++) {
           const dayRecord = empRecords.find(r => r.day === day);
           let status = '';
-          
+
           if (dayRecord) {
             if (dayRecord.status === 'present' || dayRecord.status === 'working') {
               status = 'P';
@@ -626,11 +626,11 @@ const AttendanceReports = () => {
           } else {
             status = 'A';
           }
-          
+
           // Format: "Mar 1", "Mar 2", etc.
           row[`${monthShort} ${day}`] = status;
         }
-        
+
         // Add all required columns
         row['Days of the Month'] = daysInMonth;
         row['Actual Present Days'] = (empStats.present + (empStats.half_day * 0.5)).toFixed(1);
@@ -650,25 +650,25 @@ const AttendanceReports = () => {
         row['Account Number'] = employee.account_number || 'N/A';
         row['IFSC Code'] = employee.ifsc_code || 'N/A';
         row['Bank Name'] = employee.bank_account_name || 'N/A';
-        
+
         exportData.push(row);
       }
 
       // Create worksheet
       const ws = XLSX.utils.json_to_sheet(exportData);
-      
+
       // Calculate column widths
       const colWidths = [
         { wch: 25 }, // Employee Name
         { wch: 15 }, // Date of Joining
         { wch: 12 }, // Leave Balance
       ];
-      
+
       // Add widths for each day column
       for (let i = 1; i <= daysInMonth; i++) {
         colWidths.push({ wch: 8 }); // "Mar 1" style
       }
-      
+
       // Add widths for summary columns
       colWidths.push(
         { wch: 15 }, // Days of the Month
@@ -689,9 +689,9 @@ const AttendanceReports = () => {
         { wch: 15 }, // IFSC Code
         { wch: 20 }  // Bank Name
       );
-      
+
       ws['!cols'] = colWidths;
-      
+
       // Create workbook and save
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Monthly Attendance');
@@ -730,13 +730,13 @@ const AttendanceReports = () => {
 
   const getStatusBadge = (record) => {
     if (record.status === 'working') {
-      return record.is_late ? 
-        <Badge bg="warning" className="px-2 py-1" style={{ backgroundColor: '#fd7e14' }}>Working (Late)</Badge> : 
+      return record.is_late ?
+        <Badge bg="warning" className="px-2 py-1" style={{ backgroundColor: '#fd7e14' }}>Working (Late)</Badge> :
         <Badge bg="info" className="px-2 py-1">Working</Badge>;
     }
     if (record.status === 'present') {
-      return record.is_late ? 
-        <Badge bg="warning" className="px-2 py-1" style={{ backgroundColor: '#fd7e14' }}>Present (Late)</Badge> : 
+      return record.is_late ?
+        <Badge bg="warning" className="px-2 py-1" style={{ backgroundColor: '#fd7e14' }}>Present (Late)</Badge> :
         <Badge bg="success" className="px-2 py-1">Present</Badge>;
     }
     if (record.status === 'half_day') return <Badge bg="warning" className="px-2 py-1">Half Day</Badge>;
@@ -746,9 +746,9 @@ const AttendanceReports = () => {
   };
 
   const isCurrentDate = (day) => {
-    return selectedMonth === currentMonth && 
-           selectedYear === currentYear && 
-           day === currentDay;
+    return selectedMonth === currentMonth &&
+      selectedYear === currentYear &&
+      day === currentDay;
   };
 
   // ============== RENDER ==============
@@ -772,16 +772,16 @@ const AttendanceReports = () => {
 
       {/* View Tabs */}
       <div className="mb-3 border-bottom">
-        <Button 
-          variant={activeView === 'daily' ? 'primary' : 'light'} 
+        <Button
+          variant={activeView === 'daily' ? 'primary' : 'light'}
           size="sm"
           onClick={() => setActiveView('daily')}
           className="me-2"
         >
           <FaEye className="me-1" size={12} /> Daily View
         </Button>
-        <Button 
-          variant={activeView === 'monthly' ? 'primary' : 'light'} 
+        <Button
+          variant={activeView === 'monthly' ? 'primary' : 'light'}
           size="sm"
           onClick={() => setActiveView('monthly')}
         >
@@ -813,18 +813,18 @@ const AttendanceReports = () => {
                   <Button variant="outline-secondary" size="sm" onClick={handlePreviousMonth}>
                     <FaArrowLeft size={10} />
                   </Button>
-                  <Form.Select 
-                    size="sm" 
-                    value={selectedMonth} 
+                  <Form.Select
+                    size="sm"
+                    value={selectedMonth}
                     onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
                     className="mx-1"
                     style={{ width: '100px' }}
                   >
                     {months.map(m => <option key={m.value} value={m.value}>{m.short}</option>)}
                   </Form.Select>
-                  <Form.Select 
-                    size="sm" 
-                    value={selectedYear} 
+                  <Form.Select
+                    size="sm"
+                    value={selectedYear}
                     onChange={(e) => setSelectedYear(parseInt(e.target.value))}
                     className="me-1"
                     style={{ width: '80px' }}
@@ -835,7 +835,7 @@ const AttendanceReports = () => {
                     <FaArrowRight size={10} />
                   </Button>
                 </div>
-                
+
                 <Button variant="outline-primary" size="sm" onClick={goToCurrentMonth}>
                   Current
                 </Button>
@@ -854,7 +854,7 @@ const AttendanceReports = () => {
                 </Form.Select>
               </div>
             </Col>
-            
+
             <Col md={4}>
               <div className="d-flex gap-2 justify-content-end">
                 <Button variant="success" size="sm" onClick={handleExportExcel}>
@@ -940,9 +940,9 @@ const AttendanceReports = () => {
                             </span>
                           </td>
                           <td className="small">
-                            {record.late_display ? (
+                            {record.late_minutes > 0 ? (
                               <Badge bg="warning" pill className="text-nowrap" style={{ backgroundColor: '#fd7e14' }}>
-                                {record.late_display}
+                                {formatLateDisplay(record.late_minutes)}
                               </Badge>
                             ) : '-'}
                           </td>
@@ -1032,12 +1032,12 @@ const AttendanceReports = () => {
                     <tr>
                       {/* Fixed First Column Header */}
                       <th className="fixed-col-header col-1 text-center fw-normal small bg-light"
-                          style={{ left: 0, top: 0 }}>
+                        style={{ left: 0, top: 0 }}>
                         #
                       </th>
                       {/* Fixed Second Column Header */}
                       <th className="fixed-col-header col-2 text-center fw-normal small bg-light"
-                          style={{ left: '50px', top: 0 }}>
+                        style={{ left: '50px', top: 0 }}>
                         Employee
                       </th>
                       {/* Scrollable Date Columns */}
@@ -1045,10 +1045,10 @@ const AttendanceReports = () => {
                         const day = i + 1;
                         const isCurrent = isCurrentDate(day);
                         const monthData = months.find(m => m.value === selectedMonth);
-                        
+
                         return (
                           <th key={i} className={`fw-normal small text-center ${isCurrent ? 'bg-primary text-white' : 'bg-light'}`}
-                              style={{ minWidth: '32px', top: 0, zIndex: 10 }}>
+                            style={{ minWidth: '32px', top: 0, zIndex: 10 }}>
                             {day}
                             <div className="small fw-normal">{monthData?.short}</div>
                           </th>
@@ -1069,17 +1069,17 @@ const AttendanceReports = () => {
                       Object.keys(monthlyStats).map((empId, idx) => {
                         const empStats = monthlyStats[empId];
                         const empRecords = monthlyAttendance.filter(r => r.employee_id === empId);
-                        
+
                         return (
                           <tr key={empId}>
                             {/* Fixed First Column */}
                             <td className="fixed-col col-1 text-center small"
-                                style={{ left: 0, backgroundColor: 'white' }}>
+                              style={{ left: 0, backgroundColor: 'white' }}>
                               {idx + 1}
                             </td>
                             {/* Fixed Second Column */}
                             <td className="fixed-col col-2 small"
-                                style={{ left: '50px', backgroundColor: 'white' }}>
+                              style={{ left: '50px', backgroundColor: 'white' }}>
                               <div className="text-truncate" style={{ maxWidth: '130px' }} title={empStats.name}>
                                 <span className="fw-semibold">{empStats.name}</span>
                               </div>
@@ -1092,11 +1092,11 @@ const AttendanceReports = () => {
                               const dayNum = day + 1;
                               const dayRecord = empRecords.find(r => r.day === dayNum);
                               const isCurrent = isCurrentDate(dayNum);
-                              
+
                               let statusIcon = '-';
                               let iconClass = 'text-muted';
                               let iconStyle = {};
-                              
+
                               if (dayRecord) {
                                 if (dayRecord.status === 'present' || dayRecord.status === 'working') {
                                   statusIcon = '✓';
@@ -1120,13 +1120,13 @@ const AttendanceReports = () => {
                                   iconStyle = { fontSize: '14px' };
                                 }
                               }
-                              
+
                               return (
                                 <td key={day} className={`small text-center align-middle ${isCurrent ? 'bg-primary bg-opacity-10' : ''}`}
-                                    style={{ backgroundColor: dayRecord?.is_late ? '#fff3cd' : 'transparent' }}>
+                                  style={{ backgroundColor: dayRecord?.is_late ? '#fff3cd' : 'transparent' }}>
                                   {dayRecord ? (
-                                    <span 
-                                      title={dayRecord.tooltip} 
+                                    <span
+                                      title={dayRecord.tooltip}
                                       className={iconClass}
                                       style={{ cursor: 'pointer', ...iconStyle }}
                                     >
