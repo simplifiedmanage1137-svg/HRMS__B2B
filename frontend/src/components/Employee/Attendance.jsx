@@ -290,7 +290,7 @@ const Attendance = () => {
       console.log('📊 Fetching today attendance for:', user.employeeId);
 
       const response = await axios.get(
-        `https://employee-management-system-g7s7.onrender.com/api/attendance/today/${user.employeeId}`
+        `http://localhost:5000/api/attendance/today/${user.employeeId}`
       );
 
       console.log('📊 Today attendance response:', response.data);
@@ -357,7 +357,7 @@ const Attendance = () => {
       console.log('📅 Today is:', todayStr);
 
       const response = await axios.get(
-        `https://employee-management-system-g7s7.onrender.com/api/attendance/report?start=${startDateStr}&end=${endDateStr}&employee_id=${user.employeeId}`
+        `http://localhost:5000/api/attendance/report?start=${startDateStr}&end=${endDateStr}&employee_id=${user.employeeId}`
       );
 
       console.log('📊 Attendance API Response:', response.data);
@@ -411,7 +411,7 @@ const Attendance = () => {
       let todayAttendance = null;
       try {
         const todayResponse = await axios.get(
-          `https://employee-management-system-g7s7.onrender.com/api/attendance/today/${user.employeeId}`
+          `http://localhost:5000/api/attendance/today/${user.employeeId}`
         );
         todayAttendance = todayResponse.data.attendance;
         console.log('📊 Today attendance from separate call:', todayAttendance);
@@ -713,7 +713,7 @@ const Attendance = () => {
   const sendHeartbeat = async () => {
     try {
       if (activeSession && location) {
-        await axios.post('https://employee-management-system-g7s7.onrender.com/api/attendance/heartbeat', {
+        await axios.post('http://localhost:5000/api/attendance/heartbeat', {
           employee_id: user.employeeId,
           session_id: activeSession.session_id,
           latitude: location.latitude,
@@ -741,7 +741,7 @@ const Attendance = () => {
         );
       }
 
-      const response = await axios.post('https://employee-management-system-g7s7.onrender.com/api/attendance/clock-in', {
+      const response = await axios.post('http://localhost:5000/api/attendance/clock-in', {
         employee_id: user.employeeId,
         latitude: location.latitude,
         longitude: location.longitude,
@@ -809,7 +809,7 @@ const Attendance = () => {
         setActiveSession(storedSession);
 
         // Continue with the stored session
-        const response = await axios.post('https://employee-management-system-g7s7.onrender.com/api/attendance/clock-out', {
+        const response = await axios.post('http://localhost:5000/api/attendance/clock-out', {
           employee_id: user.employeeId,
           session_id: storedSession.session_id,
           latitude: location?.latitude,
@@ -823,7 +823,7 @@ const Attendance = () => {
 
       console.log('Using active session:', activeSession);
 
-      const response = await axios.post('https://employee-management-system-g7s7.onrender.com/api/attendance/clock-out', {
+      const response = await axios.post('http://localhost:5000/api/attendance/clock-out', {
         employee_id: user.employeeId,
         session_id: activeSession.session_id,
         latitude: location?.latitude,
@@ -1189,14 +1189,7 @@ const Attendance = () => {
             </Col>
           </Row>
 
-          {/* Active Session Indicator */}
-          {activeSession && (
-            <div className="mt-2 text-success small text-center">
-              <FaClock className="me-1" />
-              Active since {formatTime(activeSession.clock_in_time)}
-            </div>
-          )}
-
+        
           {/* Warning for outside office */}
           {geofenceInfo && !geofenceInfo.isInOffice && !activeSession && (
             <div className="mt-2 text-warning small text-center">

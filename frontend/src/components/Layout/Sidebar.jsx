@@ -76,7 +76,7 @@ const Sidebar = () => {
         return;
       }
       
-      const response = await axios.get(`https://employee-management-system-g7s7.onrender.com/api/employees/profile/${user?.employeeId}`);
+      const response = await axios.get(`http://localhost:5000/api/employees/profile/${user?.employeeId}`);
       if (response.data) {
         const fullName = `${response.data.first_name || ''} ${response.data.last_name || ''}`.trim();
         setEmployeeName(fullName || 'Employee');
@@ -89,7 +89,7 @@ const Sidebar = () => {
 
   const fetchPendingCount = async () => {
     try {
-      const response = await axios.get('https://employee-management-system-g7s7.onrender.com/api/admin-updates/pending-count');
+      const response = await axios.get('http://localhost:5000/api/admin-updates/pending-count');
       setPendingCount(response.data.count || 0);
     } catch (error) {
       console.error('Error fetching pending count:', error);

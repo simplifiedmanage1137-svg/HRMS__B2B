@@ -40,7 +40,7 @@ const LeaveReports = () => {
       console.log('Fetching employees data...');
 
       // Fetch employees
-      const employeesRes = await axios.get('https://employee-management-system-g7s7.onrender.comapi/employees');
+      const employeesRes = await axios.get('http://localhost:5000api/employees');
       const employees = employeesRes.data;
 
       console.log(`Fetched ${employees.length} employees`);
@@ -48,7 +48,7 @@ const LeaveReports = () => {
       // Fetch leave balances for all employees
       const balancesPromises = employees.map(async (emp) => {
         try {
-          const balanceRes = await axios.get(`https://employee-management-system-g7s7.onrender.comapi/leaves/balance/${emp.employee_id}`);
+          const balanceRes = await axios.get(`http://localhost:5000api/leaves/balance/${emp.employee_id}`);
           return {
             ...emp,
             leaveBalance: balanceRes.data

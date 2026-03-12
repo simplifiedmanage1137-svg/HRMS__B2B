@@ -102,7 +102,7 @@ const AttendanceReports = () => {
   // ============== FETCH ALL EMPLOYEES ==============
   const fetchAllEmployees = async () => {
     try {
-      const response = await axios.get('https://employee-management-system-g7s7.onrender.com/api/employees');
+      const response = await axios.get('http://localhost:5000/api/employees');
       setAllEmployees(response.data);
       
       const depts = ['all', ...new Set(response.data.map(emp => emp.department).filter(Boolean))];
@@ -120,7 +120,7 @@ const AttendanceReports = () => {
       setLoading(true);
       
       const response = await axios.get(
-        `https://employee-management-system-g7s7.onrender.com/api/attendance/report?start=${selectedDate}&end=${selectedDate}`
+        `http://localhost:5000/api/attendance/report?start=${selectedDate}&end=${selectedDate}`
       );
       
       const attendanceData = response.data.attendance || [];
@@ -173,7 +173,7 @@ const AttendanceReports = () => {
       const startDateStr = startDate.toISOString().split('T')[0];
       const endDateStr = endDate.toISOString().split('T')[0];
       
-      let url = `https://employee-management-system-g7s7.onrender.com/api/attendance/report?start=${startDateStr}&end=${endDateStr}`;
+      let url = `http://localhost:5000/api/attendance/report?start=${startDateStr}&end=${endDateStr}`;
       if (department !== 'all') {
         url += `&department=${department}`;
       }
@@ -184,7 +184,7 @@ const AttendanceReports = () => {
       // Fetch leave data
       let leaveData = [];
       try {
-        const leaveResponse = await axios.get('https://employee-management-system-g7s7.onrender.com/api/leaves');
+        const leaveResponse = await axios.get('http://localhost:5000/api/leaves');
         leaveData = leaveResponse.data.filter(leave => 
           leave.status === 'approved' && 
           new Date(leave.end_date) >= startDate && 
@@ -442,7 +442,7 @@ const AttendanceReports = () => {
   // ============== GET LEAVE BALANCE FOR EMPLOYEE ==============
   const getLeaveBalance = async (employeeId) => {
     try {
-      const response = await axios.get(`https://employee-management-system-g7s7.onrender.com/api/leaves/balance/${employeeId}`);
+      const response = await axios.get(`http://localhost:5000/api/leaves/balance/${employeeId}`);
       return response.data.available || '0';
     } catch (error) {
       console.error('Error fetching leave balance:', error);
@@ -896,10 +896,9 @@ const AttendanceReports = () => {
             </Badge>
           </Card.Header>
           <Card.Body className="p-0">
-            {/* Table with Vertical Scroll */}
-            <div className="table-responsive" style={{ maxHeight: '400px', overflowY: 'auto' }}>
-              {activeView === 'daily' ? (
-                /* Daily View Table */
+            {activeView === 'daily' ? (
+              /* Daily View Table */
+              <div className="table-responsive" style={{ maxHeight: '400px', overflow: 'auto' }}>
                 <Table size="sm" striped className="mb-0">
                   <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
                     <tr>
@@ -965,33 +964,104 @@ const AttendanceReports = () => {
                     )}
                   </tbody>
                 </Table>
-              ) : (
-                /* Monthly Calendar Table */
-                <Table size="sm" bordered className="mb-0">
-                  <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
+              </div>
+            ) : (
+              /* Monthly Calendar Table with Fixed First Two Columns */
+              <div className="monthly-table-container" style={{ position: 'relative', height: '400px', overflow: 'auto' }}>
+                <style>
+                  {`
+                    .monthly-table-container {
+                      position: relative;
+                      overflow: auto;
+                      white-space: nowrap;
+                    }
+                    
+                    .monthly-table {
+                      border-collapse: separate;
+                      border-spacing: 0;
+                      min-width: 100%;
+                    }
+                    
+                    .monthly-table thead {
+                      position: sticky;
+                      top: 0;
+                      z-index: 20;
+                      background-color: #f8f9fa;
+                    }
+                    
+                    .monthly-table th, 
+                    .monthly-table td {
+                      border: 1px solid #dee2e6;
+                      padding: 0.5rem;
+                      white-space: nowrap;
+                    }
+                    
+                    .fixed-col {
+                      position: sticky;
+                      background-color: white;
+                      z-index: 15;
+                    }
+                    
+                    .fixed-col-header {
+                      position: sticky;
+                      background-color: #f8f9fa !important;
+                      z-index: 25;
+                    }
+                    
+                    .col-1 {
+                      left: 0;
+                      min-width: 50px;
+                      border-right: 2px solid #dee2e6;
+                      box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1);
+                    }
+                    
+                    .col-2 {
+                      left: 50px;
+                      min-width: 140px;
+                      border-right: 2px solid #dee2e6;
+                      box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1);
+                    }
+                    
+                    .monthly-table tbody tr:hover .fixed-col {
+                      background-color: rgba(0,0,0,.075);
+                    }
+                  `}
+                </style>
+                <table className="monthly-table table-sm mb-0">
+                  <thead>
                     <tr>
-                      <th className="fw-normal small text-center" style={{ width: '50px' }}>#</th>
-                      <th className="fw-normal small text-center" style={{ minWidth: '140px' }}>Employee</th>
+                      {/* Fixed First Column Header */}
+                      <th className="fixed-col-header col-1 text-center fw-normal small bg-light"
+                          style={{ left: 0, top: 0 }}>
+                        #
+                      </th>
+                      {/* Fixed Second Column Header */}
+                      <th className="fixed-col-header col-2 text-center fw-normal small bg-light"
+                          style={{ left: '50px', top: 0 }}>
+                        Employee
+                      </th>
+                      {/* Scrollable Date Columns */}
                       {[...Array(daysInMonth)].map((_, i) => {
                         const day = i + 1;
                         const isCurrent = isCurrentDate(day);
                         const monthData = months.find(m => m.value === selectedMonth);
                         
                         return (
-                          <th key={i} className={`fw-normal small text-center ${isCurrent ? 'bg-primary text-white' : ''}`} 
-                              style={{ minWidth: '32px' }}>
+                          <th key={i} className={`fw-normal small text-center ${isCurrent ? 'bg-primary text-white' : 'bg-light'}`}
+                              style={{ minWidth: '32px', top: 0, zIndex: 10 }}>
                             {day}
                             <div className="small fw-normal">{monthData?.short}</div>
                           </th>
                         );
                       })}
-                      <th className="text-center fw-normal small" style={{ minWidth: '32px' }}>P</th>
-                      <th className="text-center fw-normal small" style={{ minWidth: '32px' }}>H</th>
-                      <th className="text-center fw-normal small" style={{ minWidth: '32px' }}>L</th>
-                      <th className="text-center fw-normal small" style={{ minWidth: '32px' }}>Hol</th>
-                      <th className="text-center fw-normal small" style={{ minWidth: '32px' }}>A</th>
-                      <th className="text-center fw-normal small" style={{ minWidth: '60px' }}>Late</th>
-                      <th className="text-center fw-normal small" style={{ minWidth: '50px' }}>Hours</th>
+                      {/* Scrollable Summary Columns */}
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>P</th>
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>H</th>
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>L</th>
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>Hol</th>
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>A</th>
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '60px', top: 0, zIndex: 10 }}>Late</th>
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '50px', top: 0, zIndex: 10 }}>Hours</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1002,8 +1072,14 @@ const AttendanceReports = () => {
                         
                         return (
                           <tr key={empId}>
-                            <td className="text-center small">{idx + 1}</td>
-                            <td className="small">
+                            {/* Fixed First Column */}
+                            <td className="fixed-col col-1 text-center small"
+                                style={{ left: 0, backgroundColor: 'white' }}>
+                              {idx + 1}
+                            </td>
+                            {/* Fixed Second Column */}
+                            <td className="fixed-col col-2 small"
+                                style={{ left: '50px', backgroundColor: 'white' }}>
                               <div className="text-truncate" style={{ maxWidth: '130px' }} title={empStats.name}>
                                 <span className="fw-semibold">{empStats.name}</span>
                               </div>
@@ -1011,6 +1087,7 @@ const AttendanceReports = () => {
                                 {empId}
                               </small>
                             </td>
+                            {/* Scrollable Date Columns */}
                             {[...Array(daysInMonth)].map((_, day) => {
                               const dayNum = day + 1;
                               const dayRecord = empRecords.find(r => r.day === dayNum);
@@ -1060,6 +1137,7 @@ const AttendanceReports = () => {
                                 </td>
                               );
                             })}
+                            {/* Scrollable Summary Columns */}
                             <td className="text-center"><Badge bg="success" pill>{empStats.present}</Badge></td>
                             <td className="text-center"><Badge bg="warning" pill>{empStats.half_day}</Badge></td>
                             <td className="text-center"><Badge bg="purple" pill style={{ backgroundColor: '#6f42c1' }}>{empStats.on_leave || 0}</Badge></td>
@@ -1079,12 +1157,12 @@ const AttendanceReports = () => {
                         );
                       })
                     ) : (
-                      <tr><td colSpan={daysInMonth + 10} className="text-center py-4">No attendance data</td></tr>
+                      <tr><td colSpan={daysInMonth + 12} className="text-center py-4">No attendance data</td></tr>
                     )}
                   </tbody>
-                </Table>
-              )}
-            </div>
+                </table>
+              </div>
+            )}
           </Card.Body>
         </Card>
       )}

@@ -102,7 +102,7 @@ const Navbar = () => {
         return;
       }
       
-      const response = await axios.get(`https://employee-management-system-g7s7.onrender.com/api/employees/profile/${user?.employeeId}`);
+      const response = await axios.get(`http://localhost:5000/api/employees/profile/${user?.employeeId}`);
       if (response.data) {
         const fullName = `${response.data.first_name || ''} ${response.data.last_name || ''}`.trim();
         setEmployeeName(fullName || 'Employee');
@@ -117,7 +117,7 @@ const Navbar = () => {
     if (!user?.employeeId) return;
     
     try {
-      const response = await axios.get(`https://employee-management-system-g7s7.onrender.com/api/notifications?employee_id=${user.employeeId}`);
+      const response = await axios.get(`http://localhost:5000/api/notifications?employee_id=${user.employeeId}`);
       if (response.data && Array.isArray(response.data)) {
         setNotifications(response.data);
       }
@@ -128,7 +128,7 @@ const Navbar = () => {
 
   const fetchPendingUpdateRequests = async () => {
     try {
-      const response = await axios.get('https://employee-management-system-g7s7.onrender.com/api/employee-updates/pending-requests');
+      const response = await axios.get('http://localhost:5000/api/employee-updates/pending-requests');
       
       if (Array.isArray(response.data)) {
         setPendingRequests(response.data);
@@ -144,7 +144,7 @@ const Navbar = () => {
 
   const markAsRead = async (id) => {
     try {
-      await axios.put(`https://employee-management-system-g7s7.onrender.com/api/notifications/${id}/read`);
+      await axios.put(`http://localhost:5000/api/notifications/${id}/read`);
       setNotifications(prev => 
         prev.map(n => n.id === id ? { ...n, is_read: true } : n)
       );
@@ -158,7 +158,7 @@ const Navbar = () => {
     
     try {
       // Call API to delete notification
-      await axios.delete(`https://employee-management-system-g7s7.onrender.com/api/notifications/${id}`);
+      await axios.delete(`http://localhost:5000/api/notifications/${id}`);
       
       // Remove from local state
       setNotifications(prev => prev.filter(n => n.id !== id));

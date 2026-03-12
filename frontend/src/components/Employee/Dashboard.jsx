@@ -224,7 +224,7 @@ const EmployeeDashboard = () => {
 
   const fetchEmployeeData = async () => {
     try {
-      const response = await axios.get(`https://employee-management-system-g7s7.onrender.com/api/employees/profile/${user.employeeId}`);
+      const response = await axios.get(`http://localhost:5000/api/employees/profile/${user.employeeId}`);
       setEmployee(response.data);
     } catch (error) {
       console.error('Error fetching employee:', error);
@@ -236,7 +236,7 @@ const EmployeeDashboard = () => {
     try {
       console.log('Fetching leave balance for:', user.employeeId);
       
-      const response = await axios.get(`https://employee-management-system-g7s7.onrender.com/api/leaves/balance/${user.employeeId}`);
+      const response = await axios.get(`http://localhost:5000/api/leaves/balance/${user.employeeId}`);
       console.log('Leave balance response:', response.data);
       
       // Ensure we have valid numbers
@@ -266,7 +266,7 @@ const EmployeeDashboard = () => {
 
   const fetchLeaveRequests = async () => {
     try {
-      const response = await axios.get(`https://employee-management-system-g7s7.onrender.com/api/leaves?employee_id=${user.employeeId}`);
+      const response = await axios.get(`http://localhost:5000/api/leaves?employee_id=${user.employeeId}`);
       const leaves = response.data || [];
       setLeaveRequests(leaves.slice(0, 5)); // Show only 5 most recent
       
@@ -308,7 +308,7 @@ const EmployeeDashboard = () => {
       const endDateStr = endDate.toISOString().split('T')[0];
       
       const response = await axios.get(
-        `https://employee-management-system-g7s7.onrender.com/api/attendance/report?start=${startDateStr}&end=${endDateStr}&employee_id=${user.employeeId}`
+        `http://localhost:5000/api/attendance/report?start=${startDateStr}&end=${endDateStr}&employee_id=${user.employeeId}`
       );
       
       const attendance = response.data.attendance || [];

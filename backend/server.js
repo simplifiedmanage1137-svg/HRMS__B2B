@@ -13,8 +13,7 @@ dotenv.config();
 
 // ============== MIDDLEWARE ==============
 app.use(cors({
-    // origin: 'http://localhost:5173',
-    origin: 'https://employee-management-system-g7s7.onrender.com',
+    origin: 'http://localhost:5173',
     credentials: true
 }));
 app.use(express.json());

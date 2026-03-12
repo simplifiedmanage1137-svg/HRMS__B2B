@@ -1,11 +1,11 @@
 // components/Admin/AttendanceReports.jsx
 import React, { useState, useEffect } from 'react';
-import {
-  Card, Table, Badge, Form, Row, Col,
-  Button, Spinner, Alert
+import { 
+  Card, Table, Badge, Form, Row, Col, 
+  Button, Spinner, Alert 
 } from 'react-bootstrap';
-import {
-  FaCalendarAlt,
+import { 
+  FaCalendarAlt, 
   FaFileExcel,
   FaArrowLeft,
   FaArrowRight,
@@ -26,13 +26,13 @@ import { holidays as holidayData } from '../../data/holidays';
 const AttendanceReports = () => {
   // ============== STATE VARIABLES ==============
   const [activeView, setActiveView] = useState('daily');
-
+  
   // Daily View State
   const [dailyAttendance, setDailyAttendance] = useState([]);
   const [selectedDate, setSelectedDate] = useState(
     new Date().toISOString().split('T')[0]
   );
-
+  
   // Monthly View State
   const [monthlyAttendance, setMonthlyAttendance] = useState([]);
   const [allEmployees, setAllEmployees] = useState([]);
@@ -43,13 +43,13 @@ const AttendanceReports = () => {
   const [monthlyStats, setMonthlyStats] = useState({});
   const [daysInMonth, setDaysInMonth] = useState(0);
   const [exportFormat, setExportFormat] = useState('detailed');
-
+  
   // Current date for highlighting
   const currentDate = new Date();
   const currentDay = currentDate.getDate();
   const currentMonth = currentDate.getMonth() + 1;
   const currentYear = currentDate.getFullYear();
-
+  
   // Common State
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -79,35 +79,6 @@ const AttendanceReports = () => {
   const PROFESSIONAL_TAX = 200;
   const OTHER_DEDUCTIONS = 0;
 
-  // ============== FORMAT LATE DISPLAY IN HOURS:MINUTES:SECONDS ==============
-  const formatLateDisplay = (lateMinutes) => {
-    if (!lateMinutes || lateMinutes <= 0) return '0s';
-    
-    const totalSeconds = Math.round(lateMinutes * 60);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    
-    const parts = [];
-    if (hours > 0) parts.push(`${hours}h`);
-    if (minutes > 0) parts.push(`${minutes}m`);
-    if (seconds > 0 || (hours === 0 && minutes === 0)) parts.push(`${seconds}s`);
-    
-    return parts.join(' ');
-  };
-
-  // Format late to HH:MM:SS format
-  const formatLateToHHMMSS = (lateMinutes) => {
-    if (!lateMinutes || lateMinutes <= 0) return '00:00:00';
-    
-    const totalSeconds = Math.round(lateMinutes * 60);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  };
-
   // ============== INITIAL LOADS ==============
   useEffect(() => {
     fetchAllEmployees();
@@ -131,12 +102,12 @@ const AttendanceReports = () => {
   // ============== FETCH ALL EMPLOYEES ==============
   const fetchAllEmployees = async () => {
     try {
-      const response = await axios.get('https://employee-management-system-g7s7.onrender.com/api/employees');
+      const response = await axios.get('http://localhost:5000/api/employees');
       setAllEmployees(response.data);
-
+      
       const depts = ['all', ...new Set(response.data.map(emp => emp.department).filter(Boolean))];
       setDepartments(depts);
-
+      
     } catch (error) {
       console.error('Error fetching employees:', error);
       setMessage('Failed to load employees');
@@ -147,13 +118,13 @@ const AttendanceReports = () => {
   const fetchDailyAttendance = async () => {
     try {
       setLoading(true);
-
+      
       const response = await axios.get(
-        `https://employee-management-system-g7s7.onrender.com/api/attendance/report?start=${selectedDate}&end=${selectedDate}`
+        `http://localhost:5000/api/attendance/report?start=${selectedDate}&end=${selectedDate}`
       );
-
+      
       const attendanceData = response.data.attendance || [];
-
+      
       // Process attendance data
       const processedAttendance = attendanceData.map(record => {
         if (record.clock_in && !record.clock_out) {
@@ -163,19 +134,26 @@ const AttendanceReports = () => {
           record.total_hours = currentHours.toFixed(2);
           record.status = 'working';
         }
-
-        // Format late minutes to HH:MM:SS format
+        
         if (record.late_minutes > 0) {
-          record.late_display = formatLateDisplay(record.late_minutes);
-          record.late_hhmmss = formatLateToHHMMSS(record.late_minutes);
+          const totalSeconds = Math.round(record.late_minutes * 60);
+          if (totalSeconds < 60) {
+            record.late_display = `${totalSeconds}s late`;
+          } else {
+            const mins = Math.floor(totalSeconds / 60);
+            const secs = totalSeconds % 60;
+            record.late_display = mins > 0 ? 
+              (secs > 0 ? `${mins}m ${secs}s late` : `${mins}m late`) : 
+              `${secs}s late`;
+          }
         }
-
+        
         return record;
       });
-
+      
       setDailyAttendance(processedAttendance);
       setMessage('');
-
+      
     } catch (error) {
       console.error('Error fetching daily attendance:', error);
       setMessage('Failed to load attendance');
@@ -188,41 +166,41 @@ const AttendanceReports = () => {
   const fetchMonthlyAttendance = async () => {
     try {
       setLoading(true);
-
+      
       const startDate = new Date(selectedYear, selectedMonth - 1, 1);
       const endDate = new Date(selectedYear, selectedMonth, 0);
-
+      
       const startDateStr = startDate.toISOString().split('T')[0];
       const endDateStr = endDate.toISOString().split('T')[0];
-
-      let url = `https://employee-management-system-g7s7.onrender.com/api/attendance/report?start=${startDateStr}&end=${endDateStr}`;
+      
+      let url = `http://localhost:5000/api/attendance/report?start=${startDateStr}&end=${endDateStr}`;
       if (department !== 'all') {
         url += `&department=${department}`;
       }
-
+      
       const response = await axios.get(url);
       const attendanceData = response.data.attendance || [];
-
+      
       // Fetch leave data
       let leaveData = [];
       try {
-        const leaveResponse = await axios.get('https://employee-management-system-g7s7.onrender.com/api/leaves');
-        leaveData = leaveResponse.data.filter(leave =>
-          leave.status === 'approved' &&
-          new Date(leave.end_date) >= startDate &&
+        const leaveResponse = await axios.get('http://localhost:5000/api/leaves');
+        leaveData = leaveResponse.data.filter(leave => 
+          leave.status === 'approved' && 
+          new Date(leave.end_date) >= startDate && 
           new Date(leave.start_date) <= endDate
         );
       } catch (error) {
         console.log('Could not fetch leave data');
       }
-
+      
       // Filter holidays for selected month and year
       const monthHolidays = holidayData.filter(holiday => {
         const holidayDate = new Date(holiday.date);
-        return holidayDate.getFullYear() === selectedYear &&
-          holidayDate.getMonth() + 1 === selectedMonth;
+        return holidayDate.getFullYear() === selectedYear && 
+               holidayDate.getMonth() + 1 === selectedMonth;
       });
-
+      
       // Process data with holiday support
       const processedData = processMonthlyAttendance(
         attendanceData,
@@ -232,11 +210,11 @@ const AttendanceReports = () => {
         startDate,
         endDate
       );
-
+      
       setMonthlyAttendance(processedData);
       calculateMonthlyStatistics(processedData);
       setMessage('');
-
+      
     } catch (error) {
       console.error('Error fetching monthly attendance:', error);
       setMessage('Failed to load monthly attendance');
@@ -249,7 +227,7 @@ const AttendanceReports = () => {
   const processMonthlyAttendance = (attendanceData, employees, leaveData, holidays, startDate, endDate) => {
     const daysInMonth = endDate.getDate();
     const processedData = [];
-
+    
     // Create attendance map
     const attendanceMap = {};
     attendanceData.forEach(record => {
@@ -259,13 +237,13 @@ const AttendanceReports = () => {
         attendanceMap[key] = record;
       }
     });
-
+    
     // Create leave map
     const leaveMap = {};
     leaveData.forEach(leave => {
       const leaveStart = new Date(leave.start_date);
       const leaveEnd = new Date(leave.end_date || leave.start_date);
-
+      
       for (let d = new Date(leaveStart); d <= leaveEnd; d.setDate(d.getDate() + 1)) {
         const dateStr = d.toISOString().split('T')[0];
         const key = `${leave.employee_id}-${dateStr}`;
@@ -275,7 +253,7 @@ const AttendanceReports = () => {
         };
       }
     });
-
+    
     // Create holiday map
     const holidayMap = {};
     holidays.forEach(holiday => {
@@ -285,23 +263,23 @@ const AttendanceReports = () => {
         region: holiday.region
       };
     });
-
+    
     // Filter employees by department
     let filteredEmployees = employees;
     if (department !== 'all') {
       filteredEmployees = employees.filter(emp => emp.department === department);
     }
-
+    
     filteredEmployees.forEach(employee => {
       for (let day = 1; day <= daysInMonth; day++) {
         const currentDate = new Date(selectedYear, selectedMonth - 1, day);
         const dateStr = currentDate.toISOString().split('T')[0];
-
+        
         const attendanceKey = `${employee.employee_id}-${dateStr}`;
         const dayAttendance = attendanceMap[attendanceKey];
         const dayLeave = leaveMap[attendanceKey];
         const dayHoliday = holidayMap[dateStr];
-
+        
         let status = 'absent';
         let statusBadge = 'danger';
         let statusIcon = '✗';
@@ -311,7 +289,7 @@ const AttendanceReports = () => {
         let lateMinutes = 0;
         let tooltip = 'Absent';
         let leaveType = null;
-
+        
         // PRIORITY: Holiday > Leave > Attendance
         if (dayHoliday) {
           status = 'holiday';
@@ -331,18 +309,18 @@ const AttendanceReports = () => {
           clockOut = dayAttendance.clock_out;
           totalHours = parseFloat(dayAttendance.total_hours) || 0;
           lateMinutes = dayAttendance.late_minutes || 0;
-
+          
           const isToday = dateStr === new Date().toISOString().split('T')[0];
-
+          
           if (isToday && clockIn && !clockOut) {
             status = 'working';
             statusBadge = 'info';
             statusIcon = '✓';
-            tooltip = `Working since ${formatShortTime(clockIn)}`;
+            tooltip = `Working since ${formatTime(clockIn)}`;
             if (lateMinutes > 0) {
               tooltip += ` | Late: ${formatLateDisplay(lateMinutes)}`;
             }
-
+            
             const now = new Date();
             const clockInTime = new Date(clockIn);
             totalHours = (now - clockInTime) / (1000 * 60 * 60);
@@ -361,7 +339,7 @@ const AttendanceReports = () => {
               statusBadge = 'danger';
               statusIcon = '✗';
             }
-
+            
             tooltip = `In: ${formatShortTime(clockIn)} | Out: ${formatShortTime(clockOut)} | Hrs: ${totalHours.toFixed(1)}`;
             if (lateMinutes > 0) {
               tooltip += ` | Late: ${formatLateDisplay(lateMinutes)}`;
@@ -377,7 +355,7 @@ const AttendanceReports = () => {
             }
           }
         }
-
+        
         processedData.push({
           id: `${employee.employee_id}-${dateStr}`,
           employee_id: employee.employee_id,
@@ -392,8 +370,6 @@ const AttendanceReports = () => {
           statusBadge,
           statusIcon,
           late_minutes: lateMinutes,
-          late_display: formatLateDisplay(lateMinutes),
-          late_hhmmss: formatLateToHHMMSS(lateMinutes),
           is_late: lateMinutes > 0,
           tooltip,
           leave_type: leaveType,
@@ -402,14 +378,14 @@ const AttendanceReports = () => {
         });
       }
     });
-
+    
     return processedData;
   };
 
   // ============== CALCULATE MONTHLY STATISTICS ==============
   const calculateMonthlyStatistics = (data) => {
     const perEmployee = {};
-
+    
     data.forEach(record => {
       if (!perEmployee[record.employee_id]) {
         perEmployee[record.employee_id] = {
@@ -426,7 +402,7 @@ const AttendanceReports = () => {
           leave_types: []
         };
       }
-
+      
       if (record.status === 'present') perEmployee[record.employee_id].present++;
       else if (record.status === 'half_day') perEmployee[record.employee_id].half_day++;
       else if (record.status === 'absent') perEmployee[record.employee_id].absent++;
@@ -438,37 +414,35 @@ const AttendanceReports = () => {
       }
       else if (record.status === 'working') perEmployee[record.employee_id].working++;
       else if (record.status === 'holiday') perEmployee[record.employee_id].holiday++;
-
+      
       // Count late logins
       if (record.is_late) {
         perEmployee[record.employee_id].late_count++;
         perEmployee[record.employee_id].total_late_minutes += record.late_minutes || 0;
       }
-
+      
       const hours = parseFloat(record.total_hours || 0);
       perEmployee[record.employee_id].total_hours += hours;
     });
-
+    
     // Calculate average late minutes
     Object.keys(perEmployee).forEach(empId => {
       const emp = perEmployee[empId];
       if (emp.late_count > 0) {
         emp.avg_late_minutes = (emp.total_late_minutes / emp.late_count).toFixed(1);
-        emp.total_late_display = formatLateDisplay(emp.total_late_minutes);
       } else {
         emp.avg_late_minutes = '0';
-        emp.total_late_display = '0s';
       }
       emp.unique_leave_types = [...new Set(emp.leave_types)];
     });
-
+    
     setMonthlyStats(perEmployee);
   };
 
   // ============== GET LEAVE BALANCE FOR EMPLOYEE ==============
   const getLeaveBalance = async (employeeId) => {
     try {
-      const response = await axios.get(`https://employee-management-system-g7s7.onrender.com/api/leaves/balance/${employeeId}`);
+      const response = await axios.get(`http://localhost:5000/api/leaves/balance/${employeeId}`);
       return response.data.available || '0';
     } catch (error) {
       console.error('Error fetching leave balance:', error);
@@ -510,26 +484,26 @@ const AttendanceReports = () => {
   const calculateSalary = (employee, presentDays, halfDays, lateCount) => {
     const grossSalary = parseFloat(employee.gross_salary) || 0;
     const inHandSalary = parseFloat(employee.in_hand_salary) || 0;
-
+    
     // Calculate per day salary
     const perDaySalary = grossSalary / 30; // Assuming 30 days month
-
+    
     // Calculate actual salary based on attendance
     const totalWorkingDays = presentDays + (halfDays * 0.5);
     const actualSalary = totalWorkingDays * perDaySalary;
-
+    
     // Professional Tax (fixed ₹200)
     const profTax = PROFESSIONAL_TAX;
-
+    
     // Other deductions (can be customized based on late count, etc.)
     const otherDeductions = OTHER_DEDUCTIONS;
-
+    
     // Total deductions
     const totalDeductions = profTax + otherDeductions;
-
+    
     // Net salary to be paid
     const netSalaryToPay = actualSalary - totalDeductions;
-
+    
     return {
       grossSalary: grossSalary.toFixed(2),
       inHandSalary: inHandSalary.toFixed(2),
@@ -544,10 +518,10 @@ const AttendanceReports = () => {
   // ============== EXPORT TO EXCEL - COMPLETE FORMAT ==============
   const handleExportExcel = async () => {
     if (activeView === 'daily') {
-      // Daily Export
+      // Daily Export (keep existing format)
       const exportDate = new Date(selectedDate);
       const formattedDate = exportDate.toLocaleDateString();
-
+      
       const exportData = dailyAttendance.map((record, index) => ({
         'Sr No': index + 1,
         'Date': formattedDate,
@@ -555,21 +529,20 @@ const AttendanceReports = () => {
         'Employee Name': `${record.first_name} ${record.last_name}`,
         'Department': record.department,
         'Shift': record.shift_time_used || 'Not set',
-        'Clock In': record.clock_in ? formatShortTime(record.clock_in) : '-',
-        'Clock Out': record.clock_out ? formatShortTime(record.clock_out) : '-',
+        'Clock In': record.clock_in ? formatTime(record.clock_in) : '-',
+        'Clock Out': record.clock_out ? formatTime(record.clock_out) : '-',
         'Total Hours': record.total_hours || '0.0',
-        'Late Duration': record.late_display || '0s',
-        'Late (HH:MM:SS)': record.late_hhmmss || '00:00:00',
-        'Late (seconds)': record.late_minutes ? Math.round(record.late_minutes * 60) : '0',
-        'Status': record.status === 'present' ? 'Present' :
-          record.status === 'half_day' ? 'Half Day' :
-            record.status === 'working' ? 'Working' :
-              record.status === 'on_leave' ? 'On Leave' :
-                record.status === 'holiday' ? 'Holiday' : 'Absent'
+        'Late Duration': record.late_display || '0',
+        'Late (minutes)': record.late_minutes ? (record.late_minutes * 60).toFixed(0) : '0',
+        'Status': record.status === 'present' ? 'Present' : 
+                  record.status === 'half_day' ? 'Half Day' : 
+                  record.status === 'working' ? 'Working' : 
+                  record.status === 'on_leave' ? 'On Leave' : 
+                  record.status === 'holiday' ? 'Holiday' : 'Absent'
       }));
 
       const ws = XLSX.utils.json_to_sheet(exportData);
-
+      
       const colWidths = [
         { wch: 8 },   // Sr No
         { wch: 12 },  // Date
@@ -580,25 +553,24 @@ const AttendanceReports = () => {
         { wch: 10 },  // Clock In
         { wch: 10 },  // Clock Out
         { wch: 10 },  // Total Hours
-        { wch: 15 },  // Late Duration
-        { wch: 15 },  // Late (HH:MM:SS)
-        { wch: 12 },  // Late (seconds)
+        { wch: 12 },  // Late Duration
+        { wch: 12 },  // Late (minutes)
         { wch: 12 }   // Status
       ];
       ws['!cols'] = colWidths;
-
+      
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Daily Attendance');
       XLSX.writeFile(wb, `Daily_Attendance_${selectedDate}.xlsx`);
-
+      
     } else {
       // Monthly Export - COMPLETE FORMAT
       const currentMonthData = months.find(m => m.value === selectedMonth);
       const monthShort = currentMonthData?.short || 'Month';
       const monthName = currentMonthData?.label || 'Month';
-
+      
       const exportData = [];
-
+      
       // Sort employees
       const sortedEmployees = [...allEmployees].sort((a, b) => {
         if (department !== 'all') {
@@ -611,35 +583,34 @@ const AttendanceReports = () => {
       for (const employee of sortedEmployees) {
         // Filter department if needed
         if (department !== 'all' && employee.department !== department) continue;
-
+        
         const empRecords = monthlyAttendance.filter(r => r.employee_id === employee.employee_id);
         const empStats = monthlyStats[employee.employee_id] || {
           present: 0,
           half_day: 0,
           absent: 0,
           on_leave: 0,
-          late_count: 0,
-          total_late_minutes: 0
+          late_count: 0
         };
-
+        
         // Get leave balance
         const leaveBalance = await getLeaveBalance(employee.employee_id);
-
+        
         // Calculate salary components
         const salary = calculateSalary(employee, empStats.present, empStats.half_day, empStats.late_count);
-
+        
         // Create row for this employee
         const row = {
           'Employee Name': `${employee.first_name || ''} ${employee.last_name || ''}`.trim(),
           'Date of Joining': employee.joining_date ? new Date(employee.joining_date).toLocaleDateString() : 'N/A',
           'Leave Balance': leaveBalance,
         };
-
+        
         // Add each day's status with month and date
         for (let day = 1; day <= daysInMonth; day++) {
           const dayRecord = empRecords.find(r => r.day === day);
           let status = '';
-
+          
           if (dayRecord) {
             if (dayRecord.status === 'present' || dayRecord.status === 'working') {
               status = 'P';
@@ -652,19 +623,14 @@ const AttendanceReports = () => {
             } else {
               status = 'A';
             }
-
-            // Add late indicator if late
-            if (dayRecord.is_late) {
-              status += '*';
-            }
           } else {
             status = 'A';
           }
-
+          
           // Format: "Mar 1", "Mar 2", etc.
           row[`${monthShort} ${day}`] = status;
         }
-
+        
         // Add all required columns
         row['Days of the Month'] = daysInMonth;
         row['Actual Present Days'] = (empStats.present + (empStats.half_day * 0.5)).toFixed(1);
@@ -672,9 +638,7 @@ const AttendanceReports = () => {
         row['Half Days'] = empStats.half_day || 0;
         row['PL Leave'] = empStats.on_leave || 0;
         row['Absent'] = empStats.absent || 0;
-        row['Late Coming Count'] = empStats.late_count || 0;
-        row['Total Late Time'] = formatLateDisplay(empStats.total_late_minutes);
-        row['Late (HH:MM:SS)'] = formatLateToHHMMSS(empStats.total_late_minutes);
+        row['Late Coming'] = empStats.late_count || 0;
         row['Amount'] = salary.actualSalary;
         row['Gross Salary'] = salary.grossSalary;
         row['Net Salary'] = salary.inHandSalary;
@@ -686,25 +650,25 @@ const AttendanceReports = () => {
         row['Account Number'] = employee.account_number || 'N/A';
         row['IFSC Code'] = employee.ifsc_code || 'N/A';
         row['Bank Name'] = employee.bank_account_name || 'N/A';
-
+        
         exportData.push(row);
       }
 
       // Create worksheet
       const ws = XLSX.utils.json_to_sheet(exportData);
-
+      
       // Calculate column widths
       const colWidths = [
         { wch: 25 }, // Employee Name
         { wch: 15 }, // Date of Joining
         { wch: 12 }, // Leave Balance
       ];
-
+      
       // Add widths for each day column
       for (let i = 1; i <= daysInMonth; i++) {
         colWidths.push({ wch: 8 }); // "Mar 1" style
       }
-
+      
       // Add widths for summary columns
       colWidths.push(
         { wch: 15 }, // Days of the Month
@@ -713,9 +677,7 @@ const AttendanceReports = () => {
         { wch: 10 }, // Half Days
         { wch: 10 }, // PL Leave
         { wch: 10 }, // Absent
-        { wch: 15 }, // Late Coming Count
-        { wch: 15 }, // Total Late Time
-        { wch: 15 }, // Late (HH:MM:SS)
+        { wch: 12 }, // Late Coming
         { wch: 12 }, // Amount
         { wch: 12 }, // Gross Salary
         { wch: 12 }, // Net Salary
@@ -723,14 +685,13 @@ const AttendanceReports = () => {
         { wch: 15 }, // Professional Tax
         { wch: 12 }, // Deduction
         { wch: 18 }, // Net Salary To be Pay
-        { wch: 10 }, // Gender
         { wch: 20 }, // Account Number
         { wch: 15 }, // IFSC Code
         { wch: 20 }  // Bank Name
       );
-
+      
       ws['!cols'] = colWidths;
-
+      
       // Create workbook and save
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Monthly Attendance');
@@ -756,15 +717,26 @@ const AttendanceReports = () => {
     });
   };
 
+  const formatLateDisplay = (lateMinutes) => {
+    const totalSeconds = Math.round(lateMinutes * 60);
+    if (totalSeconds < 60) {
+      return `${totalSeconds}s`;
+    } else {
+      const mins = Math.floor(totalSeconds / 60);
+      const secs = totalSeconds % 60;
+      return mins > 0 ? (secs > 0 ? `${mins}m ${secs}s` : `${mins}m`) : `${secs}s`;
+    }
+  };
+
   const getStatusBadge = (record) => {
     if (record.status === 'working') {
-      return record.is_late ?
-        <Badge bg="warning" className="px-2 py-1" style={{ backgroundColor: '#fd7e14' }} title={`Late: ${record.late_display}`}>Working (Late)</Badge> :
+      return record.is_late ? 
+        <Badge bg="warning" className="px-2 py-1" style={{ backgroundColor: '#fd7e14' }}>Working (Late)</Badge> : 
         <Badge bg="info" className="px-2 py-1">Working</Badge>;
     }
     if (record.status === 'present') {
-      return record.is_late ?
-        <Badge bg="warning" className="px-2 py-1" style={{ backgroundColor: '#fd7e14' }} title={`Late: ${record.late_display}`}>Present (Late)</Badge> :
+      return record.is_late ? 
+        <Badge bg="warning" className="px-2 py-1" style={{ backgroundColor: '#fd7e14' }}>Present (Late)</Badge> : 
         <Badge bg="success" className="px-2 py-1">Present</Badge>;
     }
     if (record.status === 'half_day') return <Badge bg="warning" className="px-2 py-1">Half Day</Badge>;
@@ -774,9 +746,9 @@ const AttendanceReports = () => {
   };
 
   const isCurrentDate = (day) => {
-    return selectedMonth === currentMonth &&
-      selectedYear === currentYear &&
-      day === currentDay;
+    return selectedMonth === currentMonth && 
+           selectedYear === currentYear && 
+           day === currentDay;
   };
 
   // ============== RENDER ==============
@@ -800,16 +772,16 @@ const AttendanceReports = () => {
 
       {/* View Tabs */}
       <div className="mb-3 border-bottom">
-        <Button
-          variant={activeView === 'daily' ? 'primary' : 'light'}
+        <Button 
+          variant={activeView === 'daily' ? 'primary' : 'light'} 
           size="sm"
           onClick={() => setActiveView('daily')}
           className="me-2"
         >
           <FaEye className="me-1" size={12} /> Daily View
         </Button>
-        <Button
-          variant={activeView === 'monthly' ? 'primary' : 'light'}
+        <Button 
+          variant={activeView === 'monthly' ? 'primary' : 'light'} 
           size="sm"
           onClick={() => setActiveView('monthly')}
         >
@@ -841,18 +813,18 @@ const AttendanceReports = () => {
                   <Button variant="outline-secondary" size="sm" onClick={handlePreviousMonth}>
                     <FaArrowLeft size={10} />
                   </Button>
-                  <Form.Select
-                    size="sm"
-                    value={selectedMonth}
+                  <Form.Select 
+                    size="sm" 
+                    value={selectedMonth} 
                     onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
                     className="mx-1"
                     style={{ width: '100px' }}
                   >
                     {months.map(m => <option key={m.value} value={m.value}>{m.short}</option>)}
                   </Form.Select>
-                  <Form.Select
-                    size="sm"
-                    value={selectedYear}
+                  <Form.Select 
+                    size="sm" 
+                    value={selectedYear} 
                     onChange={(e) => setSelectedYear(parseInt(e.target.value))}
                     className="me-1"
                     style={{ width: '80px' }}
@@ -863,7 +835,7 @@ const AttendanceReports = () => {
                     <FaArrowRight size={10} />
                   </Button>
                 </div>
-
+                
                 <Button variant="outline-primary" size="sm" onClick={goToCurrentMonth}>
                   Current
                 </Button>
@@ -882,7 +854,7 @@ const AttendanceReports = () => {
                 </Form.Select>
               </div>
             </Col>
-
+            
             <Col md={4}>
               <div className="d-flex gap-2 justify-content-end">
                 <Button variant="success" size="sm" onClick={handleExportExcel}>
@@ -924,30 +896,29 @@ const AttendanceReports = () => {
             </Badge>
           </Card.Header>
           <Card.Body className="p-0">
-            {/* Table with Vertical Scroll */}
-            <div className="table-responsive" style={{ maxHeight: '400px', overflowY: 'auto' }}>
-              {activeView === 'daily' ? (
-                /* Daily View Table */
+            {activeView === 'daily' ? (
+              /* Daily View Table */
+              <div className="table-responsive" style={{ maxHeight: '400px', overflow: 'auto' }}>
                 <Table size="sm" striped className="mb-0">
                   <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
                     <tr>
-                      <th className="text-dark fw-normal small text-center" style={{ width: '60px', whiteSpace: 'nowrap' }}>Sr No</th>
-                      <th className="text-dark fw-normal small" style={{ whiteSpace: 'nowrap' }}>Employee</th>
-                      <th className="text-dark fw-normal small" style={{ whiteSpace: 'nowrap' }}>Department</th>
-                      <th className="text-dark fw-normal small" style={{ whiteSpace: 'nowrap' }}>Shift</th>
-                      <th className="text-dark fw-normal small" style={{ whiteSpace: 'nowrap' }}>Clock In</th>
-                      <th className="text-dark fw-normal small" style={{ whiteSpace: 'nowrap' }}>Late</th>
-                      <th className="text-dark fw-normal small" style={{ whiteSpace: 'nowrap' }}>Clock Out</th>
-                      <th className="text-dark fw-normal small" style={{ whiteSpace: 'nowrap' }}>Hours</th>
-                      <th className="text-dark fw-normal small" style={{ whiteSpace: 'nowrap' }}>Status</th>
+                      <th className="text-dark fw-normal small text-center" style={{ width: '60px' }}>Sr No</th>
+                      <th className="text-dark fw-normal small">Employee</th>
+                      <th className="text-dark fw-normal small">Department</th>
+                      <th className="text-dark fw-normal small">Shift</th>
+                      <th className="text-dark fw-normal small">Clock In</th>
+                      <th className="text-dark fw-normal small">Late</th>
+                      <th className="text-dark fw-normal small">Clock Out</th>
+                      <th className="text-dark fw-normal small">Hours</th>
+                      <th className="text-dark fw-normal small">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {dailyAttendance.length > 0 ? (
                       dailyAttendance.map((record, index) => (
                         <tr key={index} className={record.is_late ? 'table-warning' : ''}>
-                          <td className="text-center small align-middle">{index + 1}</td>
-                          <td className="small align-middle">
+                          <td className="text-center">{index + 1}</td>
+                          <td className="small">
                             <div className="text-truncate" style={{ maxWidth: '150px' }} title={`${record.first_name} ${record.last_name}`}>
                               {record.first_name} {record.last_name}
                             </div>
@@ -955,43 +926,37 @@ const AttendanceReports = () => {
                               {record.employee_id}
                             </small>
                           </td>
-                          <td className="small align-middle">
+                          <td className="small">
                             <span className="text-truncate d-inline-block" style={{ maxWidth: '100px' }} title={record.department}>
                               {record.department}
                             </span>
                           </td>
-                          <td className="small align-middle">
+                          <td className="small">
                             <span className="text-nowrap">{record.shift_time_used || 'Not set'}</span>
                           </td>
-                          <td className={`small align-middle ${record.clock_in ? 'text-success' : 'text-muted'}`}>
+                          <td className={`small ${record.clock_in ? 'text-success' : 'text-muted'}`}>
                             <span className="text-nowrap" title={formatShortTime(record.clock_in)}>
                               {formatShortTime(record.clock_in)}
                             </span>
                           </td>
-                          <td className="small align-middle">
+                          <td className="small">
                             {record.late_display ? (
-                              <Badge 
-                                bg="warning" 
-                                pill 
-                                className="text-nowrap" 
-                                style={{ backgroundColor: '#fd7e14', fontSize: '11px' }}
-                                title={`Late by ${record.late_display} (${record.late_hhmmss})`}
-                              >
-                                ⏰ {record.late_display}
+                              <Badge bg="warning" pill className="text-nowrap" style={{ backgroundColor: '#fd7e14' }}>
+                                {record.late_display}
                               </Badge>
                             ) : '-'}
                           </td>
-                          <td className={`small align-middle ${record.clock_out ? 'text-danger' : 'text-muted'}`}>
+                          <td className={`small ${record.clock_out ? 'text-danger' : 'text-muted'}`}>
                             <span className="text-nowrap" title={formatShortTime(record.clock_out)}>
                               {formatShortTime(record.clock_out)}
                             </span>
                           </td>
-                          <td className="small align-middle">
+                          <td className="small">
                             <span className="text-nowrap" title={`${record.total_hours || '0.0'} hrs`}>
                               {record.total_hours || '0.0'}
                             </span>
                           </td>
-                          <td className="small align-middle">{getStatusBadge(record)}</td>
+                          <td className="small">{getStatusBadge(record)}</td>
                         </tr>
                       ))
                     ) : (
@@ -999,33 +964,104 @@ const AttendanceReports = () => {
                     )}
                   </tbody>
                 </Table>
-              ) : (
-                /* Monthly Calendar Table */
-                <Table size="sm" bordered className="mb-0">
-                  <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
+              </div>
+            ) : (
+              /* Monthly Calendar Table with Fixed First Two Columns */
+              <div className="monthly-table-container" style={{ position: 'relative', height: '400px', overflow: 'auto' }}>
+                <style>
+                  {`
+                    .monthly-table-container {
+                      position: relative;
+                      overflow: auto;
+                      white-space: nowrap;
+                    }
+                    
+                    .monthly-table {
+                      border-collapse: separate;
+                      border-spacing: 0;
+                      min-width: 100%;
+                    }
+                    
+                    .monthly-table thead {
+                      position: sticky;
+                      top: 0;
+                      z-index: 20;
+                      background-color: #f8f9fa;
+                    }
+                    
+                    .monthly-table th, 
+                    .monthly-table td {
+                      border: 1px solid #dee2e6;
+                      padding: 0.5rem;
+                      white-space: nowrap;
+                    }
+                    
+                    .fixed-col {
+                      position: sticky;
+                      background-color: white;
+                      z-index: 15;
+                    }
+                    
+                    .fixed-col-header {
+                      position: sticky;
+                      background-color: #f8f9fa !important;
+                      z-index: 25;
+                    }
+                    
+                    .col-1 {
+                      left: 0;
+                      min-width: 50px;
+                      border-right: 2px solid #dee2e6;
+                      box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1);
+                    }
+                    
+                    .col-2 {
+                      left: 50px;
+                      min-width: 140px;
+                      border-right: 2px solid #dee2e6;
+                      box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1);
+                    }
+                    
+                    .monthly-table tbody tr:hover .fixed-col {
+                      background-color: rgba(0,0,0,.075);
+                    }
+                  `}
+                </style>
+                <table className="monthly-table table-sm mb-0">
+                  <thead>
                     <tr>
-                      <th className="text-dark fw-normal small text-center" style={{ width: '60px', whiteSpace: 'nowrap' }}>Sr No</th>
-                      <th className="fw-normal small text-center" style={{ minWidth: '140px', whiteSpace: 'nowrap' }}>Employee</th>
+                      {/* Fixed First Column Header */}
+                      <th className="fixed-col-header col-1 text-center fw-normal small bg-light"
+                          style={{ left: 0, top: 0 }}>
+                        #
+                      </th>
+                      {/* Fixed Second Column Header */}
+                      <th className="fixed-col-header col-2 text-center fw-normal small bg-light"
+                          style={{ left: '50px', top: 0 }}>
+                        Employee
+                      </th>
+                      {/* Scrollable Date Columns */}
                       {[...Array(daysInMonth)].map((_, i) => {
                         const day = i + 1;
                         const isCurrent = isCurrentDate(day);
                         const monthData = months.find(m => m.value === selectedMonth);
-
+                        
                         return (
-                          <th key={i} className={`fw-normal small text-center ${isCurrent ? 'bg-primary text-white' : ''}`}
-                            style={{ minWidth: '32px', whiteSpace: 'nowrap' }}>
+                          <th key={i} className={`fw-normal small text-center ${isCurrent ? 'bg-primary text-white' : 'bg-light'}`}
+                              style={{ minWidth: '32px', top: 0, zIndex: 10 }}>
                             {day}
                             <div className="small fw-normal">{monthData?.short}</div>
                           </th>
                         );
                       })}
-                      <th className="text-center fw-normal small" style={{ minWidth: '32px', whiteSpace: 'nowrap' }}>P</th>
-                      <th className="text-center fw-normal small" style={{ minWidth: '32px', whiteSpace: 'nowrap' }}>H</th>
-                      <th className="text-center fw-normal small" style={{ minWidth: '32px', whiteSpace: 'nowrap' }}>L</th>
-                      <th className="text-center fw-normal small" style={{ minWidth: '32px', whiteSpace: 'nowrap' }}>Hol</th>
-                      <th className="text-center fw-normal small" style={{ minWidth: '32px', whiteSpace: 'nowrap' }}>A</th>
-                      <th className="text-center fw-normal small" style={{ minWidth: '60px', whiteSpace: 'nowrap' }}>Late</th>
-                      <th className="text-center fw-normal small" style={{ minWidth: '50px', whiteSpace: 'nowrap' }}>Hours</th>
+                      {/* Scrollable Summary Columns */}
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>P</th>
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>H</th>
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>L</th>
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>Hol</th>
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>A</th>
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '60px', top: 0, zIndex: 10 }}>Late</th>
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '50px', top: 0, zIndex: 10 }}>Hours</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1033,11 +1069,17 @@ const AttendanceReports = () => {
                       Object.keys(monthlyStats).map((empId, idx) => {
                         const empStats = monthlyStats[empId];
                         const empRecords = monthlyAttendance.filter(r => r.employee_id === empId);
-
+                        
                         return (
                           <tr key={empId}>
-                            <td className="text-center small align-middle" style={{ whiteSpace: 'nowrap' }}>{idx + 1}</td>
-                            <td className="small align-middle">
+                            {/* Fixed First Column */}
+                            <td className="fixed-col col-1 text-center small"
+                                style={{ left: 0, backgroundColor: 'white' }}>
+                              {idx + 1}
+                            </td>
+                            {/* Fixed Second Column */}
+                            <td className="fixed-col col-2 small"
+                                style={{ left: '50px', backgroundColor: 'white' }}>
                               <div className="text-truncate" style={{ maxWidth: '130px' }} title={empStats.name}>
                                 <span className="fw-semibold">{empStats.name}</span>
                               </div>
@@ -1045,51 +1087,46 @@ const AttendanceReports = () => {
                                 {empId}
                               </small>
                             </td>
+                            {/* Scrollable Date Columns */}
                             {[...Array(daysInMonth)].map((_, day) => {
                               const dayNum = day + 1;
                               const dayRecord = empRecords.find(r => r.day === dayNum);
                               const isCurrent = isCurrentDate(dayNum);
-
+                              
                               let statusIcon = '-';
                               let iconClass = 'text-muted';
                               let iconStyle = {};
-                              let title = '';
-
+                              
                               if (dayRecord) {
                                 if (dayRecord.status === 'present' || dayRecord.status === 'working') {
                                   statusIcon = '✓';
                                   iconClass = 'text-success fw-bold';
                                   iconStyle = { fontSize: '14px' };
-                                  title = dayRecord.tooltip;
                                 } else if (dayRecord.status === 'half_day') {
                                   statusIcon = '½';
                                   iconClass = 'text-warning fw-bold';
                                   iconStyle = { fontSize: '14px' };
-                                  title = dayRecord.tooltip;
                                 } else if (dayRecord.status === 'on_leave') {
                                   statusIcon = '🏖️';
                                   iconClass = 'text-purple';
                                   iconStyle = { fontSize: '14px' };
-                                  title = dayRecord.tooltip;
                                 } else if (dayRecord.status === 'holiday') {
                                   statusIcon = '🎉';
                                   iconClass = 'text-warning';
                                   iconStyle = { fontSize: '14px' };
-                                  title = dayRecord.tooltip;
                                 } else if (dayRecord.status === 'absent') {
                                   statusIcon = '✗';
                                   iconClass = 'text-danger fw-bold';
                                   iconStyle = { fontSize: '14px' };
-                                  title = dayRecord.tooltip;
                                 }
                               }
-
+                              
                               return (
                                 <td key={day} className={`small text-center align-middle ${isCurrent ? 'bg-primary bg-opacity-10' : ''}`}
-                                  style={{ backgroundColor: dayRecord?.is_late ? '#fff3cd' : 'transparent' }}>
+                                    style={{ backgroundColor: dayRecord?.is_late ? '#fff3cd' : 'transparent' }}>
                                   {dayRecord ? (
-                                    <span
-                                      title={title}
+                                    <span 
+                                      title={dayRecord.tooltip} 
                                       className={iconClass}
                                       style={{ cursor: 'pointer', ...iconStyle }}
                                     >
@@ -1100,38 +1137,32 @@ const AttendanceReports = () => {
                                 </td>
                               );
                             })}
-                            <td className="text-center align-middle"><Badge bg="success" pill>{empStats.present}</Badge></td>
-                            <td className="text-center align-middle"><Badge bg="warning" pill>{empStats.half_day}</Badge></td>
-                            <td className="text-center align-middle"><Badge bg="purple" pill style={{ backgroundColor: '#6f42c1' }}>{empStats.on_leave || 0}</Badge></td>
-                            <td className="text-center align-middle"><Badge bg="warning" pill style={{ backgroundColor: '#ffc107' }}>{empStats.holiday || 0}</Badge></td>
-                            <td className="text-center align-middle"><Badge bg="danger" pill>{empStats.absent}</Badge></td>
-                            <td className="text-center align-middle">
+                            {/* Scrollable Summary Columns */}
+                            <td className="text-center"><Badge bg="success" pill>{empStats.present}</Badge></td>
+                            <td className="text-center"><Badge bg="warning" pill>{empStats.half_day}</Badge></td>
+                            <td className="text-center"><Badge bg="purple" pill style={{ backgroundColor: '#6f42c1' }}>{empStats.on_leave || 0}</Badge></td>
+                            <td className="text-center"><Badge bg="warning" pill style={{ backgroundColor: '#ffc107' }}>{empStats.holiday || 0}</Badge></td>
+                            <td className="text-center"><Badge bg="danger" pill>{empStats.absent}</Badge></td>
+                            <td className="text-center">
                               {empStats.late_count > 0 ? (
-                                <Badge 
-                                  bg="warning" 
-                                  pill 
-                                  className="text-nowrap" 
-                                  style={{ backgroundColor: '#fd7e14', fontSize: '11px' }}
-                                  title={`Total Late: ${empStats.total_late_display} (${formatLateToHHMMSS(empStats.total_late_minutes)})`}
-                                >
-                                  ⏰ {empStats.late_count} 
-                                 
+                                <Badge bg="warning" pill className="text-nowrap" style={{ backgroundColor: '#fd7e14' }}>
+                                  ⚠️ {empStats.late_count}
                                 </Badge>
                               ) : (
                                 <Badge bg="secondary" pill className="text-nowrap">0</Badge>
                               )}
                             </td>
-                            <td className="text-center align-middle"><strong>{empStats.total_hours.toFixed(1)}</strong></td>
+                            <td className="text-center"><strong>{empStats.total_hours.toFixed(1)}</strong></td>
                           </tr>
                         );
                       })
                     ) : (
-                      <tr><td colSpan={daysInMonth + 10} className="text-center py-4">No attendance data</td></tr>
+                      <tr><td colSpan={daysInMonth + 12} className="text-center py-4">No attendance data</td></tr>
                     )}
                   </tbody>
-                </Table>
-              )}
-            </div>
+                </table>
+              </div>
+            )}
           </Card.Body>
         </Card>
       )}

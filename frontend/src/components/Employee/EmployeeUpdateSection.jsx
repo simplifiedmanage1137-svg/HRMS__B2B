@@ -20,7 +20,7 @@ const EmployeeUpdateSection = () => {
   const fetchPendingRequests = async () => {
     try {
       const response = await axios.get(
-        `https://employee-management-system-g7s7.onrender.com/api/admin-updates/employee-requests/${user.employeeId}`
+        `http://localhost:5000/api/admin-updates/employee-requests/${user.employeeId}`
       );
       setPendingRequests(response.data);
     } catch (error) {
@@ -37,7 +37,7 @@ const EmployeeUpdateSection = () => {
   const fetchCurrentEmployeeData = async () => {
     try {
       const response = await axios.get(
-        `https://employee-management-system-g7s7.onrender.com/api/employees/profile/${user.employeeId}`
+        `http://localhost:5000/api/employees/profile/${user.employeeId}`
       );
       setFormData(response.data);
     } catch (error) {
@@ -59,7 +59,7 @@ const EmployeeUpdateSection = () => {
     setMessage('');
 
     try {
-      await axios.post('https://employee-management-system-g7s7.onrender.com/api/admin-updates/submit-update', {
+      await axios.post('http://localhost:5000/api/admin-updates/submit-update', {
         requestId: selectedRequest._id,
         updatedData: formData
       });
