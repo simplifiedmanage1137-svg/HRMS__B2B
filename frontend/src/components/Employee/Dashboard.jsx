@@ -68,8 +68,13 @@ const EmployeeDashboard = () => {
     available: 0,
     total_accrued: 12,
     used: 0,
-    pending: 0
+    pending: 0,
+    comp_off_balance: 0,
+    total_comp_off_earned: 0,
+    total_comp_off_used: 0,
+    is_eligible: false
   });
+  const [compOffHistory, setCompOffHistory] = useState([]);
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [todayAttendance, setTodayAttendance] = useState(null);
   const [attendanceHistory, setAttendanceHistory] = useState([]);
@@ -85,7 +90,8 @@ const EmployeeDashboard = () => {
     workingDays: 22,
     lateDays: 0,
     weeklyOffDays: 0,
-    totalLateMinutes: 0
+    totalLateMinutes: 0,
+    compOffEarned: 0
   });
 
   // Chart data
@@ -200,6 +206,7 @@ const EmployeeDashboard = () => {
       await Promise.all([
         fetchEmployeeData(),
         fetchLeaveBalance(),
+        fetchCompOffHistory(),
         fetchLeaveRequests(),
         fetchTodayAttendance(),
         fetchAttendanceHistory(),
@@ -240,15 +247,16 @@ const EmployeeDashboard = () => {
       const response = await axios.get(API_ENDPOINTS.LEAVE_BALANCE(user.employeeId));
       console.log('Leave balance response:', response.data);
       
-      // Ensure we have valid numbers
-      const balance = {
+      setLeaveBalance({
         available: parseFloat(response.data.available) || 0,
         total_accrued: parseFloat(response.data.total_accrued) || 12,
         used: parseFloat(response.data.used) || 0,
-        pending: parseFloat(response.data.pending) || 0
-      };
-      
-      setLeaveBalance(balance);
+        pending: parseFloat(response.data.pending) || 0,
+        comp_off_balance: parseFloat(response.data.comp_off_balance) || 0,
+        total_comp_off_earned: parseFloat(response.data.total_comp_off_earned) || 0,
+        total_comp_off_used: parseFloat(response.data.total_comp_off_used) || 0,
+        is_eligible: response.data.is_eligible || false
+      });
       
     } catch (error) {
       console.error('Error fetching leave balance:', error);
@@ -258,10 +266,30 @@ const EmployeeDashboard = () => {
         available: 12,
         total_accrued: 12,
         used: 0,
-        pending: 0
+        pending: 0,
+        comp_off_balance: 0,
+        total_comp_off_earned: 0,
+        total_comp_off_used: 0,
+        is_eligible: false
       });
       
       showNotification('Using default leave balance', 'info');
+    }
+  };
+
+  const fetchCompOffHistory = async () => {
+    try {
+      const response = await axios.get(`${API_ENDPOINTS.ATTENDANCE}/comp-off/${user.employeeId}/history`);
+      setCompOffHistory(response.data.earnings || []);
+      
+      // Update stats with comp-off count
+      const earned = response.data.earnings?.filter(e => !e.is_used).length || 0;
+      setStats(prev => ({
+        ...prev,
+        compOffEarned: earned
+      }));
+    } catch (error) {
+      console.error('Error fetching comp-off history:', error);
     }
   };
 
@@ -326,6 +354,7 @@ const EmployeeDashboard = () => {
       let weeklyOff = 0;
       let lateDays = 0;
       let totalLateMinutes = 0;
+      let compOffEarned = 0;
       
       completeHistory.forEach(record => {
         if (record.isWeeklyOff) {
@@ -335,6 +364,9 @@ const EmployeeDashboard = () => {
           if (parseFloat(record.late_minutes) > 0) {
             lateDays++;
             totalLateMinutes += parseFloat(record.late_minutes);
+          }
+          if (record.comp_off_awarded) {
+            compOffEarned++;
           }
         } else if (record.status === 'half_day') {
           halfDays++;
@@ -354,7 +386,8 @@ const EmployeeDashboard = () => {
         halfDays: halfDays,
         weeklyOffDays: weeklyOff,
         lateDays: lateDays,
-        totalLateMinutes: totalLateMinutes
+        totalLateMinutes: totalLateMinutes,
+        compOffEarned: compOffEarned
       }));
     } catch (error) {
       console.error('Error fetching attendance history:', error);
@@ -533,6 +566,15 @@ const EmployeeDashboard = () => {
         );
       }
       return <Badge bg="info">Working</Badge>;
+    }
+
+    if (record.comp_off_awarded) {
+      return (
+        <Badge bg="purple">
+          <FaTrophy className="me-1" size={10} /> 
+          Comp-Off Earned
+        </Badge>
+      );
     }
 
     if (record.status === 'present') {
@@ -727,6 +769,9 @@ const EmployeeDashboard = () => {
                         {todayAttendance.late_display && (
                           <small className="text-danger ms-2">(Late {todayAttendance.late_display})</small>
                         )}
+                        {todayAttendance.comp_off_awarded && (
+                          <Badge bg="purple" className="ms-2">🎉 Comp-Off Earned</Badge>
+                        )}
                         {todayAttendance.clock_out ? (
                           <> • Out: <strong>{formatTime(todayAttendance.clock_out)}</strong></>
                         ) : (
@@ -792,17 +837,12 @@ const EmployeeDashboard = () => {
             <Card.Body>
               <div className="d-flex justify-content-between align-items-start">
                 <div>
-                  <p className="text-muted small mb-1">Late Days</p>
-                  <h4 className="mb-0 fw-bold text-warning">{stats.lateDays}</h4>
-                  <small className="text-muted">Last 30 days</small>
-                  {stats.totalLateMinutes > 0 && (
-                    <small className="text-danger d-block">
-                      Total: {formatLateTime(stats.totalLateMinutes)}
-                    </small>
-                  )}
+                  <p className="text-muted small mb-1">Comp-Off Balance</p>
+                  <h4 className="mb-0 fw-bold text-purple">{leaveBalance.comp_off_balance || 0}</h4>
+                  <small className="text-muted">Earned on holidays</small>
                 </div>
-                <div className="bg-warning bg-opacity-10 p-2 rounded-circle">
-                  <FaClock className="text-warning" size={20} />
+                <div className="bg-purple bg-opacity-10 p-2 rounded-circle">
+                  <FaTrophy className="text-purple" size={20} />
                 </div>
               </div>
             </Card.Body>
@@ -1100,7 +1140,11 @@ const EmployeeDashboard = () => {
                       leaveRequests.map((leave, index) => (
                         <tr key={leave.id || index}>
                           <td className="small">
-                            <Badge bg="secondary" className="px-2 py-1">
+                            <Badge 
+                              bg={leave.leave_type === 'Comp-Off' ? 'purple' : 'secondary'} 
+                              className="px-2 py-1"
+                            >
+                              {leave.leave_type === 'Comp-Off' && '🎉 '}
                               {leave.leave_type}
                             </Badge>
                           </td>
@@ -1174,6 +1218,36 @@ const EmployeeDashboard = () => {
               )}
             </Card.Body>
           </Card>
+
+          {/* Comp-Off Summary Card */}
+          {compOffHistory.length > 0 && (
+            <Card className="border-0 shadow-sm mb-3">
+              <Card.Header className="bg-purple text-white py-2">
+                <h6 className="mb-0 small fw-semibold">
+                  <FaTrophy className="me-2" size={12} />
+                  Recent Comp-Off Earnings
+                </h6>
+              </Card.Header>
+              <Card.Body className="p-0">
+                <div className="list-group list-group-flush">
+                  {compOffHistory.slice(0, 3).map((item, index) => (
+                    <div key={index} className="list-group-item py-2">
+                      <div className="d-flex justify-content-between align-items-center">
+                        <div>
+                          <small className="fw-semibold">{item.holiday_name}</small>
+                          <br />
+                          <small className="text-muted">{formatDate(item.attendance_date)}</small>
+                        </div>
+                        <Badge bg={item.is_used ? 'secondary' : 'success'} pill>
+                          {item.is_used ? 'Used' : `${item.comp_off_days} day`}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card.Body>
+            </Card>
+          )}
 
           {/* Quick Actions Card */}
           <Card className="border-0 shadow-sm">

@@ -5,204 +5,99 @@ const supabase = require('../config/supabase');
 exports.getLeaveBalance = async (req, res) => {
     try {
         const { employee_id } = req.params;
+        
+        console.log('📊 Fetching leave balance for employee:', employee_id);
 
-        console.log('Fetching leave balance for employee:', employee_id);
-
-        if (!employee_id) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'Employee ID is required' 
-            });
-        }
-
-        // Get employee joining date
-        const { data: employees, error: empError } = await supabase
+        // Get employee details first to check probation status
+        const { data: employee, error: empError } = await supabase
             .from('employees')
-            .select('joining_date')
-            .eq('employee_id', employee_id);
+            .select('joining_date, comp_off_balance')
+            .eq('employee_id', employee_id)
+            .single();
 
         if (empError) throw empError;
 
-        if (!employees || employees.length === 0) {
-            return res.status(404).json({ 
-                success: false, 
-                message: 'Employee not found' 
-            });
-        }
-
+        // Calculate months completed
+        const joiningDate = new Date(employee.joining_date);
         const today = new Date();
-        const joiningDate = new Date(employees[0].joining_date);
-
-        console.log('Joining Date:', employees[0].joining_date);
-        console.log('Current Date:', today);
-
-        // ===== CORRECT ELIGIBILITY CALCULATION =====
-        // Calculate total months from joining date (not calendar year based)
-        let totalMonths = (today.getFullYear() - joiningDate.getFullYear()) * 12 
-                        + (today.getMonth() - joiningDate.getMonth());
         
-        // Adjust for day of month
+        let monthsCompleted = (today.getFullYear() - joiningDate.getFullYear()) * 12;
+        monthsCompleted += (today.getMonth() - joiningDate.getMonth());
+        
         if (today.getDate() < joiningDate.getDate()) {
-            totalMonths -= 1;
+            monthsCompleted -= 1;
         }
         
-        // Ensure not negative
-        totalMonths = Math.max(0, totalMonths);
-
-        // Calculate eligibility based on joining date + 6 months
-        const sixMonthsFromJoining = new Date(joiningDate);
-        sixMonthsFromJoining.setMonth(sixMonthsFromJoining.getMonth() + 6);
+        monthsCompleted = Math.max(0, monthsCompleted);
+        const isEligible = monthsCompleted >= 6;
         
-        // Check if today is on or after the eligibility date
-        const isEligibleToApply = today >= sixMonthsFromJoining;
+        // Calculate eligible from date (6 months after joining)
+        const eligibleFromDate = new Date(joiningDate);
+        eligibleFromDate.setMonth(eligibleFromDate.getMonth() + 6);
+        const eligibleFromDateStr = eligibleFromDate.toISOString().split('T')[0];
 
-        // Format eligible from date (joining date + 6 months)
-        const eligibleFromDate = sixMonthsFromJoining.toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        });
+        // Get total accrued leaves (1.5 days per month)
+        const totalAccrued = monthsCompleted * 1.5;
 
-        console.log('Eligibility Check:', {
-            joiningDate: joiningDate.toISOString(),
-            sixMonthsFromJoining: sixMonthsFromJoining.toISOString(),
-            today: today.toISOString(),
-            totalMonthsFromJoining: totalMonths,
-            isEligible: isEligibleToApply
-        });
-
-        // ===== ACCRUAL CALCULATION (Calendar year based) =====
-        const currentYear = today.getFullYear();
-        const currentMonth = today.getMonth() + 1;
-        const currentDay = today.getDate();
-        
-        const joinYear = joiningDate.getFullYear();
-        const joinMonth = joiningDate.getMonth() + 1;
-
-        // Calculate completed months in CURRENT YEAR only (for accrual)
-        let completedMonthsInCurrentYear = 0;
-        
-        if (currentYear > joinYear) {
-            // Employee joined in previous year
-            // Count all completed months in current year up to previous month
-            for (let month = 1; month <= currentMonth; month++) {
-                if (month < currentMonth) {
-                    // Previous months are fully completed
-                    completedMonthsInCurrentYear++;
-                } else if (month === currentMonth) {
-                    // Current month - check if it's complete
-                    const lastDayOfMonth = new Date(currentYear, month, 0).getDate();
-                    if (currentDay > lastDayOfMonth) {
-                        completedMonthsInCurrentYear++;
-                    }
-                }
-            }
-        } else if (currentYear === joinYear) {
-            // Employee joined in current year
-            // Count months from join month up to previous month
-            for (let month = joinMonth; month <= currentMonth; month++) {
-                if (month < currentMonth) {
-                    completedMonthsInCurrentYear++;
-                } else if (month === currentMonth) {
-                    const lastDayOfMonth = new Date(currentYear, month, 0).getDate();
-                    if (currentDay > lastDayOfMonth) {
-                        completedMonthsInCurrentYear++;
-                    }
-                }
-            }
-        }
-
-        console.log('Completed months in current year (for accrual):', completedMonthsInCurrentYear);
-
-        // Calculate accrued leaves for current year
-        const totalAccrued = completedMonthsInCurrentYear * 1.5;
-
-        console.log('Total accrued for current year:', totalAccrued);
-
-        // Get current year balance from database
-        let { data: balance, error: balanceError } = await supabase
-            .from('leave_balance')
-            .select('*')
+        // Get used leaves from leaves table
+        const { data: usedLeaves, error: usedError } = await supabase
+            .from('leaves')
+            .select('days_count')
             .eq('employee_id', employee_id)
-            .eq('leave_year', currentYear);
+            .eq('status', 'approved')
+            .in('leave_type', ['Annual', 'Sick', 'Personal', 'Maternity', 'Paternity', 'Bereavement']);
 
-        if (balanceError) throw balanceError;
+        if (usedError) throw usedError;
 
-        // If no balance record exists for current year, create one
-        if (!balance || balance.length === 0) {
-            console.log(`Creating new balance for ${employee_id} in ${currentYear}`);
-            
-            const { data: newBalance, error: insertError } = await supabase
-                .from('leave_balance')
-                .insert([{
-                    employee_id,
-                    leave_year: currentYear,
-                    total_accrued: totalAccrued,
-                    total_used: 0,
-                    total_pending: 0,
-                    current_balance: totalAccrued
-                }])
-                .select();
+        const used = usedLeaves?.reduce((sum, leave) => sum + (leave.days_count || 0), 0) || 0;
 
-            if (insertError) throw insertError;
-            
-            balance = newBalance;
+        // Get pending leaves
+        const { data: pendingLeaves, error: pendingError } = await supabase
+            .from('leaves')
+            .select('days_count')
+            .eq('employee_id', employee_id)
+            .eq('status', 'pending');
+
+        if (pendingError) throw pendingError;
+
+        const pending = pendingLeaves?.reduce((sum, leave) => sum + (leave.days_count || 0), 0) || 0;
+
+        // Calculate available leaves
+        let available = 0;
+        if (isEligible) {
+            available = Math.max(0, totalAccrued - used - pending);
         }
 
-        const currentBalance = balance[0];
-        
-        // Parse values to numbers
-        const dbTotalAccrued = parseFloat(currentBalance.total_accrued) || 0;
-        const totalUsed = parseFloat(currentBalance.total_used) || 0;
-        const totalPending = parseFloat(currentBalance.total_pending) || 0;
-        
-        // Use the larger of database value or calculated value
-        const finalTotalAccrued = Math.max(dbTotalAccrued, totalAccrued);
-        
-        // Calculate available using formula: Available = Total Accrued - Used - Pending
-        const calculatedAvailable = finalTotalAccrued - totalUsed - totalPending;
-        
-        // Update database if needed
-        if (dbTotalAccrued !== finalTotalAccrued) {
-            console.log('Updating database with correct accrued:', finalTotalAccrued);
-            const { error: updateError } = await supabase
-                .from('leave_balance')
-                .update({
-                    total_accrued: finalTotalAccrued,
-                    current_balance: calculatedAvailable
-                })
-                .eq('employee_id', employee_id)
-                .eq('leave_year', currentYear);
+        // Get comp-off balance
+        const compOffBalance = employee.comp_off_balance || 0;
 
-            if (updateError) throw updateError;
-        }
+        console.log('📊 Leave balance calculated:', {
+            totalAccrued,
+            used,
+            pending,
+            available,
+            monthsCompleted,
+            isEligible,
+            compOffBalance
+        });
 
-        const response = {
+        res.json({
             success: true,
-            employee_id,
-            total_accrued: finalTotalAccrued.toFixed(1),
-            used: totalUsed.toFixed(1),
-            pending: totalPending.toFixed(1),
-            available: calculatedAvailable.toFixed(1),
-            monthly_accrual: 1.5,
-            joining_date: employees[0].joining_date,
-            months_completed: totalMonths,
-            completed_months_in_year: completedMonthsInCurrentYear,
-            is_eligible: isEligibleToApply,
-            eligible_from_date: eligibleFromDate,
-            leave_year: currentYear,
-            next_accrual_date: new Date(currentYear, currentMonth, 1).toISOString().split('T')[0],
-            message: `Leaves for year ${currentYear} only. Previous year leaves expired on Dec 31.`
-        };
-
-        console.log('Sending response:', response);
-        res.json(response);
+            total_accrued: totalAccrued.toFixed(1),
+            used: used.toFixed(1),
+            pending: pending.toFixed(1),
+            available: available.toFixed(1),
+            comp_off_balance: compOffBalance.toFixed(1),
+            months_completed: monthsCompleted,
+            is_eligible: isEligible,
+            eligible_from_date: eligibleFromDateStr
+        });
 
     } catch (error) {
-        console.error('Error in getLeaveBalance:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Error fetching leave balance',
+        console.error('Error fetching leave balance:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch leave balance',
             error: error.message
         });
     }
@@ -212,265 +107,125 @@ exports.getLeaveBalance = async (req, res) => {
 exports.applyLeave = async (req, res) => {
     try {
         console.log('='.repeat(50));
-        console.log('LEAVE APPLICATION RECEIVED');
+        console.log('📝 LEAVE APPLICATION');
         console.log('Request body:', JSON.stringify(req.body, null, 2));
         console.log('='.repeat(50));
 
         const {
+            employee_id,
             leave_type,
             leave_duration,
+            half_day_type,
             start_date,
             end_date,
-            half_day_type,
             reason,
+            days_count,
             reporting_manager
         } = req.body;
 
-        const employee_id = req.headers['employee-id'] || req.body.employee_id;
-
-        if (!employee_id) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'Employee ID is required' 
+        // Validation
+        if (!employee_id || !leave_type || !start_date || !reason) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required fields'
             });
         }
 
-        // Calculate number of days
-        let numberOfDays = 1;
-        
-        if (leave_duration === 'Half Day') {
-            numberOfDays = 0.5;
-        } else if (leave_duration === 'Full Day' && start_date && end_date && start_date !== end_date) {
-            const start = new Date(start_date);
-            const end = new Date(end_date);
-            const diffTime = Math.abs(end - start);
-            numberOfDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-        }
-
-        console.log('Number of days requested:', numberOfDays);
-
-        // Check if employee exists
-        const { data: employees, error: empError } = await supabase
+        // Get employee details
+        const { data: employee, error: empError } = await supabase
             .from('employees')
-            .select('*')
-            .eq('employee_id', employee_id);
+            .select('joining_date, comp_off_balance')
+            .eq('employee_id', employee_id)
+            .single();
 
         if (empError) throw empError;
 
-        if (!employees || employees.length === 0) {
-            return res.status(404).json({ 
-                success: false, 
-                message: 'Employee not found' 
-            });
-        }
-
-        const emp = employees[0];
-
-        // Check if employee has completed 6 months from joining date
-        const joiningDate = new Date(emp.joining_date);
+        // Calculate months completed
+        const joiningDate = new Date(employee.joining_date);
         const today = new Date();
-        const sixMonthsFromJoining = new Date(joiningDate);
-        sixMonthsFromJoining.setMonth(sixMonthsFromJoining.getMonth() + 6);
         
-        const isEligible = today >= sixMonthsFromJoining;
-
-        console.log('Eligibility Check:', {
-            joiningDate: joiningDate.toISOString(),
-            sixMonthsFromJoining: sixMonthsFromJoining.toISOString(),
-            today: today.toISOString(),
-            isEligible,
-            leave_type
-        });
-
-        // If not eligible, only allow Unpaid Leave
-        if (!isEligible && leave_type !== 'Unpaid') {
-            const eligibleDate = sixMonthsFromJoining.toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-            });
-            return res.status(403).json({ 
-                success: false, 
-                message: `During probation (until ${eligibleDate}), you can only apply for Unpaid Leave.` 
-            });
+        let monthsCompleted = (today.getFullYear() - joiningDate.getFullYear()) * 12;
+        monthsCompleted += (today.getMonth() - joiningDate.getMonth());
+        
+        if (today.getDate() < joiningDate.getDate()) {
+            monthsCompleted -= 1;
         }
-
-        // Get current year
-        const currentYear = today.getFullYear();
         
-        // Get or create leave balance
-        let { data: balance, error: balanceError } = await supabase
-            .from('leave_balance')
-            .select('*')
-            .eq('employee_id', employee_id)
-            .eq('leave_year', currentYear);
+        monthsCompleted = Math.max(0, monthsCompleted);
+        const isEligible = monthsCompleted >= 6;
 
-        if (balanceError) throw balanceError;
-
-        // If no balance record exists, create one
-        if (!balance || balance.length === 0) {
-            console.log('No balance record found, creating new one');
-            
-            // Calculate completed months in current year
-            const currentMonth = today.getMonth() + 1;
-            const currentDay = today.getDate();
-            
-            // Count completed months (months that are fully finished)
-            let completedMonths = 0;
-            for (let m = 1; m <= currentMonth; m++) {
-                if (m < currentMonth) {
-                    completedMonths++;
-                } else if (m === currentMonth) {
-                    // Check if current month is complete (past last day)
-                    const lastDayOfMonth = new Date(currentYear, m, 0).getDate();
-                    if (currentDay > lastDayOfMonth) {
-                        completedMonths++;
-                    }
-                }
+        // Check leave balance for non-Unpaid leaves
+        if (leave_type !== 'Unpaid' && leave_type !== 'Comp-Off') {
+            if (!isEligible) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'You are not eligible for paid leaves during probation period. Only Unpaid Leave is available.'
+                });
             }
 
-            const initialAccrued = completedMonths * 1.5;
-
-            const { data: newBalance, error: insertError } = await supabase
-                .from('leave_balance')
-                .insert([{
-                    employee_id,
-                    leave_year: currentYear,
-                    total_accrued: initialAccrued,
-                    total_used: 0,
-                    total_pending: 0,
-                    current_balance: initialAccrued
-                }])
-                .select();
-
-            if (insertError) throw insertError;
+            // Get current balance
+            const { data: balanceData, error: balanceError } = await exports.getLeaveBalance({ params: { employee_id } });
             
-            balance = newBalance;
+            if (balanceError) throw balanceError;
+            
+            if (parseFloat(balanceData.available) < days_count) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Insufficient leave balance. Available: ${balanceData.available} days`
+                });
+            }
         }
 
-        const currentBalance = balance[0];
-        
-        // Parse values to numbers
-        const totalAccrued = parseFloat(currentBalance.total_accrued) || 0;
-        const totalUsed = parseFloat(currentBalance.total_used) || 0;
-        const totalPending = parseFloat(currentBalance.total_pending) || 0;
-        const available = parseFloat(currentBalance.current_balance) || 0;
-
-        console.log('Current balance before application:', {
-            totalAccrued,
-            totalUsed,
-            totalPending,
-            available,
-            requested: numberOfDays,
-            leave_type
-        });
-
-        // Check if sufficient available balance (only for non-Unpaid leaves)
-        if (leave_type !== 'Unpaid' && available < numberOfDays) {
-            return res.status(400).json({ 
-                success: false, 
-                message: `Insufficient leave balance. Available: ${available.toFixed(1)} days, Requested: ${numberOfDays} days` 
-            });
+        // Check comp-off balance
+        if (leave_type === 'Comp-Off') {
+            if ((employee.comp_off_balance || 0) < days_count) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Insufficient Comp-Off balance. Available: ${employee.comp_off_balance || 0} days`
+                });
+            }
         }
 
-        // Check for overlapping leaves
-        const { data: overlapping, error: overlapError } = await supabase
-            .from('leaves')
-            .select('*')
-            .eq('employee_id', employee_id)
-            .neq('status', 'rejected')
-            .or(`and(start_date.gte.${start_date},start_date.lte.${end_date || start_date}),and(end_date.gte.${start_date},end_date.lte.${end_date || start_date})`);
-
-        if (overlapError) throw overlapError;
-
-        if (overlapping && overlapping.length > 0) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'You already have a leave application for this date range' 
-            });
-        }
-
-        // Insert leave application
-        const { data: leaveData, error: insertError } = await supabase
+        // Insert leave record
+        const { data: leaveData, error: leaveError } = await supabase
             .from('leaves')
             .insert([{
                 employee_id,
-                leave_type: leave_type || 'Annual',
-                leave_duration: leave_duration || 'Full Day',
+                leave_type,
+                leave_duration,
+                half_day_type: half_day_type || null,
                 start_date,
                 end_date: end_date || start_date,
-                half_day_type: half_day_type || null,
                 reason,
-                reporting_manager: reporting_manager || null,
+                days_count: days_count || 1,
+                reporting_manager,
                 status: 'pending',
-                days_count: numberOfDays,
-                applied_by: employee_id,
-                applied_date: new Date().toISOString()
+                applied_date: new Date().toISOString().split('T')[0]
             }])
             .select();
 
-        if (insertError) throw insertError;
+        if (leaveError) throw leaveError;
 
-        console.log('Leave inserted with ID:', leaveData[0].id);
+        console.log('✅ Leave applied successfully:', leaveData[0]);
 
-        // Update balance only for non-Unpaid leaves
-        let newBalanceData = currentBalance;
-        
-        if (leave_type !== 'Unpaid') {
-            const newPending = totalPending + numberOfDays;
-            const newAvailable = available - numberOfDays;
-
-            console.log('Updating balance (non-Unpaid leave):', {
-                oldPending: totalPending,
-                newPending,
-                oldAvailable: available,
-                newAvailable
-            });
-
-            const { data: updatedBalance, error: updateError } = await supabase
-                .from('leave_balance')
-                .update({
-                    total_pending: newPending,
-                    current_balance: newAvailable
-                })
-                .eq('employee_id', employee_id)
-                .eq('leave_year', currentYear)
-                .select();
-
-            if (updateError) throw updateError;
-            
-            newBalanceData = updatedBalance[0];
-        } else {
-            console.log('Unpaid leave - No balance update required');
-        }
-
-        console.log('Final status:', {
-            leave_type,
-            balance_updated: leave_type !== 'Unpaid'
-        });
-
-        res.status(201).json({
+        res.json({
             success: true,
-            message: 'Leave application submitted successfully',
-            leaveId: leaveData[0].id,
-            balance: {
-                total_accrued: (parseFloat(newBalanceData.total_accrued) || 0).toFixed(1),
-                used: (parseFloat(newBalanceData.total_used) || 0).toFixed(1),
-                pending: (parseFloat(newBalanceData.total_pending) || 0).toFixed(1),
-                available: (parseFloat(newBalanceData.current_balance) || 0).toFixed(1),
-                leave_year: currentYear
-            }
+            message: leave_type === 'Comp-Off' 
+                ? 'Comp-Off request submitted successfully!' 
+                : 'Leave request submitted successfully!',
+            leave: leaveData[0]
         });
 
     } catch (error) {
-        console.error('Error applying for leave:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Failed to apply for leave',
+        console.error('Error applying leave:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to apply leave',
             error: error.message
         });
     }
 };
+
 
 // Helper function to parse shift timing
 const parseShiftTiming = (shiftString) => {
@@ -723,220 +478,83 @@ exports.getLeaves = async (req, res) => {
 exports.updateLeaveStatus = async (req, res) => {
     try {
         const { id } = req.params;
-        const { status, comments } = req.body;
+        const { status, remarks } = req.body;
 
-        console.log('='.repeat(50));
-        console.log('UPDATE LEAVE STATUS REQUEST');
-        console.log('Leave ID:', id);
-        console.log('Status:', status);
-        console.log('Comments:', comments);
-        console.log('='.repeat(50));
-
-        if (!['approved', 'rejected'].includes(status)) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'Invalid status. Must be approved or rejected.' 
+        if (!status || !['approved', 'rejected', 'cancelled'].includes(status)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Valid status is required'
             });
         }
 
-        // Get leave details before update
-        const { data: leaveDetails, error: fetchError } = await supabase
+        // Get leave details first
+        const { data: leave, error: fetchError } = await supabase
             .from('leaves')
             .select('*')
-            .eq('id', id);
+            .eq('id', id)
+            .single();
 
         if (fetchError) throw fetchError;
 
-        if (!leaveDetails || leaveDetails.length === 0) {
-            return res.status(404).json({ 
-                success: false, 
-                message: 'Leave request not found' 
-            });
-        }
-
-        const leave = leaveDetails[0];
-        const oldStatus = leave.status;
-        const currentYear = new Date().getFullYear();
-        const leaveDays = parseFloat(leave.days_count) || 1;
-
-        console.log('Leave details:', {
-            id: leave.id,
-            employee_id: leave.employee_id,
-            oldStatus,
-            newStatus: status,
-            days: leaveDays
-        });
-
-        // Only process if it was pending
-        if (oldStatus !== 'pending') {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'This leave request is no longer pending' 
-            });
-        }
-
-        // Get current balance
-        const { data: balance, error: balanceError } = await supabase
-            .from('leave_balance')
-            .select('*')
-            .eq('employee_id', leave.employee_id)
-            .eq('leave_year', currentYear);
-
-        if (balanceError) throw balanceError;
-
-        if (!balance || balance.length === 0) {
-            return res.status(404).json({ 
-                success: false, 
-                message: 'Leave balance not found' 
-            });
-        }
-
-        const currentBalance = balance[0];
-        
-        // Parse values
-        const totalAccrued = parseFloat(currentBalance.total_accrued) || 0;
-        const totalUsed = parseFloat(currentBalance.total_used) || 0;
-        const totalPending = parseFloat(currentBalance.total_pending) || 0;
-        const available = parseFloat(currentBalance.current_balance) || 0;
-
-        console.log('Current balance before update:', {
-            totalAccrued,
-            totalUsed,
-            totalPending,
-            available
-        });
-
         // Update leave status
-        const { error: updateError } = await supabase
+        const { data, error } = await supabase
             .from('leaves')
             .update({
                 status,
-                admin_comments: comments || null
+                approved_by: req.user?.employeeId || req.body.approved_by,
+                approved_date: status === 'approved' ? new Date().toISOString().split('T')[0] : null,
+                remarks: remarks || null
             })
-            .eq('id', id);
+            .eq('id', id)
+            .select();
 
-        if (updateError) throw updateError;
+        if (error) throw error;
 
-        let newBalanceData = currentBalance;
-
-        if (status === 'approved') {
-            // APPROVED: Move from pending to used
-            const newPending = totalPending - leaveDays;
-            const newUsed = totalUsed + leaveDays;
-            
-            const { data: updatedBalance, error: balUpdateError } = await supabase
-                .from('leave_balance')
+        // If comp-off leave is approved, deduct from balance
+        if (status === 'approved' && leave.leave_type === 'Comp-Off') {
+            // Update employee's comp_off_balance
+            const { error: updateError } = await supabase
+                .from('employees')
                 .update({
-                    total_pending: newPending,
-                    total_used: newUsed
+                    comp_off_balance: supabase.raw('comp_off_balance - ?', [leave.days_count]),
+                    total_comp_off_used: supabase.raw('total_comp_off_used + ?', [leave.days_count])
                 })
-                .eq('employee_id', leave.employee_id)
-                .eq('leave_year', currentYear)
-                .select();
+                .eq('employee_id', leave.employee_id);
 
-            if (balUpdateError) throw balUpdateError;
-            
-            newBalanceData = updatedBalance[0];
-            
-            console.log('APPROVED - Balance updated:', {
-                oldPending: totalPending,
-                newPending,
-                oldUsed: totalUsed,
-                newUsed,
-                available: available // unchanged
-            });
+            if (updateError) {
+                console.error('Error updating comp-off balance:', updateError);
+            } else {
+                // Mark comp-off earnings as used
+                const { error: markError } = await supabase
+                    .from('comp_off_earnings')
+                    .update({
+                        is_used: true,
+                        used_date: new Date().toISOString().split('T')[0],
+                        used_leave_id: id
+                    })
+                    .eq('employee_id', leave.employee_id)
+                    .eq('is_used', false)
+                    .order('attendance_date')
+                    .limit(leave.days_count);
 
-        } else if (status === 'rejected') {
-            // REJECTED: Move from pending back to available
-            const newPending = totalPending - leaveDays;
-            const newAvailable = available + leaveDays;
-            
-            const { data: updatedBalance, error: balUpdateError } = await supabase
-                .from('leave_balance')
-                .update({
-                    total_pending: newPending,
-                    current_balance: newAvailable
-                })
-                .eq('employee_id', leave.employee_id)
-                .eq('leave_year', currentYear)
-                .select();
-
-            if (balUpdateError) throw balUpdateError;
-            
-            newBalanceData = updatedBalance[0];
-            
-            console.log('REJECTED - Balance updated:', {
-                oldPending: totalPending,
-                newPending,
-                oldAvailable: available,
-                newAvailable,
-                used: totalUsed // unchanged
-            });
+                if (markError) {
+                    console.error('Error marking comp-off as used:', markError);
+                }
+            }
         }
 
-        // Get updated leave stats for admin dashboard
-        const { count: pendingCount, error: pendingError } = await supabase
-            .from('leaves')
-            .select('*', { count: 'exact', head: true })
-            .eq('status', 'pending');
-
-        const { count: approvedCount, error: approvedError } = await supabase
-            .from('leaves')
-            .select('*', { count: 'exact', head: true })
-            .eq('status', 'approved');
-
-        const { count: rejectedCount, error: rejectedError } = await supabase
-            .from('leaves')
-            .select('*', { count: 'exact', head: true })
-            .eq('status', 'rejected');
-
-        const { count: totalCount, error: totalError } = await supabase
-            .from('leaves')
-            .select('*', { count: 'exact', head: true });
-
-        // Create notification for employee
-        try {
-            const notificationMessage = status === 'approved' 
-                ? `Your leave application for ${new Date(leave.start_date).toLocaleDateString()} has been approved.`
-                : `Your leave application for ${new Date(leave.start_date).toLocaleDateString()} has been rejected. ${comments ? 'Reason: ' + comments : ''}`;
-
-            const { error: notifError } = await supabase
-                .from('notifications')
-                .insert([{
-                    employee_id: leave.employee_id,
-                    message: notificationMessage,
-                    type: 'leave_' + status,
-                    created_at: new Date().toISOString()
-                }]);
-
-            if (notifError) throw notifError;
-            console.log('Notification created for employee');
-        } catch (notifError) {
-            console.error('Error creating notification:', notifError);
-        }
+        console.log(`✅ Leave ${status}:`, data[0]);
 
         res.json({
             success: true,
-            message: `Leave ${status} successfully`,
-            balance: {
-                total_accrued: (parseFloat(newBalanceData.total_accrued) || 0).toFixed(1),
-                used: (parseFloat(newBalanceData.total_used) || 0).toFixed(1),
-                pending: (parseFloat(newBalanceData.total_pending) || 0).toFixed(1),
-                available: (parseFloat(newBalanceData.current_balance) || 0).toFixed(1)
-            },
-            stats: {
-                total: totalCount || 0,
-                pending: pendingCount || 0,
-                approved: approvedCount || 0,
-                rejected: rejectedCount || 0
-            },
-            employee_id: leave.employee_id // Send employee_id so frontend knows who to refresh
+            message: `Leave request ${status} successfully`,
+            leave: data[0]
         });
 
     } catch (error) {
         console.error('Error updating leave status:', error);
-        res.status(500).json({ 
-            success: false, 
+        res.status(500).json({
+            success: false,
             message: 'Failed to update leave status',
             error: error.message
         });
@@ -946,37 +564,73 @@ exports.updateLeaveStatus = async (req, res) => {
 // Get leave types
 exports.getLeaveTypes = async (req, res) => {
     try {
-        const { data: types, error } = await supabase
-            .from('leave_types')
-            .select('*')
-            .eq('is_active', true);
-
-        if (error) throw error;
-
-        if (!types || types.length === 0) {
-            return res.json([
-                { id: 1, name: 'Annual', description: 'Annual vacation leave' },
-                { id: 2, name: 'Sick', description: 'Medical leave' },
-                { id: 3, name: 'Personal', description: 'Personal time off' },
-                { id: 4, name: 'Maternity', description: 'Maternity leave' },
-                { id: 5, name: 'Paternity', description: 'Paternity leave' },
-                { id: 6, name: 'Bereavement', description: 'Leave for family death' },
-                { id: 7, name: 'Unpaid', description: 'Leave without pay' }
-            ]);
+        const { employee_id } = req.query;
+        
+        let availableTypes = [
+            { value: 'Unpaid', label: 'Unpaid Leave', icon: '💰' }
+        ];
+        
+        if (employee_id) {
+            // Get employee details to check comp-off balance
+            const { data: employee, error } = await supabase
+                .from('employees')
+                .select('comp_off_balance')
+                .eq('employee_id', employee_id)
+                .single();
+                
+            if (!error && employee.comp_off_balance > 0) {
+                availableTypes.unshift({ 
+                    value: 'Comp-Off', 
+                    label: `Comp-Off (${employee.comp_off_balance} days available)`, 
+                    icon: '🎉' 
+                });
+            }
+            
+            // Check probation status for other leave types
+            const { data: empData } = await supabase
+                .from('employees')
+                .select('joining_date')
+                .eq('employee_id', employee_id)
+                .single();
+                
+            if (empData) {
+                const joiningDate = new Date(empData.joining_date);
+                const today = new Date();
+                
+                let monthsCompleted = (today.getFullYear() - joiningDate.getFullYear()) * 12;
+                monthsCompleted += (today.getMonth() - joiningDate.getMonth());
+                
+                if (today.getDate() < joiningDate.getDate()) {
+                    monthsCompleted -= 1;
+                }
+                
+                monthsCompleted = Math.max(0, monthsCompleted);
+                
+                if (monthsCompleted >= 6) {
+                    availableTypes.push(
+                        { value: 'Annual', label: 'Annual Leave', icon: '🌴' },
+                        { value: 'Sick', label: 'Sick Leave', icon: '🤒' },
+                        { value: 'Personal', label: 'Personal Leave', icon: '👤' },
+                        { value: 'Maternity', label: 'Maternity Leave', icon: '🤱' },
+                        { value: 'Paternity', label: 'Paternity Leave', icon: '👨‍👧' },
+                        { value: 'Bereavement', label: 'Bereavement Leave', icon: '💐' }
+                    );
+                }
+            }
         }
 
-        res.json(types);
+        res.json({
+            success: true,
+            leaveTypes: availableTypes
+        });
+
     } catch (error) {
         console.error('Error fetching leave types:', error);
-        res.json([
-            { id: 1, name: 'Annual', description: 'Annual vacation leave' },
-            { id: 2, name: 'Sick', description: 'Medical leave' },
-            { id: 3, name: 'Personal', description: 'Personal time off' },
-            { id: 4, name: 'Maternity', description: 'Maternity leave' },
-            { id: 5, name: 'Paternity', description: 'Paternity leave' },
-            { id: 6, name: 'Bereavement', description: 'Leave for family death' },
-            { id: 7, name: 'Unpaid', description: 'Leave without pay' }
-        ]);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch leave types',
+            error: error.message
+        });
     }
 };
 

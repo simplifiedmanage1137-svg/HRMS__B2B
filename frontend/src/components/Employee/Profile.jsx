@@ -1,7 +1,7 @@
 // src/components/Employee/Profile.jsx
 import React, { useState, useEffect } from 'react';
 import { 
-  Card, Row, Col, Badge, Spinner, Alert, Tab, Nav, Table, 
+  Card, Row, Col, Badge, Spinner, Alert, Table, 
   Button, ProgressBar, ListGroup 
 } from 'react-bootstrap';
 import { 
@@ -30,7 +30,8 @@ import {
   FaDownload,
   FaEdit,
   FaInfoCircle,
-  FaExclamationTriangle
+  FaExclamationTriangle,
+  FaTrophy
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -50,9 +51,15 @@ const Profile = () => {
         total_accrued: '0',
         used: '0',
         pending: '0',
+        comp_off_balance: '0',
+        total_comp_off_earned: '0',
+        total_comp_off_used: '0',
         completed_months_in_year: 0,
-        message: ''
+        message: '',
+        is_eligible: false,
+        months_completed: 0
     });
+    const [compOffHistory, setCompOffHistory] = useState([]);
     const [leaveRequests, setLeaveRequests] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -64,6 +71,7 @@ const Profile = () => {
         if (user?.employeeId) {
             fetchEmployeeProfile();
             fetchLeaveBalance();
+            fetchCompOffHistory();
             fetchLeaveRequests();
             fetchDocumentCount();
         }
@@ -74,6 +82,7 @@ const Profile = () => {
         if (employeeUpdate && employeeUpdate.employeeId === user?.employeeId) {
             fetchEmployeeProfile();
             fetchLeaveBalance();
+            fetchCompOffHistory();
             clearEmployeeUpdate();
             showNotification('Your profile has been updated!', 'info');
         }
@@ -107,6 +116,15 @@ const Profile = () => {
             setLeaveBalance(response.data);
         } catch (error) {
             console.error('Error fetching leave balance:', error);
+        }
+    };
+
+    const fetchCompOffHistory = async () => {
+        try {
+            const response = await axios.get(`${API_ENDPOINTS.ATTENDANCE}/comp-off/${user?.employeeId}/history`);
+            setCompOffHistory(response.data.earnings || []);
+        } catch (error) {
+            console.error('Error fetching comp-off history:', error);
         }
     };
 
@@ -237,7 +255,6 @@ const Profile = () => {
             {/* Main Profile Card */}
             <Card className="mb-4 border-0 shadow-sm">
                 <Card.Header className="bg-white py-2 border-0">
-                    {/* FIXED: Tabs are now always visible with proper styling */}
                     <div className="d-flex border-bottom">
                         <Button
                             variant={activeTab === 'personal' ? 'primary' : 'light'}
@@ -268,6 +285,21 @@ const Profile = () => {
                         >
                             <FaUmbrellaBeach className="me-2" size={12} />
                             Leave
+                        </Button>
+                        <Button
+                            variant={activeTab === 'comp-off' ? 'primary' : 'light'}
+                            size="sm"
+                            onClick={() => setActiveTab('comp-off')}
+                            className="me-1 rounded-0 border-0"
+                            style={{ 
+                                backgroundColor: activeTab === 'comp-off' ? '#0d6efd' : '#f8f9fa',
+                                color: activeTab === 'comp-off' ? 'white' : '#6c757d',
+                                borderBottom: activeTab === 'comp-off' ? '3px solid #0d6efd' : '3px solid transparent',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            <FaTrophy className="me-2" size={12} />
+                            Comp-Off
                         </Button>
                         <Button
                             variant={activeTab === 'bank' ? 'primary' : 'light'}
@@ -318,6 +350,7 @@ const Profile = () => {
                 </Card.Header>
                 
                 <Card.Body className="p-3">
+                    {/* Personal Tab */}
                     {activeTab === 'personal' && (
                         <Row>
                             {/* Profile Picture Card */}
@@ -471,6 +504,7 @@ const Profile = () => {
                         </Row>
                     )}
 
+                    {/* Leave Tab */}
                     {activeTab === 'leave' && (
                         <Row>
                             <Col md={4}>
@@ -483,6 +517,18 @@ const Profile = () => {
                                         </h6>
                                     </Card.Header>
                                     <Card.Body className="p-3">
+                                        {/* Comp-Off Balance Display */}
+                                        {parseFloat(leaveBalance.comp_off_balance) > 0 && (
+                                            <div className="text-center mb-3 p-2 bg-purple bg-opacity-10 rounded">
+                                                <FaTrophy className="text-purple mb-2" size={24} />
+                                                <h5 className="text-purple fw-bold mb-0">{leaveBalance.comp_off_balance}</h5>
+                                                <p className="text-muted small">Comp-Off Days</p>
+                                                <Badge bg="purple" className="mt-1">
+                                                    Earned by working on holidays
+                                                </Badge>
+                                            </div>
+                                        )}
+
                                         <div className="text-center mb-3">
                                             <h1 className="display-4 text-primary fw-bold">{leaveBalance.available}</h1>
                                             <p className="text-muted small">Available Leaves</p>
@@ -501,6 +547,26 @@ const Profile = () => {
                                                 <span className="text-muted">Pending:</span>
                                                 <span className="fw-semibold text-warning">{leaveBalance.pending} days</span>
                                             </div>
+
+                                            {/* Comp-Off Summary */}
+                                            {parseFloat(leaveBalance.total_comp_off_earned) > 0 && (
+                                                <div className="mt-2 pt-2 border-top">
+                                                    <div className="d-flex justify-content-between mb-1 small">
+                                                        <span className="text-muted">
+                                                            <FaTrophy className="me-1 text-purple" size={10} />
+                                                            Comp-Off Earned:
+                                                        </span>
+                                                        <span className="fw-semibold">{leaveBalance.total_comp_off_earned || 0}</span>
+                                                    </div>
+                                                    <div className="d-flex justify-content-between mb-1 small">
+                                                        <span className="text-muted">
+                                                            <FaTrophy className="me-1 text-purple" size={10} />
+                                                            Comp-Off Used:
+                                                        </span>
+                                                        <span className="fw-semibold">{leaveBalance.total_comp_off_used || 0}</span>
+                                                    </div>
+                                                </div>
+                                            )}
 
                                             <div className="d-flex justify-content-between mb-2 small">
                                                 <span className="text-muted">Months Completed (this year):</span>
@@ -563,7 +629,11 @@ const Profile = () => {
                                                         {leaveRequests.map((leave, index) => (
                                                             <tr key={leave.id || index}>
                                                                 <td className="small">
-                                                                    <Badge bg="secondary" className="px-2 py-1">
+                                                                    <Badge 
+                                                                        bg={leave.leave_type === 'Comp-Off' ? 'purple' : 'secondary'} 
+                                                                        className="px-2 py-1"
+                                                                    >
+                                                                        {leave.leave_type === 'Comp-Off' && '🎉 '}
                                                                         {leave.leave_type}
                                                                     </Badge>
                                                                 </td>
@@ -599,6 +669,78 @@ const Profile = () => {
                         </Row>
                     )}
 
+                    {/* Comp-Off Tab */}
+                    {activeTab === 'comp-off' && (
+                        <Row>
+                            <Col md={12}>
+                                <Card className="border-0 shadow-sm">
+                                    <Card.Header className="bg-purple text-white py-2 d-flex justify-content-between align-items-center">
+                                        <h6 className="mb-0 small fw-semibold">
+                                            <FaTrophy className="me-2" size={12} />
+                                            Comp-Off Earnings History
+                                        </h6>
+                                        <Badge bg="light" text="dark" className="px-3 py-1">
+                                            Balance: {leaveBalance.comp_off_balance} days
+                                        </Badge>
+                                    </Card.Header>
+                                    <Card.Body className="p-0">
+                                        {compOffHistory.length > 0 ? (
+                                            <div className="table-responsive" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                                                <Table hover size="sm" className="mb-0">
+                                                    <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
+                                                        <tr>
+                                                            <th className="small text-dark">#</th>
+                                                            <th className="small text-dark">Date Earned</th>
+                                                            <th className="small text-dark">Holiday</th>
+                                                            <th className="small text-dark">Hours Worked</th>
+                                                            <th className="small text-dark">Comp-Off Days</th>
+                                                            <th className="small text-dark">Status</th>
+                                                            <th className="small text-dark">Used Date</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {compOffHistory.map((item, index) => (
+                                                            <tr key={item.id || index}>
+                                                                <td className="small">{index + 1}</td>
+                                                                <td className="small">{formatDate(item.attendance_date)}</td>
+                                                                <td className="small">
+                                                                    <Badge bg="info" pill className="px-2 py-1">
+                                                                        {item.holiday_name}
+                                                                    </Badge>
+                                                                </td>
+                                                                <td className="small">{item.hours_worked} hrs</td>
+                                                                <td className="small fw-bold">{item.comp_off_days}</td>
+                                                                <td className="small">
+                                                                    {item.is_used ? (
+                                                                        <Badge bg="secondary" pill>Used</Badge>
+                                                                    ) : (
+                                                                        <Badge bg="success" pill>Available</Badge>
+                                                                    )}
+                                                                </td>
+                                                                <td className="small">
+                                                                    {item.used_date ? formatDate(item.used_date) : '-'}
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </Table>
+                                            </div>
+                                        ) : (
+                                            <div className="text-center py-5">
+                                                <FaTrophy size={50} className="text-muted mb-3 opacity-50" />
+                                                <h6 className="text-muted">No Comp-Off earnings yet</h6>
+                                                <p className="text-muted small mb-0">
+                                                    Work on holidays to earn Comp-Off days!
+                                                </p>
+                                            </div>
+                                        )}
+                                    </Card.Body>
+                                </Card>
+                            </Col>
+                        </Row>
+                    )}
+
+                    {/* Bank Tab */}
                     {activeTab === 'bank' && (
                         <Card className="border-0 shadow-sm">
                             <Card.Header className="bg-light py-2">
@@ -646,6 +788,7 @@ const Profile = () => {
                         </Card>
                     )}
 
+                    {/* Salary Tab */}
                     {activeTab === 'salary' && (
                         <Card className="border-0 shadow-sm">
                             <Card.Header className="bg-light py-2">
@@ -677,6 +820,7 @@ const Profile = () => {
                         </Card>
                     )}
 
+                    {/* Policy Tab */}
                     {activeTab === 'policy' && (
                         <Card className="border-0 shadow-sm">
                             <Card.Header className="bg-light py-2">

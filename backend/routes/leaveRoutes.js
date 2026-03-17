@@ -4,9 +4,6 @@ const router = express.Router();
 const leaveController = require('../controllers/leaveController');
 
 module.exports = (supabase) => {
-    // Pass supabase to controller if needed
-    // If controller doesn't need supabase directly, just return router
-    
     // Get leave types
     router.get('/types', leaveController.getLeaveTypes);
 
@@ -27,6 +24,10 @@ module.exports = (supabase) => {
 
     // Yearly reset (admin only)
     router.post('/yearly-reset', leaveController.yearlyReset);
+
+    // Comp-Off specific routes
+    router.get('/comp-off/:employee_id', leaveController.getCompOffBalance);
+    router.get('/comp-off/:employee_id/history', leaveController.getCompOffHistory);
 
     console.log('✅ Leave routes loaded');
     return router;

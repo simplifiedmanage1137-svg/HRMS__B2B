@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const supabase = require('../config/supabase');
+const { holidays } = require('../data/holidays'); // Import holidays data
 
 // Generate unique session ID
 const generateSessionId = () => {
@@ -44,6 +45,34 @@ const parseTimeString = (timeStr) => {
     }
 
     return { hour, minute };
+};
+
+// Check if a date is a holiday from HolidayCalendar
+const isHoliday = (date) => {
+    const dateStr = date.toISOString().split('T')[0];
+    const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
+    
+    // Check if it's a weekly off
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+        return { 
+            isHoliday: true, 
+            type: 'weekly_off',
+            name: dayOfWeek === 0 ? 'Sunday' : 'Saturday'
+        };
+    }
+    
+    // Check if it's a public holiday from holidays.js
+    const holiday = holidays.find(h => h.date === dateStr);
+    if (holiday) {
+        return { 
+            isHoliday: true, 
+            type: 'public_holiday',
+            name: holiday.name,
+            region: holiday.region
+        };
+    }
+    
+    return { isHoliday: false };
 };
 
 // Clock in
@@ -95,6 +124,10 @@ exports.clockIn = async (req, res) => {
         console.log('Today date (LOCAL):', today);
         console.log('Clock in time:', now.toString());
 
+        // Check if today is a holiday
+        const holidayCheck = isHoliday(now);
+        console.log('📅 Holiday check:', holidayCheck);
+
         // Parse shift time from employee profile
         let shiftHour = 9, shiftMinute = 0;
         let shiftDisplay = emp.shift_timing || '9:00 AM';
@@ -135,7 +168,9 @@ exports.clockIn = async (req, res) => {
                     longitude,
                     location_accuracy: accuracy,
                     session_id: sessionId,
-                    shift_time_used: shiftDisplay
+                    shift_time_used: shiftDisplay,
+                    is_holiday: holidayCheck.isHoliday,
+                    holiday_name: holidayCheck.name || null
                 }]);
 
             if (attendanceError) throw attendanceError;
@@ -212,6 +247,11 @@ exports.clockIn = async (req, res) => {
                 message = `⏰ Clocked in (${earlyDisplay} early)`;
             }
 
+            // Add holiday message if applicable
+            if (holidayCheck.isHoliday) {
+                message = `🏢 ${message} - Working on ${holidayCheck.name || holidayCheck.type}`;
+            }
+
             const response = {
                 success: true,
                 message,
@@ -223,7 +263,9 @@ exports.clockIn = async (req, res) => {
                 is_early: isEarly,
                 session_id: sessionId,
                 employee_name: `${emp.first_name} ${emp.last_name}`,
-                attendance_date: today
+                attendance_date: today,
+                is_holiday: holidayCheck.isHoliday,
+                holiday_name: holidayCheck.name || null
             };
 
             if (isLate) {
@@ -281,8 +323,12 @@ exports.clockOut = async (req, res) => {
 
         const now = new Date();
         const today = now.toISOString().split('T')[0];
+        
+        // Check if today is a holiday
+        const holidayCheck = isHoliday(now);
 
         console.log(`🔍 Looking for active session: ${session_id} for employee: ${employee_id}`);
+        console.log(`📅 Holiday check for ${today}:`, holidayCheck);
 
         try {
             // 1. First, find the active session
@@ -389,6 +435,46 @@ exports.clockOut = async (req, res) => {
             const totalHours = totalMs / (1000 * 60 * 60);
             const totalHoursRounded = Math.round(totalHours * 100) / 100;
 
+            // Check if employee worked on a holiday (8+ hours)
+            let compOffAwarded = false;
+            let compOffDays = 0;
+
+            if (holidayCheck.isHoliday && totalHoursRounded >= 8) {
+                compOffAwarded = true;
+                compOffDays = 1.0; // Award 1 day comp-off for full day work
+                
+                console.log(`🎉 Employee worked on ${holidayCheck.type}: ${holidayCheck.name}. Awarding ${compOffDays} comp-off day!`);
+                
+                // Insert into comp_off_earnings table
+                const { error: compOffError } = await supabase
+                    .from('comp_off_earnings')
+                    .insert([{
+                        employee_id,
+                        attendance_date: today,
+                        holiday_name: holidayCheck.name || holidayCheck.type,
+                        hours_worked: totalHoursRounded,
+                        comp_off_days: compOffDays,
+                        is_used: false
+                    }]);
+
+                if (compOffError) {
+                    console.error('❌ Error inserting comp-off earning:', compOffError);
+                } else {
+                    // Update employee's comp_off_balance
+                    const { error: updateError } = await supabase
+                        .from('employees')
+                        .update({
+                            comp_off_balance: supabase.raw('comp_off_balance + ?', [compOffDays]),
+                            total_comp_off_earned: supabase.raw('total_comp_off_earned + ?', [compOffDays])
+                        })
+                        .eq('employee_id', employee_id);
+
+                    if (updateError) {
+                        console.error('❌ Error updating comp-off balance:', updateError);
+                    }
+                }
+            }
+
             // Determine status
             let status = 'present';
             if (totalHours < 4) {
@@ -408,7 +494,11 @@ exports.clockOut = async (req, res) => {
                     status: status,
                     latitude: latitude || attendanceRecord.latitude,
                     longitude: longitude || attendanceRecord.longitude,
-                    location_accuracy: accuracy || attendanceRecord.location_accuracy
+                    location_accuracy: accuracy || attendanceRecord.location_accuracy,
+                    is_holiday: holidayCheck.isHoliday,
+                    holiday_name: holidayCheck.name || null,
+                    comp_off_awarded: compOffAwarded,
+                    comp_off_days: compOffDays
                 })
                 .eq('id', attendanceRecord.id);
 
@@ -429,11 +519,16 @@ exports.clockOut = async (req, res) => {
 
             res.json({
                 success: true,
-                message: `✅ Clocked out successfully. ${status === 'present' ? 'Full day' : status === 'half_day' ? 'Half day' : 'Absent'}`,
+                message: compOffAwarded 
+                    ? `✅ Clocked out successfully! 🎉 You earned ${compOffDays} Comp-Off day for working on ${holidayCheck.name || holidayCheck.type}!` 
+                    : `✅ Clocked out successfully. ${status === 'present' ? 'Full day' : status === 'half_day' ? 'Half day' : 'Absent'}`,
                 clock_out: now,
                 total_hours: totalHoursRounded,
                 status,
-                session_id: session.session_id
+                session_id: session.session_id,
+                comp_off_awarded: compOffAwarded,
+                comp_off_days: compOffDays,
+                holiday_worked: holidayCheck.isHoliday ? holidayCheck.name || holidayCheck.type : null
             });
 
         } catch (error) {
@@ -501,7 +596,7 @@ exports.getTodayAttendance = async (req, res) => {
             .from('attendance')
             .select(`
                 *,
-                employees!inner(first_name, last_name, shift_timing)
+                employees!inner(first_name, last_name, shift_timing, comp_off_balance)
             `)
             .eq('employee_id', employee_id)
             .eq('attendance_date', todayStr)
@@ -534,6 +629,7 @@ exports.getTodayAttendance = async (req, res) => {
                 formattedAttendance.first_name = formattedAttendance.employees.first_name;
                 formattedAttendance.last_name = formattedAttendance.employees.last_name;
                 formattedAttendance.shift_timing = formattedAttendance.employees.shift_timing;
+                formattedAttendance.comp_off_balance = formattedAttendance.employees.comp_off_balance;
                 delete formattedAttendance.employees;
             }
             
@@ -556,7 +652,9 @@ exports.getTodayAttendance = async (req, res) => {
             console.log('📊 Today\'s attendance:', {
                 date: formattedAttendance.attendance_date,
                 clock_in: formattedAttendance.clock_in ? 'Yes' : 'No',
-                clock_out: formattedAttendance.clock_out ? 'Yes' : 'No'
+                clock_out: formattedAttendance.clock_out ? 'Yes' : 'No',
+                is_holiday: formattedAttendance.is_holiday,
+                comp_off_awarded: formattedAttendance.comp_off_awarded
             });
         }
 
@@ -609,7 +707,8 @@ exports.getAttendanceReport = async (req, res) => {
                     first_name, 
                     last_name, 
                     department, 
-                    shift_timing
+                    shift_timing,
+                    comp_off_balance
                 )
             `)
             .gte('attendance_date', start)
@@ -646,11 +745,16 @@ exports.getAttendanceReport = async (req, res) => {
                 late_minutes: record.late_minutes,
                 early_minutes: record.early_minutes,
                 shift_time_used: record.shift_time_used,
+                is_holiday: record.is_holiday,
+                holiday_name: record.holiday_name,
+                comp_off_awarded: record.comp_off_awarded,
+                comp_off_days: record.comp_off_days,
                 // Employee details flattened
                 first_name: employee.first_name || '',
                 last_name: employee.last_name || '',
                 department: employee.department || '',
                 shift_timing: employee.shift_timing || '',
+                comp_off_balance: employee.comp_off_balance || 0,
                 // Remove nested object
                 employees: undefined
             };
@@ -664,7 +768,8 @@ exports.getAttendanceReport = async (req, res) => {
                 total: formattedAttendance.length,
                 present: formattedAttendance.filter(a => a.status === 'present').length,
                 half_day: formattedAttendance.filter(a => a.status === 'half_day').length,
-                absent: formattedAttendance.filter(a => a.status === 'absent').length
+                absent: formattedAttendance.filter(a => a.status === 'absent').length,
+                comp_off_earned: formattedAttendance.filter(a => a.comp_off_awarded).length
             }
         });
 
@@ -818,5 +923,63 @@ exports.markAbsentAtDayEnd = async () => {
     } catch (error) {
         console.error('Error marking absent:', error);
         return { success: false, error: error.message };
+    }
+};
+
+// Get comp-off balance
+exports.getCompOffBalance = async (req, res) => {
+    try {
+        const { employee_id } = req.params;
+        
+        const { data, error } = await supabase
+            .from('employees')
+            .select('comp_off_balance, total_comp_off_earned, total_comp_off_used')
+            .eq('employee_id', employee_id)
+            .single();
+
+        if (error) throw error;
+
+        res.json({
+            success: true,
+            comp_off_balance: data.comp_off_balance || 0,
+            total_earned: data.total_comp_off_earned || 0,
+            total_used: data.total_comp_off_used || 0
+        });
+
+    } catch (error) {
+        console.error('Error fetching comp-off balance:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch comp-off balance',
+            error: error.message
+        });
+    }
+};
+
+// Get comp-off history
+exports.getCompOffHistory = async (req, res) => {
+    try {
+        const { employee_id } = req.params;
+        
+        const { data, error } = await supabase
+            .from('comp_off_earnings')
+            .select('*')
+            .eq('employee_id', employee_id)
+            .order('attendance_date', { ascending: false });
+
+        if (error) throw error;
+
+        res.json({
+            success: true,
+            earnings: data || []
+        });
+
+    } catch (error) {
+        console.error('Error fetching comp-off history:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch comp-off history',
+            error: error.message
+        });
     }
 };
