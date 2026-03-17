@@ -13,261 +13,130 @@ function getMonthName(monthNumber) {
  * Generate salary slip for an employee
  * Access: Employee can generate their own, Admin can generate for anyone
  */
+
+
+// Generate salary slip with overtime
 exports.generateSalarySlip = async (req, res) => {
     try {
-        const { employee_id, month, year } = req.body;
-
         console.log('='.repeat(70));
-        console.log('💰 GENERATE SALARY SLIP REQUEST');
-        console.log('Employee ID:', employee_id);
-        console.log('Month:', month, 'Year:', year);
-        console.log('Request User:', { 
-            role: req.userRole, 
-            employeeId: req.employeeId 
-        });
+        console.log('💰 GENERATING SALARY SLIP');
+        console.log('Request body:', JSON.stringify(req.body, null, 2));
         console.log('='.repeat(70));
 
-        // Validate required fields
+        const { employee_id, month, year, overtime_amount, overtime_hours } = req.body;
+
         if (!employee_id || !month || !year) {
             return res.status(400).json({
                 success: false,
-                message: 'Employee ID, month and year are required'
+                message: 'Employee ID, month, and year are required'
             });
         }
 
-        // Validate month range
-        if (month < 1 || month > 12) {
-            return res.status(400).json({
-                success: false,
-                message: 'Month must be between 1 and 12'
-            });
-        }
-
-        // Validate year (not too far in past/future)
-        const currentYear = new Date().getFullYear();
-        if (year < 2000 || year > currentYear + 1) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid year'
-            });
-        }
-
-        // 👇 IMPORTANT: Authorization check
-        // If user is employee, they can only generate for themselves
-        if (req.userRole === 'employee' && req.employeeId !== employee_id) {
-            console.log('❌ Unauthorized: Employee trying to generate for another employee');
-            return res.status(403).json({
-                success: false,
-                message: 'You can only generate salary slips for yourself'
-            });
-        }
-
-        // If user is admin, they can generate for anyone (no check needed)
-
-        // Get employee details with joining date
-        const { data: employees, error: empError } = await supabase
+        // Get employee details
+        const { data: employee, error: empError } = await supabase
             .from('employees')
             .select('*')
-            .eq('employee_id', employee_id);
+            .eq('employee_id', employee_id)
+            .single();
 
-        if (empError) {
-            console.error('❌ Database error fetching employee:', empError);
-            throw empError;
-        }
-
-        if (!employees || employees.length === 0) {
-            console.log('❌ Employee not found:', employee_id);
+        if (empError || !employee) {
             return res.status(404).json({
                 success: false,
                 message: 'Employee not found'
             });
         }
 
-        const emp = employees[0];
-        console.log('✅ Employee found:', emp.first_name, emp.last_name);
-        
-        // Validate joining date - cannot generate slips for months before joining
-        const joiningDate = new Date(emp.joining_date);
-        const requestedDate = new Date(year, month - 1, 1);
-        
-        // Reset time portions for accurate comparison
-        joiningDate.setDate(1);
-        joiningDate.setHours(0, 0, 0, 0);
-        requestedDate.setHours(0, 0, 0, 0);
-
-        if (requestedDate < joiningDate) {
-            const joiningMonth = joiningDate.toLocaleString('default', { month: 'long' });
-            const joiningYear = joiningDate.getFullYear();
-            
-            console.log('❌ Cannot generate: Before joining date');
-            return res.status(400).json({
-                success: false,
-                message: `You cannot generate salary slip for months before your joining date. You joined in ${joiningMonth} ${joiningYear}.`
-            });
-        }
-
-        // Cannot generate for future months
-        const currentDate = new Date();
-        const currentMonth = currentDate.getMonth() + 1;
-        const currentYear_ = currentDate.getFullYear();
-        
-        if (year > currentYear_ || (year === currentYear_ && month > currentMonth)) {
-            console.log('❌ Cannot generate: Future month');
-            return res.status(400).json({
-                success: false,
-                message: 'Cannot generate salary slip for future months'
-            });
-        }
-
         // Check if salary slip already exists for this month/year
-        const { data: existing, error: checkError } = await supabase
+        const { data: existingSlip, error: checkError } = await supabase
             .from('salary_slips')
             .select('*')
             .eq('employee_id', employee_id)
             .eq('month', month)
-            .eq('year', year);
+            .eq('year', year)
+            .maybeSingle();
 
-        if (checkError) {
-            console.error('❌ Error checking existing slip:', checkError);
-            throw checkError;
-        }
+        if (checkError) throw checkError;
 
-        if (existing && existing.length > 0) {
-            console.log('✅ Salary slip already exists, returning existing');
+        if (existingSlip) {
             return res.json({
                 success: true,
                 message: 'Salary slip already exists',
-                salarySlip: existing[0]
+                salarySlip: existingSlip
             });
         }
 
-        // Get basic salary (prefer gross_salary if available)
-        let basicSalary = 0;
-        
-        if (emp.gross_salary && parseFloat(emp.gross_salary) > 0) {
-            basicSalary = parseFloat(emp.gross_salary);
-        } else if (emp.salary && parseFloat(emp.salary) > 0) {
-            basicSalary = parseFloat(emp.salary);
-        } else {
-            console.log('⚠️ No salary found for employee, using 0');
-        }
+        // Calculate salary components
+        const basicSalary = parseFloat(employee.gross_salary || employee.salary || 0);
+        const dtDeduction = 200; // Fixed deduction
+        const overtimeAmt = parseFloat(overtime_amount) || 0;
+        const overtimeHrs = parseFloat(overtime_hours) || 0;
+        const netSalary = basicSalary - dtDeduction + overtimeAmt;
 
-        // Clean the salary value (remove any non-numeric characters)
-        const rawSalary = String(basicSalary).replace(/[^0-9.]/g, '');
-        basicSalary = parseFloat(rawSalary) || 0;
-
-        // Fixed deduction amount
-        const DT_DEDUCTION = 200;
-        
-        // Calculate net salary
-        const netSalary = basicSalary - DT_DEDUCTION;
-
-        // Ensure net salary is not negative
-        const finalNetSalary = netSalary < 0 ? 0 : netSalary;
-
-        console.log('💰 Salary calculation:', {
+        console.log('📊 Salary calculation:', {
             basicSalary,
-            deduction: DT_DEDUCTION,
-            netSalary: finalNetSalary
+            dtDeduction,
+            overtimeAmt,
+            overtimeHrs,
+            netSalary
         });
 
-        // Insert salary slip with correct calculation
-        const { data: newSlip, error: insertError } = await supabase
+        // Create salary slip with all fields
+        const { data: salarySlip, error: insertError } = await supabase
             .from('salary_slips')
             .insert([{
                 employee_id,
                 month,
                 year,
                 basic_salary: basicSalary,
-                dt: DT_DEDUCTION,
-                total_deductions: DT_DEDUCTION,
-                net_salary: finalNetSalary,
-                gross_earnings: basicSalary,
-                hra: 0,
-                conveyance: 0,
-                medical: 0,
-                special: 0,
-                pf: 0,
-                esi: 0,
-                tds: 0,
-                pt: 0,
+                dt: dtDeduction,
+                overtime_hours: overtimeHrs,
+                overtime_amount: overtimeAmt,
+                net_salary: netSalary,
                 generated_date: new Date().toISOString(),
                 is_paid: false
             }])
-            .select();
+            .select()
+            .single();
 
         if (insertError) {
-            console.error('❌ Error inserting salary slip:', insertError);
-            
-            // Check for duplicate key error
-            if (insertError.code === '23505') {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Salary slip for this month already exists'
-                });
-            }
-            
+            console.error('❌ Insert error:', insertError);
             throw insertError;
         }
 
-        console.log('✅ Salary slip generated successfully. ID:', newSlip[0].id);
-
-        // Create notification for employee
-        try {
-            const monthName = new Date(year, month - 1, 1).toLocaleString('default', { month: 'long' });
+        // Mark overtime as paid if any
+        if (overtimeHrs > 0) {
+            const startDate = new Date(year, month - 1, 1);
+            const endDate = new Date(year, month, 0);
             
-            const { error: notifError } = await supabase
-                .from('notifications')
-                .insert([{
-                    employee_id,
-                    title: 'Salary Slip Generated',
-                    message: `Salary slip for ${monthName} ${year} has been generated.`,
-                    type: 'salary',
-                    reference_id: newSlip[0].id,
-                    created_at: new Date().toISOString()
-                }]);
+            const startDateStr = startDate.toISOString().split('T')[0];
+            const endDateStr = endDate.toISOString().split('T')[0];
 
-            if (notifError) {
-                console.log('⚠️ Notification error:', notifError.message);
-            } else {
-                console.log('✅ Notification created for employee');
-            }
-        } catch (notifError) {
-            console.log('⚠️ Notification error:', notifError.message);
-        }
+            const { error: updateError } = await supabase
+                .from('overtime_earnings')
+                .update({ 
+                    is_paid: true, 
+                    paid_in_salary_id: salarySlip.id 
+                })
+                .eq('employee_id', employee_id)
+                .gte('attendance_date', startDateStr)
+                .lte('attendance_date', endDateStr);
 
-        // If generating for self, no need for admin notification
-        // But if admin is generating for employee, notify admin as well
-        if (req.userRole === 'admin' && req.employeeId !== employee_id) {
-            try {
-                const { error: adminNotifError } = await supabase
-                    .from('admin_notifications')
-                    .insert([{
-                        admin_id: req.userId,
-                        title: 'Salary Slip Generated',
-                        message: `Salary slip for employee ${emp.first_name} ${emp.last_name} (${employee_id}) for ${monthName} ${year} has been generated.`,
-                        type: 'salary_generated',
-                        reference_id: newSlip[0].id,
-                        created_at: new Date().toISOString()
-                    }]);
-
-                if (adminNotifError) {
-                    console.log('⚠️ Admin notification error:', adminNotifError.message);
-                }
-            } catch (adminNotifError) {
-                console.log('⚠️ Admin notification error:', adminNotifError.message);
+            if (updateError) {
+                console.error('Error marking overtime as paid:', updateError);
             }
         }
 
-        res.status(201).json({
+        console.log('✅ Salary slip generated:', salarySlip);
+
+        res.json({
             success: true,
             message: 'Salary slip generated successfully',
-            salarySlip: newSlip[0]
+            salarySlip
         });
 
     } catch (error) {
         console.error('❌ Error generating salary slip:', error);
-        console.error('Error stack:', error.stack);
+        console.error('Error details:', error);
         
         res.status(500).json({
             success: false,
@@ -278,54 +147,44 @@ exports.generateSalarySlip = async (req, res) => {
     }
 };
 
-// Get all salary slips for an employee
+// Get salary slips for employee
 exports.getEmployeeSalarySlips = async (req, res) => {
     try {
         const { employee_id } = req.params;
 
-        // Get employee joining date
-        const { data: employees, error: empError } = await supabase
-            .from('employees')
-            .select('joining_date')
-            .eq('employee_id', employee_id);
-
-        if (empError) throw empError;
-
-        if (!employees || employees.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Employee not found'
-            });
-        }
-
-        const joiningDate = new Date(employees[0].joining_date);
-        const joiningMonth = joiningDate.getMonth() + 1;
-        const joiningYear = joiningDate.getFullYear();
-
-        // Get all salary slips for this employee
-        const { data: slips, error: slipError } = await supabase
+        const { data: salarySlips, error } = await supabase
             .from('salary_slips')
             .select('*')
             .eq('employee_id', employee_id)
             .order('year', { ascending: false })
             .order('month', { ascending: false });
 
-        if (slipError) throw slipError;
+        if (error) throw error;
 
-        // Add validation info to response
+        // Get employee joining info
+        const { data: employee, error: empError } = await supabase
+            .from('employees')
+            .select('joining_date')
+            .eq('employee_id', employee_id)
+            .single();
+
+        if (empError) throw empError;
+
+        const joiningDate = new Date(employee.joining_date);
+        const joiningInfo = {
+            year: joiningDate.getFullYear(),
+            month: joiningDate.getMonth() + 1,
+            formattedDate: joiningDate.toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            })
+        };
+
         res.json({
             success: true,
-            salarySlips: slips || [],
-            joiningInfo: {
-                month: joiningMonth,
-                year: joiningYear,
-                date: employees[0].joining_date,
-                formattedDate: joiningDate.toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                })
-            }
+            salarySlips: salarySlips || [],
+            joiningInfo
         });
 
     } catch (error) {
@@ -333,6 +192,41 @@ exports.getEmployeeSalarySlips = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to fetch salary slips',
+            error: error.message
+        });
+    }
+};
+
+// Get single salary slip
+exports.getSalarySlip = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const { data: salarySlip, error } = await supabase
+            .from('salary_slips')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (error) throw error;
+
+        if (!salarySlip) {
+            return res.status(404).json({
+                success: false,
+                message: 'Salary slip not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            salarySlip
+        });
+
+    } catch (error) {
+        console.error('Error fetching salary slip:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch salary slip',
             error: error.message
         });
     }

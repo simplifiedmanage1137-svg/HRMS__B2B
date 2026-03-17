@@ -1,6 +1,7 @@
+// controllers/attendanceController.js
 const { v4: uuidv4 } = require('uuid');
 const supabase = require('../config/supabase');
-const { holidays } = require('../data/holidays'); // Import holidays data
+const { holidays } = require('../data/holidays');
 
 // Generate unique session ID
 const generateSessionId = () => {
@@ -13,17 +14,14 @@ const parseTimeString = (timeStr) => {
 
     console.log('Parsing time string:', timeStr);
 
-    // Handle format like "3:00 PM - 12:00 AM"
     const parts = timeStr.split('-');
     let startTimeStr = timeStr;
     if (parts.length > 0) {
         startTimeStr = parts[0].trim();
     }
 
-    // Try to parse time
     let hour = 9, minute = 0;
 
-    // Check for AM/PM format (e.g., "3:00 PM")
     const ampmMatch = startTimeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
     if (ampmMatch) {
         hour = parseInt(ampmMatch[1]);
@@ -36,7 +34,6 @@ const parseTimeString = (timeStr) => {
         return { hour, minute };
     }
 
-    // Check for 24-hour format (e.g., "15:00")
     const militaryMatch = startTimeStr.match(/(\d{1,2}):(\d{2})/);
     if (militaryMatch) {
         hour = parseInt(militaryMatch[1]);
@@ -47,12 +44,96 @@ const parseTimeString = (timeStr) => {
     return { hour, minute };
 };
 
-// Check if a date is a holiday from HolidayCalendar
+// Parse shift timing to get total hours
+const parseShiftTiming = (shiftString) => {
+    if (!shiftString) {
+        return {
+            startHour: 9,
+            startMinute: 0,
+            endHour: 18,
+            endMinute: 0,
+            totalHours: 9
+        };
+    }
+
+    const parts = shiftString.split('-');
+    if (parts.length !== 2) {
+        return {
+            startHour: 9,
+            startMinute: 0,
+            endHour: 18,
+            endMinute: 0,
+            totalHours: 9
+        };
+    }
+
+    const startPart = parts[0].trim();
+    const endPart = parts[1].trim();
+
+    const parseTime = (timeStr) => {
+        const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+        if (!match) return null;
+
+        let hour = parseInt(match[1]);
+        const minute = parseInt(match[2]);
+        const ampm = match[3].toUpperCase();
+
+        if (ampm === 'PM' && hour !== 12) hour += 12;
+        if (ampm === 'AM' && hour === 12) hour = 0;
+
+        return { hour, minute };
+    };
+
+    const startTime = parseTime(startPart);
+    const endTime = parseTime(endPart);
+
+    if (!startTime || !endTime) {
+        return {
+            startHour: 9,
+            startMinute: 0,
+            endHour: 18,
+            endMinute: 0,
+            totalHours: 9
+        };
+    }
+
+    let totalHours = endTime.hour - startTime.hour;
+    if (totalHours < 0) totalHours += 24;
+    totalHours += (endTime.minute - startTime.minute) / 60;
+
+    return {
+        startHour: startTime.hour,
+        startMinute: startTime.minute,
+        endHour: endTime.hour,
+        endMinute: endTime.minute,
+        totalHours: totalHours
+    };
+};
+
+// Calculate overtime (only full hours count)
+const calculateOvertime = (totalHours, shiftHours) => {
+    const standardShiftHours = shiftHours || 9;
+    
+    // Only full hours above shift count as overtime
+    // If totalHours = 10.2, overtime = 1 hour (only full hour above 9)
+    // If totalHours = 10.8, overtime = 1 hour
+    // If totalHours = 11.0, overtime = 2 hours
+    const overtimeHours = Math.floor(Math.max(0, totalHours - standardShiftHours));
+    const overtimeMinutes = overtimeHours * 60;
+    
+    return {
+        overtimeHours,
+        overtimeMinutes,
+        hasOvertime: overtimeHours > 0,
+        overtimeAmount: overtimeHours * 150 // ₹150 per hour
+    };
+};
+
+// Check if a date is a holiday
 const isHoliday = (date) => {
     const dateStr = date.toISOString().split('T')[0];
-    const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
+    const dayOfWeek = date.getDay();
     
-    // Check if it's a weekly off
     if (dayOfWeek === 0 || dayOfWeek === 6) {
         return { 
             isHoliday: true, 
@@ -61,7 +142,6 @@ const isHoliday = (date) => {
         };
     }
     
-    // Check if it's a public holiday from holidays.js
     const holiday = holidays.find(h => h.date === dateStr);
     if (holiday) {
         return { 
@@ -93,7 +173,6 @@ exports.clockIn = async (req, res) => {
             });
         }
 
-        // Get employee details
         const { data: employees, error: empError } = await supabase
             .from('employees')
             .select('*')
@@ -111,7 +190,6 @@ exports.clockIn = async (req, res) => {
         const emp = employees[0];
         const now = new Date();
 
-        // Get today's date in LOCAL timezone
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
         const day = String(now.getDate()).padStart(2, '0');
@@ -124,11 +202,9 @@ exports.clockIn = async (req, res) => {
         console.log('Today date (LOCAL):', today);
         console.log('Clock in time:', now.toString());
 
-        // Check if today is a holiday
         const holidayCheck = isHoliday(now);
         console.log('📅 Holiday check:', holidayCheck);
 
-        // Parse shift time from employee profile
         let shiftHour = 9, shiftMinute = 0;
         let shiftDisplay = emp.shift_timing || '9:00 AM';
 
@@ -140,22 +216,16 @@ exports.clockIn = async (req, res) => {
             }
         }
 
-        // Create shift start datetime for today
         const shiftStartTime = new Date(now);
         shiftStartTime.setHours(shiftHour, shiftMinute, 0, 0);
 
-        // Calculate difference
         const diffMs = now - shiftStartTime;
         const isLate = diffMs > 0;
         const isEarly = diffMs < 0;
         const lateMinutes = isLate ? diffMs / (1000 * 60) : 0;
         const earlyMinutes = isEarly ? Math.abs(diffMs) / (1000 * 60) : 0;
 
-        // Start transaction - Supabase doesn't support transactions directly
-        // We'll use a series of operations with error handling
-        
         try {
-            // ALWAYS create a new attendance record for each clock-in
             const { error: attendanceError } = await supabase
                 .from('attendance')
                 .insert([{
@@ -175,7 +245,6 @@ exports.clockIn = async (req, res) => {
 
             if (attendanceError) throw attendanceError;
 
-            // Check if session already exists
             const { data: existingSession, error: checkError } = await supabase
                 .from('attendance_sessions')
                 .select('*')
@@ -184,7 +253,6 @@ exports.clockIn = async (req, res) => {
             if (checkError) throw checkError;
 
             if (existingSession && existingSession.length === 0) {
-                // Create new session
                 const { error: sessionError } = await supabase
                     .from('attendance_sessions')
                     .insert([{
@@ -200,7 +268,6 @@ exports.clockIn = async (req, res) => {
 
                 if (sessionError) throw sessionError;
             } else {
-                // Update existing session
                 const { error: sessionError } = await supabase
                     .from('attendance_sessions')
                     .update({
@@ -215,7 +282,6 @@ exports.clockIn = async (req, res) => {
                 if (sessionError) throw sessionError;
             }
 
-            // Prepare response message
             let status = 'On Time';
             let message = '✅ Clocked in on time';
             let lateDisplay = null;
@@ -247,7 +313,6 @@ exports.clockIn = async (req, res) => {
                 message = `⏰ Clocked in (${earlyDisplay} early)`;
             }
 
-            // Add holiday message if applicable
             if (holidayCheck.isHoliday) {
                 message = `🏢 ${message} - Working on ${holidayCheck.name || holidayCheck.type}`;
             }
@@ -295,7 +360,7 @@ exports.clockIn = async (req, res) => {
     }
 };
 
-// Clock out
+// Clock out with overtime calculation
 exports.clockOut = async (req, res) => {
     try {
         console.log('='.repeat(70));
@@ -306,7 +371,6 @@ exports.clockOut = async (req, res) => {
 
         const { employee_id, session_id, latitude, longitude, accuracy } = req.body;
 
-        // Validate required fields
         if (!employee_id) {
             return res.status(400).json({
                 success: false,
@@ -324,14 +388,12 @@ exports.clockOut = async (req, res) => {
         const now = new Date();
         const today = now.toISOString().split('T')[0];
         
-        // Check if today is a holiday
         const holidayCheck = isHoliday(now);
 
         console.log(`🔍 Looking for active session: ${session_id} for employee: ${employee_id}`);
         console.log(`📅 Holiday check for ${today}:`, holidayCheck);
 
         try {
-            // 1. First, find the active session
             const { data: activeSessions, error: sessionError } = await supabase
                 .from('attendance_sessions')
                 .select('*')
@@ -347,7 +409,6 @@ exports.clockOut = async (req, res) => {
             let attendanceRecord;
 
             if (!activeSessions || activeSessions.length === 0) {
-                // Try to find by employee_id only as fallback
                 const { data: fallbackSessions, error: fallbackError } = await supabase
                     .from('attendance_sessions')
                     .select('*')
@@ -360,7 +421,6 @@ exports.clockOut = async (req, res) => {
 
                 if (!fallbackSessions || fallbackSessions.length === 0) {
                     console.log('❌ No active session found for employee:', employee_id);
-
                     return res.status(400).json({
                         success: false,
                         message: 'No active clock-in session found. Please clock in first.',
@@ -371,7 +431,6 @@ exports.clockOut = async (req, res) => {
                 console.log('Using fallback session:', fallbackSessions[0].session_id);
                 session = fallbackSessions[0];
 
-                // Find attendance record for this session
                 const { data: attendanceRecords, error: attendanceError } = await supabase
                     .from('attendance')
                     .select('*')
@@ -390,11 +449,9 @@ exports.clockOut = async (req, res) => {
 
                 attendanceRecord = attendanceRecords[0];
             } else {
-                // Use the primary session found
                 session = activeSessions[0];
                 console.log('✅ Found active session:', session);
 
-                // Find the corresponding attendance record
                 const { data: attendanceRecords, error: attendanceError } = await supabase
                     .from('attendance')
                     .select('*')
@@ -405,7 +462,6 @@ exports.clockOut = async (req, res) => {
                 if (attendanceError) throw attendanceError;
 
                 if (!attendanceRecords || attendanceRecords.length === 0) {
-                    // Try without session_id filter as fallback
                     const { data: fallbackAttendance, error: fallbackError } = await supabase
                         .from('attendance')
                         .select('*')
@@ -429,23 +485,36 @@ exports.clockOut = async (req, res) => {
                 }
             }
 
-            // Calculate hours
             const clockIn = new Date(attendanceRecord.clock_in);
             const totalMs = now - clockIn;
             const totalHours = totalMs / (1000 * 60 * 60);
             const totalHoursRounded = Math.round(totalHours * 100) / 100;
 
-            // Check if employee worked on a holiday (8+ hours)
+            // Get employee shift timing to calculate overtime
+            const { data: employee, error: empError } = await supabase
+                .from('employees')
+                .select('shift_timing')
+                .eq('employee_id', employee_id)
+                .single();
+
+            if (empError) throw empError;
+
+            const shiftTiming = parseShiftTiming(employee.shift_timing);
+            const shiftHours = shiftTiming.totalHours || 9;
+
+            const overtime = calculateOvertime(totalHoursRounded, shiftHours);
+
+            console.log(`📊 Hours worked: ${totalHoursRounded}, Shift: ${shiftHours}h, Overtime: ${overtime.overtimeHours}h`);
+
             let compOffAwarded = false;
             let compOffDays = 0;
 
             if (holidayCheck.isHoliday && totalHoursRounded >= 8) {
                 compOffAwarded = true;
-                compOffDays = 1.0; // Award 1 day comp-off for full day work
+                compOffDays = 1.0;
                 
                 console.log(`🎉 Employee worked on ${holidayCheck.type}: ${holidayCheck.name}. Awarding ${compOffDays} comp-off day!`);
                 
-                // Insert into comp_off_earnings table
                 const { error: compOffError } = await supabase
                     .from('comp_off_earnings')
                     .insert([{
@@ -460,7 +529,6 @@ exports.clockOut = async (req, res) => {
                 if (compOffError) {
                     console.error('❌ Error inserting comp-off earning:', compOffError);
                 } else {
-                    // Update employee's comp_off_balance
                     const { error: updateError } = await supabase
                         .from('employees')
                         .update({
@@ -475,7 +543,24 @@ exports.clockOut = async (req, res) => {
                 }
             }
 
-            // Determine status
+            // Save overtime earnings
+            if (overtime.hasOvertime) {
+                const { error: overtimeError } = await supabase
+                    .from('overtime_earnings')
+                    .insert([{
+                        employee_id,
+                        attendance_date: today,
+                        overtime_minutes: overtime.overtimeMinutes,
+                        overtime_hours: overtime.overtimeHours,
+                        overtime_amount: overtime.overtimeAmount,
+                        is_paid: false
+                    }]);
+
+                if (overtimeError) {
+                    console.error('❌ Error inserting overtime earnings:', overtimeError);
+                }
+            }
+
             let status = 'present';
             if (totalHours < 4) {
                 status = 'absent';
@@ -483,9 +568,6 @@ exports.clockOut = async (req, res) => {
                 status = 'half_day';
             }
 
-            console.log(`📊 Hours worked: ${totalHoursRounded}, Status: ${status}`);
-
-            // Update attendance record
             const { error: updateAttendanceError } = await supabase
                 .from('attendance')
                 .update({
@@ -498,13 +580,15 @@ exports.clockOut = async (req, res) => {
                     is_holiday: holidayCheck.isHoliday,
                     holiday_name: holidayCheck.name || null,
                     comp_off_awarded: compOffAwarded,
-                    comp_off_days: compOffDays
+                    comp_off_days: compOffDays,
+                    overtime_minutes: overtime.overtimeMinutes,
+                    overtime_hours: overtime.overtimeHours,
+                    overtime_amount: overtime.overtimeAmount
                 })
                 .eq('id', attendanceRecord.id);
 
             if (updateAttendanceError) throw updateAttendanceError;
 
-            // Deactivate session
             const { error: updateSessionError } = await supabase
                 .from('attendance_sessions')
                 .update({
@@ -517,18 +601,31 @@ exports.clockOut = async (req, res) => {
 
             console.log('✅ Clock-out successful');
 
+            let message = '';
+            if (compOffAwarded) {
+                message = `✅ Clocked out successfully! 🎉 You earned ${compOffDays} Comp-Off day for working on ${holidayCheck.name || holidayCheck.type}!`;
+            } else if (overtime.hasOvertime) {
+                message = `✅ Clocked out successfully! You worked ${overtime.overtimeHours} hour(s) overtime! (₹${overtime.overtimeAmount})`;
+            } else {
+                message = `✅ Clocked out successfully. ${status === 'present' ? 'Full day' : status === 'half_day' ? 'Half day' : 'Absent'}`;
+            }
+
             res.json({
                 success: true,
-                message: compOffAwarded 
-                    ? `✅ Clocked out successfully! 🎉 You earned ${compOffDays} Comp-Off day for working on ${holidayCheck.name || holidayCheck.type}!` 
-                    : `✅ Clocked out successfully. ${status === 'present' ? 'Full day' : status === 'half_day' ? 'Half day' : 'Absent'}`,
+                message,
                 clock_out: now,
                 total_hours: totalHoursRounded,
                 status,
                 session_id: session.session_id,
                 comp_off_awarded: compOffAwarded,
                 comp_off_days: compOffDays,
-                holiday_worked: holidayCheck.isHoliday ? holidayCheck.name || holidayCheck.type : null
+                holiday_worked: holidayCheck.isHoliday ? holidayCheck.name || holidayCheck.type : null,
+                overtime: {
+                    hours: overtime.overtimeHours,
+                    minutes: overtime.overtimeMinutes,
+                    amount: overtime.overtimeAmount,
+                    hasOvertime: overtime.hasOvertime
+                }
             });
 
         } catch (error) {
@@ -563,7 +660,6 @@ exports.getTodayAttendance = async (req, res) => {
         }
 
         const now = new Date();
-        // Format today as YYYY-MM-DD using LOCAL date
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
         const day = String(now.getDate()).padStart(2, '0');
@@ -571,8 +667,6 @@ exports.getTodayAttendance = async (req, res) => {
 
         console.log('📊 Today date:', todayStr);
 
-        // First check if employee exists
-        console.log('📊 Checking if employee exists with ID:', employee_id);
         const { data: employees, error: empError } = await supabase
             .from('employees')
             .select('*')
@@ -591,7 +685,6 @@ exports.getTodayAttendance = async (req, res) => {
         const employee = employees[0];
         console.log('✅ Employee found:', employee.first_name, employee.last_name);
 
-        // Get today's attendance record
         const { data: todayAttendance, error: attendanceError } = await supabase
             .from('attendance')
             .select(`
@@ -607,7 +700,6 @@ exports.getTodayAttendance = async (req, res) => {
 
         console.log('📊 Today attendance records found:', todayAttendance?.length || 0);
 
-        // Get active session if any
         const { data: activeSession, error: sessionError } = await supabase
             .from('attendance_sessions')
             .select('*')
@@ -618,13 +710,11 @@ exports.getTodayAttendance = async (req, res) => {
         
         console.log('📊 Active session found:', activeSession?.length || 0);
 
-        // Format the attendance data if it exists
         let formattedAttendance = null;
         
         if (todayAttendance && todayAttendance.length > 0) {
             formattedAttendance = { ...todayAttendance[0] };
             
-            // Add employee details
             if (formattedAttendance.employees) {
                 formattedAttendance.first_name = formattedAttendance.employees.first_name;
                 formattedAttendance.last_name = formattedAttendance.employees.last_name;
@@ -633,7 +723,6 @@ exports.getTodayAttendance = async (req, res) => {
                 delete formattedAttendance.employees;
             }
             
-            // Calculate late display if applicable
             if (formattedAttendance.late_minutes && formattedAttendance.late_minutes > 0) {
                 const lateSeconds = Math.round(formattedAttendance.late_minutes * 60);
                 formattedAttendance.late_display = lateSeconds < 60 ?
@@ -641,7 +730,6 @@ exports.getTodayAttendance = async (req, res) => {
                     `${Math.floor(lateSeconds / 60)}m ${lateSeconds % 60}s`;
             }
             
-            // Calculate current hours if working
             if (formattedAttendance.clock_in && !formattedAttendance.clock_out) {
                 const clockIn = new Date(formattedAttendance.clock_in);
                 const now = new Date();
@@ -654,7 +742,8 @@ exports.getTodayAttendance = async (req, res) => {
                 clock_in: formattedAttendance.clock_in ? 'Yes' : 'No',
                 clock_out: formattedAttendance.clock_out ? 'Yes' : 'No',
                 is_holiday: formattedAttendance.is_holiday,
-                comp_off_awarded: formattedAttendance.comp_off_awarded
+                comp_off_awarded: formattedAttendance.comp_off_awarded,
+                overtime_hours: formattedAttendance.overtime_hours
             });
         }
 
@@ -682,14 +771,13 @@ exports.getTodayAttendance = async (req, res) => {
     }
 };
 
-// Get attendance report
+// Get attendance report with overtime
 exports.getAttendanceReport = async (req, res) => {
     try {
         const { start, end, employee_id } = req.query;
         
         console.log('📊 Getting attendance report from', start, 'to', end, 'for employee:', employee_id);
         
-        // Validate required parameters
         if (!start || !end) {
             console.log('❌ Missing start or end date');
             return res.status(400).json({
@@ -698,7 +786,6 @@ exports.getAttendanceReport = async (req, res) => {
             });
         }
 
-        // Get attendance records - SIMPLIFIED QUERY
         let query = supabase
             .from('attendance')
             .select(`
@@ -729,9 +816,7 @@ exports.getAttendanceReport = async (req, res) => {
 
         console.log(`📊 Found ${attendance?.length || 0} attendance records`);
 
-        // Format attendance records
         const formattedAttendance = (attendance || []).map(record => {
-            // Get employee details from the nested object
             const employee = record.employees || {};
             
             return {
@@ -749,18 +834,18 @@ exports.getAttendanceReport = async (req, res) => {
                 holiday_name: record.holiday_name,
                 comp_off_awarded: record.comp_off_awarded,
                 comp_off_days: record.comp_off_days,
-                // Employee details flattened
+                overtime_minutes: record.overtime_minutes || 0,
+                overtime_hours: record.overtime_hours || 0,
+                overtime_amount: record.overtime_amount || 0,
                 first_name: employee.first_name || '',
                 last_name: employee.last_name || '',
                 department: employee.department || '',
                 shift_timing: employee.shift_timing || '',
                 comp_off_balance: employee.comp_off_balance || 0,
-                // Remove nested object
                 employees: undefined
             };
         });
 
-        // Return directly without leave data for now
         res.json({
             success: true,
             attendance: formattedAttendance,
@@ -769,7 +854,9 @@ exports.getAttendanceReport = async (req, res) => {
                 present: formattedAttendance.filter(a => a.status === 'present').length,
                 half_day: formattedAttendance.filter(a => a.status === 'half_day').length,
                 absent: formattedAttendance.filter(a => a.status === 'absent').length,
-                comp_off_earned: formattedAttendance.filter(a => a.comp_off_awarded).length
+                comp_off_earned: formattedAttendance.filter(a => a.comp_off_awarded).length,
+                total_overtime_hours: formattedAttendance.reduce((sum, a) => sum + (a.overtime_hours || 0), 0),
+                total_overtime_amount: formattedAttendance.reduce((sum, a) => sum + (a.overtime_amount || 0), 0)
             }
         });
 
@@ -812,10 +899,9 @@ exports.heartbeat = async (req, res) => {
     }
 };
 
-// Check active sessions (for monitoring only, no auto clock-out)
+// Check active sessions
 exports.checkActiveSessions = async () => {
     try {
-        // This function now only monitors, doesn't auto clock-out
         const { count: activeCount, error: countError } = await supabase
             .from('attendance_sessions')
             .select('*', { count: 'exact', head: true })
@@ -825,8 +911,7 @@ exports.checkActiveSessions = async () => {
 
         console.log(`📊 Active sessions: ${activeCount}`);
 
-        // Optional: Send alerts for sessions inactive for too long
-        const timeoutMinutes = 60; // Alert after 60 minutes of no heartbeat
+        const timeoutMinutes = 60;
         const timeoutDate = new Date();
         timeoutDate.setMinutes(timeoutDate.getMinutes() - timeoutMinutes);
 
@@ -840,8 +925,6 @@ exports.checkActiveSessions = async () => {
 
         for (const session of inactiveSessions || []) {
             console.log(`⚠️ Session ${session.session_id} for employee ${session.employee_id} has been inactive for ${timeoutMinutes}+ minutes`);
-            // You could send a notification to admin here
-            // But DO NOT auto clock-out
         }
 
         return {
@@ -856,7 +939,7 @@ exports.checkActiveSessions = async () => {
     }
 };
 
-// Mark absent for employees who didn't punch in at end of day
+// Mark absent for employees who didn't punch in
 exports.markAbsentAtDayEnd = async () => {
     try {
         const today = new Date().toISOString().split('T')[0];
@@ -864,7 +947,6 @@ exports.markAbsentAtDayEnd = async () => {
 
         console.log('📝 Running end-of-day absent marking for:', today);
 
-        // Get all employees
         const { data: employees, error: empError } = await supabase
             .from('employees')
             .select('employee_id');
@@ -875,7 +957,6 @@ exports.markAbsentAtDayEnd = async () => {
         let updatedCount = 0;
 
         for (const emp of employees || []) {
-            // Check if employee has attendance record for today
             const { data: attendance, error: attError } = await supabase
                 .from('attendance')
                 .select('*')
@@ -884,7 +965,6 @@ exports.markAbsentAtDayEnd = async () => {
 
             if (attError) throw attError;
 
-            // If no record exists, create absent record
             if (!attendance || attendance.length === 0) {
                 const { error: insertError } = await supabase
                     .from('attendance')
@@ -898,7 +978,6 @@ exports.markAbsentAtDayEnd = async () => {
                 markedCount++;
                 console.log(`✅ Marked absent for employee ${emp.employee_id}`);
             }
-            // If record exists but has clock_in and no clock_out, mark as half_day (they forgot to clock out)
             else if (attendance[0].clock_in && !attendance[0].clock_out) {
                 const clockIn = new Date(attendance[0].clock_in);
                 const totalHours = (now - clockIn) / (1000 * 60 * 60);
@@ -979,6 +1058,56 @@ exports.getCompOffHistory = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to fetch comp-off history',
+            error: error.message
+        });
+    }
+};
+
+// Get overtime summary
+exports.getOvertimeSummary = async (req, res) => {
+    try {
+        const { employee_id, month, year } = req.params;
+        
+        const startDate = new Date(year, month - 1, 1);
+        const endDate = new Date(year, month, 0);
+        
+        const startDateStr = startDate.toISOString().split('T')[0];
+        const endDateStr = endDate.toISOString().split('T')[0];
+
+        const { data: overtime, error } = await supabase
+            .from('overtime_earnings')
+            .select('*')
+            .eq('employee_id', employee_id)
+            .gte('attendance_date', startDateStr)
+            .lte('attendance_date', endDateStr)
+            .order('attendance_date', { ascending: true });
+
+        if (error) throw error;
+
+        const totalMinutes = overtime?.reduce((sum, record) => sum + (record.overtime_minutes || 0), 0) || 0;
+        const totalHours = overtime?.reduce((sum, record) => sum + (record.overtime_hours || 0), 0) || 0;
+        const totalAmount = overtime?.reduce((sum, record) => sum + (record.overtime_amount || 0), 0) || 0;
+
+        res.json({
+            success: true,
+            employee_id,
+            month,
+            year,
+            overtime: overtime || [],
+            summary: {
+                total_days: overtime?.length || 0,
+                total_minutes: totalMinutes,
+                total_hours: totalHours,
+                total_amount: totalAmount,
+                average_per_day: overtime?.length > 0 ? (totalHours / overtime.length).toFixed(2) : 0
+            }
+        });
+
+    } catch (error) {
+        console.error('Error fetching overtime summary:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch overtime summary',
             error: error.message
         });
     }

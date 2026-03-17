@@ -1,4 +1,4 @@
-// SalarySlip.jsx - Updated import section
+// src/components/Employee/SalarySlip.jsx
 import React, { useState, useEffect } from 'react';
 import {
   Row,
@@ -26,7 +26,8 @@ import {
   FaInfoCircle,
   FaClock,
   FaUserTie,
-  FaExclamationTriangle
+  FaExclamationTriangle,
+  FaTrophy
 } from 'react-icons/fa';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
@@ -36,12 +37,8 @@ import { useNavigate } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
-// 👇 Use public folder path instead of import
+// Use public folder path instead of import
 const companyLogo = '/images/b2bindemand_logo.jfif';
-
-
-// 👇 Alternative: If using public folder, use this instead
-// const companyLogo = '/images/logo.png';
 
 const SalarySlip = () => {
   const { user } = useAuth();
@@ -58,6 +55,14 @@ const SalarySlip = () => {
   const [joiningInfo, setJoiningInfo] = useState(null);
   const [eligibleMonths, setEligibleMonths] = useState([]);
   const [logoError, setLogoError] = useState(false);
+
+  // Overtime states
+  const [overtimeData, setOvertimeData] = useState([]);
+  const [overtimeSummary, setOvertimeSummary] = useState({
+    total_hours: 0,
+    total_amount: 0,
+    total_days: 0
+  });
 
   // Set current month as default
   const today = new Date();
@@ -82,6 +87,9 @@ const SalarySlip = () => {
     { value: 12, label: 'December' }
   ]);
 
+  // Overtime rate per hour
+  const OVERTIME_RATE = 150;
+
   useEffect(() => {
     if (!user?.employeeId) {
       navigate('/login');
@@ -92,10 +100,35 @@ const SalarySlip = () => {
     generateYearOptions();
   }, [user]);
 
+  useEffect(() => {
+    if (selectedMonth && selectedYear && user?.employeeId) {
+      fetchOvertimeData();
+    }
+  }, [selectedMonth, selectedYear, user?.employeeId]);
+
+  const fetchOvertimeData = async () => {
+    try {
+      const response = await axios.get(
+        `${API_ENDPOINTS.ATTENDANCE}/overtime/${user.employeeId}/${selectedMonth}/${selectedYear}`
+      );
+
+      if (response.data.success) {
+        setOvertimeData(response.data.overtime || []);
+        setOvertimeSummary(response.data.summary || {
+          total_hours: 0,
+          total_amount: 0,
+          total_days: 0
+        });
+        console.log('📊 Overtime data fetched:', response.data.summary);
+      }
+    } catch (error) {
+      console.error('Error fetching overtime data:', error);
+    }
+  };
+
   const generateYearOptions = () => {
     const currentYear = new Date().getFullYear();
     const years = [];
-    // Generate years from joining year to current year + 1
     if (joiningInfo) {
       for (let i = joiningInfo.year; i <= currentYear + 1; i++) {
         years.push(i);
@@ -117,11 +150,9 @@ const SalarySlip = () => {
 
     const eligible = [];
 
-    // Start from joining month/year
     let year = joiningInfo.year;
     let month = joiningInfo.month;
 
-    // Loop until current month
     while (year < currentYear || (year === currentYear && month <= currentMonth)) {
       eligible.push({
         year: year,
@@ -155,9 +186,8 @@ const SalarySlip = () => {
       const response = await axios.get(API_ENDPOINTS.SALARY_EMPLOYEE(user.employeeId));
       const allSlips = response.data.salarySlips || [];
 
-      setAllSalarySlips(allSlips); // Store all slips
-
-      // Get last 5 slips for display
+      setSalarySlips(allSlips);
+      setAllSalarySlips(allSlips);
       const lastFive = getLastFiveSlips(allSlips);
       setDisplaySlips(lastFive);
 
@@ -186,10 +216,7 @@ const SalarySlip = () => {
     const currentYear = currentDate.getFullYear();
     const currentMonth = currentDate.getMonth() + 1;
 
-    // Check if requested date is before joining
     if (requestedDate < joiningDate) return false;
-
-    // Check if requested date is in the future
     if (year > currentYear) return false;
     if (year === currentYear && month > currentMonth) return false;
 
@@ -205,7 +232,6 @@ const SalarySlip = () => {
       return;
     }
 
-    // Check if selected month is valid
     if (joiningInfo && !isMonthEligible(selectedMonth, selectedYear)) {
       let errorMessage = '';
       const requestedDate = new Date(selectedYear, selectedMonth - 1, 1);
@@ -244,16 +270,20 @@ const SalarySlip = () => {
     setMessage({ type: '', text: '' });
 
     try {
-      console.log('📤 Generating salary slip for:', {
+      console.log('📤 Generating salary slip with overtime:', {
         employee_id: user.employeeId,
         month: parseInt(selectedMonth),
-        year: parseInt(selectedYear)
+        year: parseInt(selectedYear),
+        overtime_amount: overtimeSummary.total_amount,
+        overtime_hours: overtimeSummary.total_hours
       });
 
       const response = await axios.post(API_ENDPOINTS.SALARY_GENERATE, {
         employee_id: user.employeeId,
         month: parseInt(selectedMonth),
-        year: parseInt(selectedYear)
+        year: parseInt(selectedYear),
+        overtime_amount: overtimeSummary.total_amount,
+        overtime_hours: overtimeSummary.total_hours
       });
 
       console.log('✅ Salary slip generated:', response.data);
@@ -263,10 +293,8 @@ const SalarySlip = () => {
         text: 'Salary slip generated successfully!'
       });
 
-      // Refresh all slips
       await fetchSalarySlips();
 
-      // Show the generated slip
       if (response.data.salarySlip) {
         setSelectedSlip(response.data.salarySlip);
         setShowSlipModal(true);
@@ -299,15 +327,12 @@ const SalarySlip = () => {
     setShowSlipModal(true);
   };
 
-  // Helper function to convert image to base64 for PDF
   const getBase64Image = async (imagePath) => {
     try {
-      // If it's an imported asset (webpack handles this)
       if (imagePath.startsWith('data:') || imagePath.startsWith('blob:')) {
         return imagePath.split(',')[1];
       }
 
-      // Fetch the image
       const response = await fetch(imagePath);
       const blob = await response.blob();
 
@@ -337,9 +362,8 @@ const SalarySlip = () => {
         text: 'Generating PDF...'
       });
 
-      const { basicSalary, deduction, netSalary } = getSlipAmounts(slip);
+      const { basicSalary, deduction, netSalary, overtimeAmount, overtimeHours } = getSlipAmounts(slip);
 
-      // Get logo as base64 for PDF
       let logoBase64 = '';
       try {
         logoBase64 = await getBase64Image(companyLogo);
@@ -347,250 +371,122 @@ const SalarySlip = () => {
         console.warn('Could not load logo for PDF:', logoErr);
       }
 
-      // Create PDF content as a string with proper HTML
-      const pdfContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8">
-          <title>Salary Slip</title>
-          <style>
-            body {
-              font-family: Arial, sans-serif;
-              max-width: 800px;
-              margin: 0 auto;
-              padding: 20px;
-              background: white;
-            }
-            .header {
-              text-align: center;
-              margin-bottom: 20px;
-            }
-            .logo {
-              height: 60px;
-              width: auto;
-              margin-bottom: 10px;
-              object-fit: contain;
-            }
-            .header h1 {
-              font-size: 28px;
-              font-weight: bold;
-              color: #000;
-              margin: 0 0 5px 0;
-            }
-            .header p {
-              font-size: 12px;
-              color: #333;
-              margin: 0;
-            }
-            .title {
-              text-align: center;
-              font-size: 18px;
-              font-weight: bold;
-              margin: 20px 0;
-              text-decoration: underline;
-            }
-            .details-table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-bottom: 20px;
-              font-size: 14px;
-            }
-            .details-table td {
-              padding: 4px 0;
-            }
-            .salary-table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-bottom: 20px;
-              font-size: 14px;
-            }
-            .salary-table th {
-              border-top: 1px solid #000;
-              border-bottom: 1px solid #000;
-              padding: 8px 4px;
-              text-align: left;
-            }
-            .salary-table td {
-              padding: 4px 4px;
-            }
-            .salary-table td:last-child {
-              text-align: right;
-            }
-            .bg-light {
-              background-color: #f2f2f2;
-            }
-            .bg-warning {
-              background-color: #fff3cd;
-            }
-            .bg-success {
-              background-color: #d4edda;
-            }
-            .text-danger {
-              color: #d9534f;
-            }
-            .text-success {
-              color: #28a745;
-            }
-            .fw-bold {
-              font-weight: bold;
-            }
-            .net-salary {
-              background-color: #d4edda;
-              padding: 15px;
-              margin-bottom: 20px;
-              text-align: center;
-            }
-            .net-salary h3 {
-              margin: 0;
-              font-size: 20px;
-              font-weight: bold;
-              color: #28a745;
-            }
-            .calculation {
-              background-color: #f8f9fa;
-              padding: 10px;
-              margin-bottom: 20px;
-              border-radius: 5px;
-              font-size: 13px;
-            }
-            .amount-words {
-              font-size: 14px;
-              margin-bottom: 30px;
-            }
-            .footer {
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              margin-top: 20px;
-              font-size: 14px;
-            }
-            .generated-date {
-              text-align: right;
-              margin-top: 10px;
-              font-size: 11px;
-              color: #6c757d;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            ${logoBase64 ? `<img src="data:image/png;base64,${logoBase64}" class="logo" alt="Logo" />` : ''}
-            
-            <p>8th Floor SkyVista, 805, Mhada Colony, Viman Nagar, Pune, Maharashtra 411014</p>
-          </div>
+      // Get month name
+      const monthName = months.find(m => m.value === parseInt(slip.month))?.label || 'Unknown';
 
-          <div class="title">
-            Salary Slip for the month of ${getMonthName(slip.month)}, ${slip.year}
-          </div>
+      // Create a temporary div for PDF content
+      const pdfContentDiv = document.createElement('div');
+      pdfContentDiv.style.width = '800px';
+      pdfContentDiv.style.padding = '20px';
+      pdfContentDiv.style.fontFamily = 'Arial, sans-serif';
+      pdfContentDiv.style.backgroundColor = 'white';
+      
+      pdfContentDiv.innerHTML = `
+        <div style="text-align: center; margin-bottom: 20px;">
+          ${logoBase64 ? `<img src="data:image/png;base64,${logoBase64}" style="height: 60px; width: auto; margin-bottom: 10px; object-fit: contain;" />` : ''}
+          <p style="font-size: 12px; color: #333; margin: 0;">8th Floor SkyVista, 805, Mhada Colony, Viman Nagar, Pune, Maharashtra 411014</p>
+        </div>
 
-          <table class="details-table">
-            <tr>
-              <td style="width: 50%;"><strong>Name:</strong> ${employee?.first_name} ${employee?.last_name}</td>
-              <td style="width: 50%;"><strong>Employee Code No:</strong> ${employee?.employee_id}</td>
+        <h3 style="text-align: center; font-size: 18px; font-weight: bold; margin: 20px 0; text-decoration: underline;">
+          Salary Slip for the month of ${monthName}, ${slip.year}
+        </h3>
+
+        <table style="width: 100%; font-size: 14px; margin-bottom: 20px; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 4px 0; width: 50%;"><strong>Name:</strong> ${employee?.first_name} ${employee?.last_name}</td>
+            <td style="padding: 4px 0; width: 50%;"><strong>Employee Code No:</strong> ${employee?.employee_id}</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px 0;"><strong>Date of Joining:</strong> ${new Date(employee?.joining_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
+          </tr>
+        </table>
+
+        <table style="width: 100%; font-size: 14px; margin-bottom: 20px; border-collapse: collapse;">
+          <thead>
+            <tr style="border-top: 1px solid #000; border-bottom: 1px solid #000;">
+              <th style="text-align: left; padding: 8px 4px;">Earnings</th>
+              <th style="text-align: right; padding: 8px 4px;">Amount (₹)</th>
             </tr>
+          </thead>
+          <tbody>
             <tr>
-              <td><strong>Date of Joining:</strong> ${new Date(employee?.joining_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
+              <td style="padding: 4px 4px;">Basic Salary</td>
+              <td style="text-align: right; padding: 4px 4px;">${formatCurrency(basicSalary)}</td>
             </tr>
-          </table>
+            <!-- Overtime row - ALWAYS SHOW -->
+            <tr style="${overtimeAmount > 0 ? 'background-color: #d4edda;' : ''}">
+              <td style="padding: 4px 4px;">
+                <span style="${overtimeAmount > 0 ? 'color: #28a745;' : ''}">Overtime (${overtimeHours || 0} hrs @ ₹150/hr)</span>
+              </td>
+              <td style="text-align: right; padding: 4px 4px; ${overtimeAmount > 0 ? 'color: #28a745; font-weight: bold;' : ''}">
+                ${overtimeAmount > 0 ? '+ ' : ''}${formatCurrency(overtimeAmount)}
+              </td>
+            </tr>
+            <tr style="background-color: #f2f2f2;">
+              <td style="font-weight: bold; padding: 4px 4px;">Gross Earnings</td>
+              <td style="text-align: right; font-weight: bold; padding: 4px 4px;">${formatCurrency(basicSalary + overtimeAmount)}</td>
+            </tr>
+          </tbody>
+        </table>
 
-          <table class="salary-table">
-            <thead>
-              <tr>
-                <th>Earnings</th>
-                <th>Amount (₹)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Basic Salary</td>
-                <td>${formatCurrency(basicSalary)}</td>
-              </tr>
-              <tr class="bg-light fw-bold">
-                <td>Gross Earnings</td>
-                <td>${formatCurrency(basicSalary)}</td>
-              </tr>
-            </tbody>
-          </table>
+        <table style="width: 100%; font-size: 14px; margin-bottom: 20px; border-collapse: collapse;">
+          <thead>
+            <tr style="border-top: 1px solid #000; border-bottom: 1px solid #000;">
+              <th style="text-align: left; padding: 8px 4px;">Deductions</th>
+              <th style="text-align: right; padding: 8px 4px;">Amount (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td style="padding: 4px 4px;">PF (Provident Fund)</td><td style="text-align: right; padding: 4px 4px;">0</td></tr>
+            <tr><td style="padding: 4px 4px;">ESI (Employee State Insurance)</td><td style="text-align: right; padding: 4px 4px;">0</td></tr>
+            <tr><td style="padding: 4px 4px;">TDS (Tax Deducted at Source)</td><td style="text-align: right; padding: 4px 4px;">0</td></tr>
+            <tr style="background-color: #fff3cd;">
+              <td style="font-weight: bold; padding: 4px 4px;">DT (Fixed Deduction)</td>
+              <td style="text-align: right; font-weight: bold; color: #d9534f; padding: 4px 4px;">${formatCurrency(deduction)}</td>
+            </tr>
+            <tr style="background-color: #f2f2f2;">
+              <td style="font-weight: bold; padding: 4px 4px;">Total Deductions</td>
+              <td style="text-align: right; font-weight: bold; color: #d9534f; padding: 4px 4px;">${formatCurrency(deduction)}</td>
+            </tr>
+            <tr style="font-weight: bold; border-top: 2px solid #000;">
+              <td style="padding: 8px 4px;">NET SALARY</td>
+              <td style="text-align: right; color: #28a745; padding: 8px 4px;">${formatCurrency(netSalary)}</td>
+            </tr>
+          </tbody>
+        </table>
 
-          <table class="salary-table">
-            <thead>
-              <tr>
-                <th>Deductions</th>
-                <th>Amount (₹)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>PF (Provident Fund)</td>
-                <td>0</td>
-              </tr>
-              <tr>
-                <td>ESI (Employee State Insurance)</td>
-                <td>0</td>
-              </tr>
-              <tr>
-                <td>TDS (Tax Deducted at Source)</td>
-                <td>0</td>
-              </tr>
-              <tr class="bg-warning fw-bold">
-                <td>DT (Fixed Deduction)</td>
-                <td class="text-danger">${formatCurrency(deduction)}</td>
-              </tr>
-              <tr class="bg-light fw-bold">
-                <td>Total Deductions</td>
-                <td class="text-danger">${formatCurrency(deduction)}</td>
-              </tr>
-              <tr class="fw-bold" style="border-top: 2px solid #000;">
-                <td>NET SALARY</td>
-                <td class="text-success">${formatCurrency(netSalary)}</td>
-              </tr>
-            </tbody>
-          </table>
+        <div style="background-color: #f8f9fa; padding: 10px; margin-bottom: 20px; border-radius: 5px; font-size: 13px;">
+          <strong>Calculation:</strong> Basic Salary (₹${formatCurrency(basicSalary)}) 
+          + Overtime (₹${formatCurrency(overtimeAmount)}) 
+          - DT Deduction (₹${formatCurrency(deduction)}) = Net Salary (₹${formatCurrency(netSalary)})
+        </div>
 
-          <div class="calculation">
-            <strong>Calculation:</strong> Basic Salary (₹${formatCurrency(basicSalary)}) - DT Deduction (₹${formatCurrency(deduction)}) = Net Salary (₹${formatCurrency(netSalary)})
-          </div>
+        <div style="font-size: 14px; margin-bottom: 30px;">
+          <strong>Amount in Words:</strong> Rupees ${numberToWords(Math.round(netSalary))} Only
+        </div>
 
-          <div class="amount-words">
-            <strong>Amount in Words:</strong> Rupees ${numberToWords(Math.round(netSalary))} Only
-          </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px; font-size: 14px;">
+          <div>For B2BinDemand</div>
+          <div>Authorized Signatory</div>
+        </div>
 
-          <div class="footer">
-            <div>For B2BinDemand</div>
-            <div>Authorized Signatory</div>
-          </div>
-
-          <div class="generated-date">
-            Generated on: ${new Date().toLocaleString()}
-          </div>
-        </body>
-        </html>
+        <div style="text-align: right; margin-top: 10px; font-size: 11px; color: #6c757d;">
+          Generated on: ${new Date().toLocaleString()}
+        </div>
       `;
 
-      const iframe = document.createElement('iframe');
-      iframe.style.position = 'absolute';
-      iframe.style.width = '0';
-      iframe.style.height = '0';
-      iframe.style.border = 'none';
-      document.body.appendChild(iframe);
+      document.body.appendChild(pdfContentDiv);
 
-      const iframeDoc = iframe.contentWindow.document;
-      iframeDoc.open();
-      iframeDoc.write(pdfContent);
-      iframeDoc.close();
-
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      const canvas = await html2canvas(iframeDoc.body, {
+      const canvas = await html2canvas(pdfContentDiv, {
         scale: 2,
         backgroundColor: '#ffffff',
         logging: false,
         allowTaint: true,
         useCORS: true,
-        windowWidth: 800,
-        windowHeight: iframeDoc.body.scrollHeight
+        windowWidth: 800
       });
+
+      document.body.removeChild(pdfContentDiv);
 
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
@@ -600,9 +496,7 @@ const SalarySlip = () => {
       });
 
       pdf.addImage(imgData, 'PNG', 0, 0, canvas.width * 0.75, canvas.height * 0.75);
-      pdf.save(`Salary_Slip_${slip.employee_id}_${getMonthName(slip.month)}_${slip.year}.pdf`);
-
-      document.body.removeChild(iframe);
+      pdf.save(`Salary_Slip_${employee?.employee_id}_${monthName}_${slip.year}.pdf`);
 
       setMessage({
         type: 'success',
@@ -638,24 +532,34 @@ const SalarySlip = () => {
 
   const getSlipAmounts = (slip) => {
     if (!slip) {
-      return { basicSalary: 0, deduction: 0, netSalary: 0 };
+      return { basicSalary: 0, deduction: 0, netSalary: 0, overtimeAmount: 0, overtimeHours: 0 };
     }
 
-    // Get basic salary from slip or employee
     const slipBase = Number(slip.basic_salary) || 0;
     const employeeBase = Number(employee?.gross_salary || employee?.salary) || 0;
     const basicSalary = slipBase > 0 ? slipBase : employeeBase;
 
-    // Get deduction (DT - Fixed Deduction)
     const deduction = Number(slip.dt) || 200;
+    const overtimeAmount = Number(slip.overtime_amount) || 0;
+    const overtimeHours = Number(slip.overtime_hours) || 0;
 
-    // Calculate net salary = basic salary - deduction
-    const netSalary = basicSalary - deduction;
+    const netSalary = basicSalary - deduction + overtimeAmount;
+
+    console.log('💰 Slip amounts:', {
+      slip,
+      basicSalary,
+      deduction,
+      overtimeAmount,
+      overtimeHours,
+      netSalary
+    });
 
     return {
       basicSalary,
       deduction,
-      netSalary: netSalary < 0 ? 0 : netSalary
+      netSalary: netSalary < 0 ? 0 : netSalary,
+      overtimeAmount,
+      overtimeHours
     };
   };
 
@@ -664,7 +568,7 @@ const SalarySlip = () => {
     return month ? month.label : 'Unknown';
   };
 
-  const selectedSlipAmounts = selectedSlip ? getSlipAmounts(selectedSlip) : { basicSalary: 0, deduction: 0, netSalary: 0 };
+  const selectedSlipAmounts = selectedSlip ? getSlipAmounts(selectedSlip) : { basicSalary: 0, deduction: 0, netSalary: 0, overtimeAmount: 0, overtimeHours: 0 };
 
   const getStatusBadge = (isPaid) => {
     return isPaid ?
@@ -695,7 +599,6 @@ const SalarySlip = () => {
     return numToWords(num) + ' Only';
   };
 
-  // Handle logo error
   const handleLogoError = () => {
     setLogoError(true);
   };
@@ -703,20 +606,16 @@ const SalarySlip = () => {
   const getLastFiveSlips = (slips) => {
     if (!slips || slips.length === 0) return [];
 
-    // Sort by year and month descending (newest first)
     const sortedSlips = [...slips].sort((a, b) => {
       if (a.year !== b.year) return b.year - a.year;
       return b.month - a.month;
     });
 
-    // Return only first 5 (latest)
     return sortedSlips.slice(0, 5);
   };
 
-  // Update the salarySlips state to store all slips but show only last 5
-  const [allSalarySlips, setAllSalarySlips] = useState([]); // Store all slips
-  const [displaySlips, setDisplaySlips] = useState([]); // Store last 5 for display
-
+  const [allSalarySlips, setAllSalarySlips] = useState([]);
+  const [displaySlips, setDisplaySlips] = useState([]);
 
   if (loading) {
     return (
@@ -737,10 +636,18 @@ const SalarySlip = () => {
           <FaMoneyBillWave className="me-2 text-primary" />
           Salary Slips
         </h5>
-        <Badge bg="dark" className="px-3 py-2 small">
-          <FaHistory className="me-2" size={12} />
-          Total Slips: {salarySlips.length}
-        </Badge>
+        <div>
+          {overtimeSummary.total_hours > 0 && (
+            <Badge bg="success" className="me-2 px-3 py-2 small">
+              <FaClock className="me-2" size={12} />
+              OT: {overtimeSummary.total_hours}h (₹{overtimeSummary.total_amount})
+            </Badge>
+          )}
+          <Badge bg="dark" className="px-3 py-2 small">
+            <FaHistory className="me-2" size={12} />
+            Total Slips: {allSalarySlips.length}
+          </Badge>
+        </div>
       </div>
 
       {/* Alert Messages */}
@@ -837,7 +744,6 @@ const SalarySlip = () => {
                     })}
                   </Form.Select>
 
-                  {/* Show validation message if needed */}
                   {selectedMonth && selectedYear && joiningInfo && !isMonthEligible(selectedMonth, selectedYear) && (
                     <div className="mt-1 text-danger small">
                       <FaInfoCircle className="me-1" size={10} />
@@ -852,6 +758,23 @@ const SalarySlip = () => {
                     </div>
                   )}
                 </Form.Group>
+
+                {/* Overtime Preview */}
+                {overtimeSummary.total_hours > 0 && (
+                  <div className="bg-success bg-opacity-10 p-2 rounded mb-3">
+                    <div className="d-flex align-items-center justify-content-between small">
+                      <span className="fw-semibold text-success">
+                        <FaClock className="me-1" /> Overtime for this month:
+                      </span>
+                      <Badge bg="success" pill>
+                        {overtimeSummary.total_hours}h (₹{overtimeSummary.total_amount})
+                      </Badge>
+                    </div>
+                    <div className="mt-1 small text-muted">
+                      This will be added to your salary
+                    </div>
+                  </div>
+                )}
 
                 <Button
                   variant="primary"
@@ -869,6 +792,7 @@ const SalarySlip = () => {
                     <>
                       <FaDownload className="me-2" size={12} />
                       Generate Salary Slip
+                      {overtimeSummary.total_hours > 0 && ' (Incl. Overtime)'}
                     </>
                   )}
                 </Button>
@@ -879,7 +803,6 @@ const SalarySlip = () => {
 
         {/* Right Column - Salary Slips History and Employee Details */}
         <Col lg={8}>
-          {/* Salary Slips History Card */}
           {/* Salary Slips History Card */}
           <Card className="mb-4 shadow-sm border-0">
             <Card.Header className="bg-light text-dark py-2 d-flex justify-content-between align-items-center">
@@ -906,6 +829,8 @@ const SalarySlip = () => {
                       <th className="text-nowrap small text-dark fw-semibold">Month</th>
                       <th className="text-nowrap small text-dark fw-semibold">Year</th>
                       <th className="text-nowrap small text-dark fw-semibold text-end">Basic Salary</th>
+                      <th className="text-nowrap small text-dark fw-semibold text-end">OT Hours</th>
+                      <th className="text-nowrap small text-dark fw-semibold text-end">OT Amount</th>
                       <th className="text-nowrap small text-dark fw-semibold text-end">DT Deduction</th>
                       <th className="text-nowrap small text-dark fw-semibold text-end">Net Salary</th>
                       <th className="text-nowrap small text-dark fw-semibold text-center">Action</th>
@@ -915,7 +840,7 @@ const SalarySlip = () => {
                     {displaySlips.length > 0 ? (
                       displaySlips.map((slip, index) => {
                         const isCurrentMonth = slip.month === currentMonth && slip.year === currentYear;
-                        const { basicSalary, deduction, netSalary } = getSlipAmounts(slip);
+                        const { basicSalary, deduction, netSalary, overtimeAmount, overtimeHours } = getSlipAmounts(slip);
 
                         return (
                           <tr key={slip.id} className={isCurrentMonth ? 'table-primary' : ''}>
@@ -928,6 +853,16 @@ const SalarySlip = () => {
                             </td>
                             <td className="fw-bold small">{slip.year}</td>
                             <td className="text-primary fw-bold small text-end">₹{formatCurrency(basicSalary)}</td>
+                            <td className="small text-end">
+                              <Badge bg={overtimeHours > 0 ? "success" : "secondary"} pill>
+                                {overtimeHours || 0}h
+                              </Badge>
+                            </td>
+                            <td className="small text-end">
+                              <span className={overtimeAmount > 0 ? "text-success" : ""}>
+                                {overtimeAmount > 0 ? '+' : ''}₹{formatCurrency(overtimeAmount)}
+                              </span>
+                            </td>
                             <td className="text-danger small text-end">₹{formatCurrency(deduction)}</td>
                             <td className="small text-end">
                               <span className="text-success fw-bold">₹{formatCurrency(netSalary)}</span>
@@ -957,7 +892,7 @@ const SalarySlip = () => {
                       })
                     ) : (
                       <tr>
-                        <td colSpan="7" className="text-center py-4">
+                        <td colSpan="9" className="text-center py-4">
                           <div className="mb-2">
                             <FaFilePdf size={30} className="text-muted opacity-50" />
                           </div>
@@ -982,7 +917,6 @@ const SalarySlip = () => {
                   </tbody>
                 </Table>
 
-                {/* Show message if there are more than 5 slips */}
                 {allSalarySlips.length > 5 && (
                   <div className="text-center mt-2 mb-2">
                     <Badge bg="info" className="px-3 py-2 small">
@@ -1049,6 +983,9 @@ const SalarySlip = () => {
           <Modal.Title as="h6" className="mb-0 small fw-semibold">
             <FaFilePdf className="me-2" size={14} />
             Salary Slip - {selectedSlip && `${getMonthName(selectedSlip.month)} ${selectedSlip.year}`}
+            {selectedSlip?.overtime_hours > 0 && (
+              <Badge bg="success" className="ms-2">OT: {selectedSlip.overtime_hours}h</Badge>
+            )}
           </Modal.Title>
         </Modal.Header>
         <Modal.Body className="p-3" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
@@ -1061,7 +998,6 @@ const SalarySlip = () => {
             }}>
               {/* Company Header with Logo */}
               <div className="text-center mb-3">
-                {/* 👇 Logo added here */}
                 {!logoError ? (
                   <img
                     src={companyLogo}
@@ -1075,7 +1011,6 @@ const SalarySlip = () => {
                     }}
                   />
                 ) : (
-                  // Fallback if logo doesn't load
                   <div style={{ height: '60px', marginBottom: '10px' }}></div>
                 )}
                 <p className="small text-muted mb-0">
@@ -1122,10 +1057,22 @@ const SalarySlip = () => {
                       {formatCurrency(selectedSlipAmounts.basicSalary)}
                     </td>
                   </tr>
+                  {/* Overtime row - ALWAYS SHOW, even if 0 */}
+                  <tr style={selectedSlipAmounts.overtimeAmount > 0 ? { backgroundColor: '#d4edda' } : {}}>
+                    <td className="py-1 ps-2">
+                      <span style={selectedSlipAmounts.overtimeAmount > 0 ? { color: '#28a745' } : {}}>
+                        Overtime ({selectedSlipAmounts.overtimeHours || 0} hrs @ ₹150/hr)
+                      </span>
+                    </td>
+                    <td className="text-end py-1 pe-2" 
+                        style={selectedSlipAmounts.overtimeAmount > 0 ? { color: '#28a745', fontWeight: 'bold' } : {}}>
+                      {selectedSlipAmounts.overtimeAmount > 0 ? '+ ' : ''}{formatCurrency(selectedSlipAmounts.overtimeAmount)}
+                    </td>
+                  </tr>
                   <tr style={{ backgroundColor: '#f2f2f2' }}>
                     <td className="fw-bold py-1 ps-2">Gross Earnings</td>
                     <td className="text-end fw-bold py-1 pe-2">
-                      {formatCurrency(selectedSlipAmounts.basicSalary)}
+                      {formatCurrency(selectedSlipAmounts.basicSalary + selectedSlipAmounts.overtimeAmount)}
                     </td>
                   </tr>
                 </tbody>
@@ -1164,9 +1111,11 @@ const SalarySlip = () => {
                 </tbody>
               </table>
 
-              {/* Calculation */}
+              {/* Calculation - Always show Overtime term */}
               <div className="bg-light p-2 mb-3 rounded small">
-                <strong>Calculation:</strong> Basic Salary (₹{formatCurrency(selectedSlipAmounts.basicSalary)}) - DT Deduction (₹{formatCurrency(selectedSlipAmounts.deduction)}) = Net Salary (₹{formatCurrency(selectedSlipAmounts.netSalary)})
+                <strong>Calculation:</strong> Basic Salary (₹{formatCurrency(selectedSlipAmounts.basicSalary)}) 
+                + Overtime (₹{formatCurrency(selectedSlipAmounts.overtimeAmount)}) 
+                - DT Deduction (₹{formatCurrency(selectedSlipAmounts.deduction)}) = Net Salary (₹{formatCurrency(selectedSlipAmounts.netSalary)})
               </div>
 
               {/* Amount in Words */}

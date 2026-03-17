@@ -1,6 +1,7 @@
 const LeaveYearlyService = require('../services/leaveYearlyService');
 const supabase = require('../config/supabase');
 
+
 // Get leave balance for employee
 exports.getLeaveBalance = async (req, res) => {
     try {
@@ -8,7 +9,7 @@ exports.getLeaveBalance = async (req, res) => {
         
         console.log('📊 Fetching leave balance for employee:', employee_id);
 
-        // Get employee details first to check probation status
+        // Get employee details first
         const { data: employee, error: empError } = await supabase
             .from('employees')
             .select('joining_date, comp_off_balance')
@@ -17,80 +18,138 @@ exports.getLeaveBalance = async (req, res) => {
 
         if (empError) throw empError;
 
-        // Calculate months completed
         const joiningDate = new Date(employee.joining_date);
         const today = new Date();
+        const currentYear = today.getFullYear();
         
-        let monthsCompleted = (today.getFullYear() - joiningDate.getFullYear()) * 12;
-        monthsCompleted += (today.getMonth() - joiningDate.getMonth());
+        // Calculate months completed since joining
+        let totalMonthsCompleted = (today.getFullYear() - joiningDate.getFullYear()) * 12;
+        totalMonthsCompleted += (today.getMonth() - joiningDate.getMonth());
         
         if (today.getDate() < joiningDate.getDate()) {
-            monthsCompleted -= 1;
+            totalMonthsCompleted -= 1;
         }
         
-        monthsCompleted = Math.max(0, monthsCompleted);
-        const isEligible = monthsCompleted >= 6;
+        totalMonthsCompleted = Math.max(0, totalMonthsCompleted);
         
-        // Calculate eligible from date (6 months after joining)
+        // Check probation status (6 months)
+        const isEligible = totalMonthsCompleted >= 6;
+        
+        // Calculate eligible from date
         const eligibleFromDate = new Date(joiningDate);
         eligibleFromDate.setMonth(eligibleFromDate.getMonth() + 6);
         const eligibleFromDateStr = eligibleFromDate.toISOString().split('T')[0];
 
-        // Get total accrued leaves (1.5 days per month)
-        const totalAccrued = monthsCompleted * 1.5;
-
-        // Get used leaves from leaves table
-        const { data: usedLeaves, error: usedError } = await supabase
-            .from('leaves')
-            .select('days_count')
+        // Get or create leave balance for current year
+        let { data: balance, error: balanceError } = await supabase
+            .from('leave_balance')
+            .select('*')
             .eq('employee_id', employee_id)
-            .eq('status', 'approved')
-            .in('leave_type', ['Annual', 'Sick', 'Personal', 'Maternity', 'Paternity', 'Bereavement']);
+            .eq('leave_year', currentYear)
+            .maybeSingle();
 
-        if (usedError) throw usedError;
+        if (balanceError) throw balanceError;
 
-        const used = usedLeaves?.reduce((sum, leave) => sum + (leave.days_count || 0), 0) || 0;
+        // If no balance for current year, create it
+        if (!balance) {
+            console.log(`📝 Creating new leave balance for ${employee_id} for year ${currentYear}`);
+            
+            // Calculate how many months in current year are completed
+            const monthsInCurrentYear = today.getMonth() + 1; // Months from Jan to current month
+            const daysInCurrentMonth = today.getDate();
+            const lastDayOfMonth = new Date(currentYear, today.getMonth() + 1, 0).getDate();
+            
+            // Count completed months (full months only)
+            let completedMonthsInYear = 0;
+            if (daysInCurrentMonth === lastDayOfMonth) {
+                // If it's the last day of month, count current month
+                completedMonthsInYear = monthsInCurrentYear;
+            } else {
+                // Otherwise count previous months only
+                completedMonthsInYear = Math.max(0, monthsInCurrentYear - 1);
+            }
+            
+            // Calculate accrued leaves (1.5 per month)
+            const totalAccrued = completedMonthsInYear * 1.5;
+            
+            // Get used leaves from current year
+            const { data: usedLeaves, error: usedError } = await supabase
+                .from('leaves')
+                .select('days_count')
+                .eq('employee_id', employee_id)
+                .eq('status', 'approved')
+                .in('leave_type', ['Annual', 'Sick', 'Personal', 'Maternity', 'Paternity', 'Bereavement'])
+                .gte('start_date', `${currentYear}-01-01`)
+                .lte('start_date', `${currentYear}-12-31`);
 
-        // Get pending leaves
-        const { data: pendingLeaves, error: pendingError } = await supabase
-            .from('leaves')
-            .select('days_count')
-            .eq('employee_id', employee_id)
-            .eq('status', 'pending');
+            if (usedError) throw usedError;
 
-        if (pendingError) throw pendingError;
+            const used = usedLeaves?.reduce((sum, leave) => sum + (leave.days_count || 0), 0) || 0;
 
-        const pending = pendingLeaves?.reduce((sum, leave) => sum + (leave.days_count || 0), 0) || 0;
+            // Get pending leaves from current year
+            const { data: pendingLeaves, error: pendingError } = await supabase
+                .from('leaves')
+                .select('days_count')
+                .eq('employee_id', employee_id)
+                .eq('status', 'pending')
+                .gte('start_date', `${currentYear}-01-01`)
+                .lte('start_date', `${currentYear}-12-31`);
 
-        // Calculate available leaves
-        let available = 0;
-        if (isEligible) {
-            available = Math.max(0, totalAccrued - used - pending);
+            if (pendingError) throw pendingError;
+
+            const pending = pendingLeaves?.reduce((sum, leave) => sum + (leave.days_count || 0), 0) || 0;
+
+            // Calculate current balance
+            const currentBalance = Math.max(0, totalAccrued - used - pending);
+
+            // Insert new balance
+            const { error: insertError } = await supabase
+                .from('leave_balance')
+                .insert([{
+                    employee_id,
+                    leave_year: currentYear,
+                    total_accrued: totalAccrued,
+                    total_used: used,
+                    total_pending: pending,
+                    current_balance: currentBalance,
+                    last_updated: today.toISOString()
+                }]);
+
+            if (insertError) throw insertError;
+
+            balance = {
+                total_accrued: totalAccrued,
+                total_used: used,
+                total_pending: pending,
+                current_balance: currentBalance
+            };
         }
 
         // Get comp-off balance
         const compOffBalance = employee.comp_off_balance || 0;
 
         console.log('📊 Leave balance calculated:', {
-            totalAccrued,
-            used,
-            pending,
-            available,
-            monthsCompleted,
+            total_accrued: balance.total_accrued,
+            used: balance.total_used,
+            pending: balance.total_pending,
+            available: balance.current_balance,
+            monthsCompleted: totalMonthsCompleted,
             isEligible,
-            compOffBalance
+            compOffBalance,
+            year: currentYear
         });
 
         res.json({
             success: true,
-            total_accrued: totalAccrued.toFixed(1),
-            used: used.toFixed(1),
-            pending: pending.toFixed(1),
-            available: available.toFixed(1),
+            total_accrued: (balance.total_accrued || 0).toFixed(1),
+            used: (balance.total_used || 0).toFixed(1),
+            pending: (balance.total_pending || 0).toFixed(1),
+            available: (balance.current_balance || 0).toFixed(1),
             comp_off_balance: compOffBalance.toFixed(1),
-            months_completed: monthsCompleted,
+            months_completed: totalMonthsCompleted,
             is_eligible: isEligible,
-            eligible_from_date: eligibleFromDateStr
+            eligible_from_date: eligibleFromDateStr,
+            leave_year: currentYear
         });
 
     } catch (error) {

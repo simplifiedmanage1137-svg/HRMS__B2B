@@ -27,16 +27,11 @@ import * as XLSX from 'xlsx';
 import { holidays as holidayData } from '../../data/holidays';
 
 const AttendanceReports = () => {
-  // ============== STATE VARIABLES ==============
   const [activeView, setActiveView] = useState('daily');
-
-  // Daily View State
   const [dailyAttendance, setDailyAttendance] = useState([]);
   const [selectedDate, setSelectedDate] = useState(
     new Date().toISOString().split('T')[0]
   );
-
-  // Monthly View State
   const [monthlyAttendance, setMonthlyAttendance] = useState([]);
   const [allEmployees, setAllEmployees] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
@@ -45,18 +40,14 @@ const AttendanceReports = () => {
   const [departments, setDepartments] = useState([]);
   const [monthlyStats, setMonthlyStats] = useState({});
   const [daysInMonth, setDaysInMonth] = useState(0);
-  const [exportFormat, setExportFormat] = useState('detailed');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const [messageType, setMessageType] = useState('danger');
 
-  // Current date for highlighting
   const currentDate = new Date();
   const currentDay = currentDate.getDate();
   const currentMonth = currentDate.getMonth() + 1;
   const currentYear = currentDate.getFullYear();
-
-  // Common State
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
-  const [messageType, setMessageType] = useState('danger');
 
   const months = [
     { value: 1, label: 'January', short: 'Jan' },
@@ -73,17 +64,15 @@ const AttendanceReports = () => {
     { value: 12, label: 'December', short: 'Dec' }
   ];
 
-  // Generate years
   const years = [];
   for (let i = 2020; i <= currentYear + 1; i++) {
     years.push(i);
   }
 
-  // Fixed deduction amount
   const PROFESSIONAL_TAX = 200;
   const OTHER_DEDUCTIONS = 0;
+  const OVERTIME_RATE = 150; // ₹150 per hour
 
-  // ============== UTILITY FUNCTIONS ==============
   const formatLateDisplay = (lateMinutes) => {
     if (!lateMinutes || lateMinutes <= 0) return null;
     
@@ -126,7 +115,6 @@ const AttendanceReports = () => {
     });
   };
 
-  // ============== INITIAL LOADS ==============
   useEffect(() => {
     fetchAllEmployees();
   }, []);
@@ -146,16 +134,13 @@ const AttendanceReports = () => {
     }
   }, [activeView, selectedDate, selectedMonth, selectedYear, department, allEmployees]);
 
-  // ============== FETCH ALL EMPLOYEES ==============
   const fetchAllEmployees = async () => {
     try {
       const response = await axios.get(API_ENDPOINTS.EMPLOYEES);
       setAllEmployees(response.data);
-
       const depts = ['all', ...new Set(response.data.map(emp => emp.department).filter(Boolean))];
       setDepartments(depts);
       setMessage('');
-
     } catch (error) {
       console.error('Error fetching employees:', error);
       setMessage('Failed to load employees');
@@ -173,7 +158,6 @@ const AttendanceReports = () => {
 
       const attendanceData = response.data.attendance || [];
 
-      // Process attendance data
       const processedAttendance = attendanceData.map(record => {
         if (record.clock_in && !record.clock_out) {
           const now = new Date();
@@ -183,7 +167,6 @@ const AttendanceReports = () => {
           record.status = 'working';
         }
 
-        // Update late display to use new format
         if (record.late_minutes > 0) {
           record.late_display = formatLateDisplay(record.late_minutes);
         }
@@ -220,8 +203,6 @@ const AttendanceReports = () => {
       const startDateStr = formatLocalDate(startDate);
       const endDateStr = formatLocalDate(endDate);
 
-      console.log('📅 Fetching monthly attendance from', startDateStr, 'to', endDateStr);
-
       let url = `${API_ENDPOINTS.ATTENDANCE_REPORT}?start=${startDateStr}&end=${endDateStr}`;
       if (department !== 'all') {
         url += `&department=${department}`;
@@ -230,7 +211,6 @@ const AttendanceReports = () => {
       const response = await axios.get(url);
       const attendanceData = response.data.attendance || [];
 
-      // Fetch leave data
       let leaveData = [];
       try {
         const leaveResponse = await axios.get(API_ENDPOINTS.LEAVES);
@@ -243,14 +223,12 @@ const AttendanceReports = () => {
         console.log('Could not fetch leave data');
       }
 
-      // Filter holidays for selected month and year
       const monthHolidays = holidayData.filter(holiday => {
         const holidayDate = new Date(holiday.date);
         return holidayDate.getFullYear() === selectedYear &&
           holidayDate.getMonth() + 1 === selectedMonth;
       });
 
-      // Process data with holiday support
       const processedData = processMonthlyAttendance(
         attendanceData,
         allEmployees,
@@ -276,7 +254,6 @@ const AttendanceReports = () => {
     const daysInMonth = endDate.getDate();
     const processedData = [];
 
-    // Create attendance map with date strings
     const attendanceMap = {};
     attendanceData.forEach(record => {
       if (record.attendance_date) {
@@ -288,7 +265,6 @@ const AttendanceReports = () => {
       }
     });
 
-    // Create leave map
     const leaveMap = {};
     leaveData.forEach(leave => {
       const leaveStart = new Date(leave.start_date);
@@ -307,7 +283,6 @@ const AttendanceReports = () => {
       }
     });
 
-    // Create holiday map
     const holidayMap = {};
     holidays.forEach(holiday => {
       const dateStr = holiday.date;
@@ -317,13 +292,11 @@ const AttendanceReports = () => {
       };
     });
 
-    // Filter employees by department
     let filteredEmployees = employees;
     if (department !== 'all') {
       filteredEmployees = employees.filter(emp => emp.department === department);
     }
 
-    // Get today's date for comparison
     const today = new Date();
     const todayYear = today.getFullYear();
     const todayMonth = today.getMonth() + 1;
@@ -338,20 +311,16 @@ const AttendanceReports = () => {
         const dayStr = String(currentDate.getDate()).padStart(2, '0');
         const dateStr = `${year}-${month}-${dayStr}`;
 
-        const dayOfWeek = currentDate.getDay(); // 0 = Sunday, 6 = Saturday
+        const dayOfWeek = currentDate.getDay();
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const isToday = year === todayYear &&
+          currentDate.getMonth() + 1 === todayMonth &&
+          day === todayDay;
 
         const attendanceKey = `${employee.employee_id}-${dateStr}`;
         const dayAttendance = attendanceMap[attendanceKey];
         const dayLeave = leaveMap[attendanceKey];
         const dayHoliday = holidayMap[dateStr];
-
-        // Check if it's a weekend (Saturday or Sunday)
-        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-
-        // Check if this date is today
-        const isToday = year === todayYear &&
-          currentDate.getMonth() + 1 === todayMonth &&
-          day === todayDay;
 
         let status = 'absent';
         let statusBadge = 'danger';
@@ -364,8 +333,10 @@ const AttendanceReports = () => {
         let leaveType = null;
         let compOffAwarded = false;
         let compOffDays = 0;
+        let overtimeHours = 0;
+        let overtimeMinutes = 0;
+        let overtimeAmount = 0;
 
-        // PRIORITY: Weekend > Holiday > Leave > Attendance
         if (isWeekend) {
           status = 'weekend';
           statusBadge = 'secondary';
@@ -392,6 +363,9 @@ const AttendanceReports = () => {
           lateMinutes = dayAttendance.late_minutes || 0;
           compOffAwarded = dayAttendance.comp_off_awarded || false;
           compOffDays = dayAttendance.comp_off_days || 0;
+          overtimeHours = dayAttendance.overtime_hours || 0;
+          overtimeMinutes = dayAttendance.overtime_minutes || 0;
+          overtimeAmount = dayAttendance.overtime_amount || 0;
 
           if (isToday && clockIn && !clockOut) {
             status = 'working';
@@ -403,6 +377,9 @@ const AttendanceReports = () => {
             }
             if (compOffAwarded) {
               tooltip += ` | 🎉 Comp-Off Earned: ${compOffDays} day`;
+            }
+            if (overtimeHours > 0) {
+              tooltip += ` | Overtime: ${overtimeHours}h (₹${overtimeAmount})`;
             }
 
             const now = new Date();
@@ -431,6 +408,9 @@ const AttendanceReports = () => {
             if (compOffAwarded) {
               tooltip += ` | 🎉 Comp-Off Earned: ${compOffDays} day`;
             }
+            if (overtimeHours > 0) {
+              tooltip += ` | Overtime: ${overtimeHours}h (₹${overtimeAmount})`;
+            }
           }
           else if (clockIn) {
             status = 'present';
@@ -442,6 +422,9 @@ const AttendanceReports = () => {
             }
             if (compOffAwarded) {
               tooltip += ` | 🎉 Comp-Off Earned: ${compOffDays} day`;
+            }
+            if (overtimeHours > 0) {
+              tooltip += ` | Overtime: ${overtimeHours}h (₹${overtimeAmount})`;
             }
           }
         }
@@ -469,7 +452,10 @@ const AttendanceReports = () => {
           is_holiday: !!dayHoliday,
           holiday_name: dayHoliday?.name,
           comp_off_awarded: compOffAwarded,
-          comp_off_days: compOffDays
+          comp_off_days: compOffDays,
+          overtime_hours: overtimeHours,
+          overtime_minutes: overtimeMinutes,
+          overtime_amount: overtimeAmount
         });
       }
     });
@@ -477,7 +463,6 @@ const AttendanceReports = () => {
     return processedData;
   };
 
-  // ============== CALCULATE MONTHLY STATISTICS ==============
   const calculateMonthlyStatistics = (data) => {
     const perEmployee = {};
 
@@ -497,6 +482,9 @@ const AttendanceReports = () => {
           total_late_minutes: 0,
           comp_off_count: 0,
           total_comp_off_days: 0,
+          overtime_hours: 0,
+          overtime_minutes: 0,
+          overtime_amount: 0,
           leave_types: []
         };
       }
@@ -514,23 +502,26 @@ const AttendanceReports = () => {
       else if (record.status === 'holiday') perEmployee[record.employee_id].holiday++;
       else if (record.status === 'weekend') perEmployee[record.employee_id].weekend++;
 
-      // Count late logins
       if (record.is_late) {
         perEmployee[record.employee_id].late_count++;
         perEmployee[record.employee_id].total_late_minutes += record.late_minutes || 0;
       }
 
-      // Count comp-off earnings
       if (record.comp_off_awarded) {
         perEmployee[record.employee_id].comp_off_count++;
         perEmployee[record.employee_id].total_comp_off_days += record.comp_off_days || 0;
+      }
+
+      if (record.overtime_hours > 0) {
+        perEmployee[record.employee_id].overtime_hours += record.overtime_hours;
+        perEmployee[record.employee_id].overtime_minutes += record.overtime_minutes || 0;
+        perEmployee[record.employee_id].overtime_amount += record.overtime_amount || 0;
       }
 
       const hours = parseFloat(record.total_hours || 0);
       perEmployee[record.employee_id].total_hours += hours;
     });
 
-    // Calculate averages and format displays
     Object.keys(perEmployee).forEach(empId => {
       const emp = perEmployee[empId];
       if (emp.late_count > 0) {
@@ -546,7 +537,6 @@ const AttendanceReports = () => {
     setMonthlyStats(perEmployee);
   };
 
-  // ============== GET LEAVE BALANCE FOR EMPLOYEE ==============
   const getLeaveBalance = async (employeeId) => {
     try {
       const response = await axios.get(API_ENDPOINTS.LEAVE_BALANCE(employeeId));
@@ -557,7 +547,6 @@ const AttendanceReports = () => {
     }
   };
 
-  // ============== NAVIGATION HANDLERS ==============
   const handlePreviousMonth = () => {
     if (selectedMonth === 1) {
       setSelectedMonth(12);
@@ -582,34 +571,24 @@ const AttendanceReports = () => {
     setSelectedYear(today.getFullYear());
   };
 
-  // ============== GET GENDER DISPLAY ==============
   const getGender = (employee) => {
     return employee.gender || 'Not Specified';
   };
 
-  // ============== CALCULATE SALARY COMPONENTS ==============
-  const calculateSalary = (employee, presentDays, halfDays, lateCount) => {
+  const calculateSalary = (employee, presentDays, halfDays, lateCount, overtimeAmount) => {
     const grossSalary = parseFloat(employee.gross_salary) || 0;
     const inHandSalary = parseFloat(employee.in_hand_salary) || 0;
 
-    // Calculate per day salary
-    const perDaySalary = grossSalary / 30; // Assuming 30 days month
-
-    // Calculate actual salary based on attendance
+    const perDaySalary = grossSalary / 30;
     const totalWorkingDays = presentDays + (halfDays * 0.5);
     const actualSalary = totalWorkingDays * perDaySalary;
 
-    // Professional Tax (fixed ₹200)
     const profTax = PROFESSIONAL_TAX;
-
-    // Other deductions (can be customized based on late count, etc.)
     const otherDeductions = OTHER_DEDUCTIONS;
-
-    // Total deductions
     const totalDeductions = profTax + otherDeductions;
 
-    // Net salary to be paid
-    const netSalaryToPay = actualSalary - totalDeductions;
+    // Add overtime amount to net salary
+    const netSalaryToPay = actualSalary - totalDeductions + (overtimeAmount || 0);
 
     return {
       grossSalary: grossSalary.toFixed(2),
@@ -618,15 +597,14 @@ const AttendanceReports = () => {
       profTax: profTax,
       otherDeductions: otherDeductions,
       totalDeductions: totalDeductions,
+      overtimeAmount: overtimeAmount || 0,
       netSalaryToPay: netSalaryToPay.toFixed(2)
     };
   };
 
-  // ============== EXPORT TO EXCEL - COMPLETE FORMAT ==============
   const handleExportExcel = async () => {
     try {
       if (activeView === 'daily') {
-        // Daily Export
         const exportDate = new Date(selectedDate);
         const formattedDate = exportDate.toLocaleDateString();
 
@@ -641,7 +619,8 @@ const AttendanceReports = () => {
           'Clock Out': record.clock_out ? formatShortTime(record.clock_out) : '-',
           'Total Hours': record.total_hours || '0.0',
           'Late Duration': record.late_display || '0',
-          'Late (minutes)': record.late_minutes ? (record.late_minutes * 60).toFixed(0) : '0',
+          'Overtime Hours': record.overtime_hours || '0',
+          'Overtime Amount': record.overtime_amount || '0',
           'Is Holiday': record.is_holiday ? 'Yes' : 'No',
           'Holiday Name': record.holiday_name || '-',
           'Comp-Off Earned': record.comp_off_awarded ? 'Yes' : 'No',
@@ -655,24 +634,11 @@ const AttendanceReports = () => {
         }));
 
         const ws = XLSX.utils.json_to_sheet(exportData);
-
         const colWidths = [
-          { wch: 8 },   // Sr No
-          { wch: 12 },  // Date
-          { wch: 15 },  // Employee ID
-          { wch: 25 },  // Employee Name
-          { wch: 15 },  // Department
-          { wch: 15 },  // Shift
-          { wch: 10 },  // Clock In
-          { wch: 10 },  // Clock Out
-          { wch: 10 },  // Total Hours
-          { wch: 12 },  // Late Duration
-          { wch: 12 },  // Late (minutes)
-          { wch: 10 },  // Is Holiday
-          { wch: 20 },  // Holiday Name
-          { wch: 12 },  // Comp-Off Earned
-          { wch: 10 },  // Comp-Off Days
-          { wch: 12 }   // Status
+          { wch: 8 }, { wch: 12 }, { wch: 15 }, { wch: 25 }, { wch: 15 },
+          { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 },
+          { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 12 },
+          { wch: 10 }, { wch: 12 }
         ];
         ws['!cols'] = colWidths;
 
@@ -685,14 +651,12 @@ const AttendanceReports = () => {
         setTimeout(() => setMessage(''), 3000);
 
       } else {
-        // Monthly Export - COMPLETE FORMAT
         const currentMonthData = months.find(m => m.value === selectedMonth);
         const monthShort = currentMonthData?.short || 'Month';
         const monthName = currentMonthData?.label || 'Month';
 
         const exportData = [];
 
-        // Sort employees
         const sortedEmployees = [...allEmployees].sort((a, b) => {
           if (department !== 'all') {
             if (a.department === department && b.department !== department) return -1;
@@ -702,7 +666,6 @@ const AttendanceReports = () => {
         });
 
         for (const employee of sortedEmployees) {
-          // Filter department if needed
           if (department !== 'all' && employee.department !== department) continue;
 
           const empRecords = monthlyAttendance.filter(r => r.employee_id === employee.employee_id);
@@ -715,23 +678,20 @@ const AttendanceReports = () => {
             late_count: 0,
             total_late_minutes: 0,
             comp_off_count: 0,
-            total_comp_off_days: 0
+            total_comp_off_days: 0,
+            overtime_hours: 0,
+            overtime_amount: 0
           };
 
-          // Get leave balance
           const leaveBalance = await getLeaveBalance(employee.employee_id);
+          const salary = calculateSalary(employee, empStats.present, empStats.half_day, empStats.late_count, empStats.overtime_amount);
 
-          // Calculate salary components
-          const salary = calculateSalary(employee, empStats.present, empStats.half_day, empStats.late_count);
-
-          // Create row for this employee
           const row = {
             'Employee Name': `${employee.first_name || ''} ${employee.last_name || ''}`.trim(),
             'Date of Joining': employee.joining_date ? new Date(employee.joining_date).toLocaleDateString() : 'N/A',
             'Leave Balance': leaveBalance,
           };
 
-          // Add each day's status with month and date
           for (let day = 1; day <= daysInMonth; day++) {
             const dayRecord = empRecords.find(r => r.day === day);
             let status = '';
@@ -751,7 +711,6 @@ const AttendanceReports = () => {
                 status = 'A';
               }
             } else {
-              // Check if this day is weekend
               const currentDate = new Date(selectedYear, selectedMonth - 1, day);
               const dayOfWeek = currentDate.getDay();
               if (dayOfWeek === 0 || dayOfWeek === 6) {
@@ -761,11 +720,9 @@ const AttendanceReports = () => {
               }
             }
 
-            // Format: "Mar 1", "Mar 2", etc.
             row[`${monthShort} ${day}`] = status;
           }
 
-          // Add all required columns
           row['Days of the Month'] = daysInMonth;
           row['Actual Present Days'] = (empStats.present + (empStats.half_day * 0.5)).toFixed(1);
           row['Present Days'] = empStats.present || 0;
@@ -777,12 +734,15 @@ const AttendanceReports = () => {
           row['Total Late Time'] = formatLateDisplay(empStats.total_late_minutes) || '0';
           row['Comp-Off Earned Count'] = empStats.comp_off_count || 0;
           row['Total Comp-Off Days'] = empStats.total_comp_off_days.toFixed(1) || '0';
+          row['Overtime Hours'] = empStats.overtime_hours || 0;
+          row['Overtime Amount'] = empStats.overtime_amount || 0;
           row['Amount'] = salary.actualSalary;
           row['Gross Salary'] = salary.grossSalary;
           row['Net Salary'] = salary.inHandSalary;
           row['Actual Salary'] = salary.actualSalary;
           row['Professional Tax'] = salary.profTax;
           row['Deduction'] = salary.totalDeductions;
+          row['Overtime Added'] = salary.overtimeAmount;
           row['Net Salary To be Pay'] = salary.netSalaryToPay;
           row['Gender'] = getGender(employee);
           row['Account Number'] = employee.account_number || 'N/A';
@@ -792,49 +752,25 @@ const AttendanceReports = () => {
           exportData.push(row);
         }
 
-        // Create worksheet
         const ws = XLSX.utils.json_to_sheet(exportData);
-
-        // Calculate column widths
         const colWidths = [
-          { wch: 25 }, // Employee Name
-          { wch: 15 }, // Date of Joining
-          { wch: 12 }, // Leave Balance
+          { wch: 25 }, { wch: 15 }, { wch: 12 },
         ];
 
-        // Add widths for each day column
         for (let i = 1; i <= daysInMonth; i++) {
-          colWidths.push({ wch: 8 }); // "Mar 1" style
+          colWidths.push({ wch: 8 });
         }
 
-        // Add widths for summary columns
         colWidths.push(
-          { wch: 15 }, // Days of the Month
-          { wch: 15 }, // Actual Present Days
-          { wch: 12 }, // Present Days
-          { wch: 10 }, // Half Days
-          { wch: 10 }, // PL Leave
-          { wch: 12 }, // Weekend Off
-          { wch: 10 }, // Absent
-          { wch: 12 }, // Late Coming
-          { wch: 15 }, // Total Late Time
-          { wch: 15 }, // Comp-Off Earned Count
-          { wch: 15 }, // Total Comp-Off Days
-          { wch: 12 }, // Amount
-          { wch: 12 }, // Gross Salary
-          { wch: 12 }, // Net Salary
-          { wch: 12 }, // Actual Salary
-          { wch: 15 }, // Professional Tax
-          { wch: 12 }, // Deduction
-          { wch: 18 }, // Net Salary To be Pay
-          { wch: 20 }, // Account Number
-          { wch: 15 }, // IFSC Code
-          { wch: 20 }  // Bank Name
+          { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 10 }, { wch: 10 },
+          { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 15 }, { wch: 15 },
+          { wch: 15 }, { wch: 12 }, { wch: 15 }, { wch: 12 }, { wch: 12 },
+          { wch: 12 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 15 },
+          { wch: 18 }, { wch: 20 }, { wch: 15 }, { wch: 20 }
         );
 
         ws['!cols'] = colWidths;
 
-        // Create workbook and save
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Monthly Attendance');
         XLSX.writeFile(wb, `Attendance_Report_${monthName}_${selectedYear}.xlsx`);
@@ -851,6 +787,14 @@ const AttendanceReports = () => {
   };
 
   const getStatusBadge = (record) => {
+    if (record.overtime_hours > 0) {
+      return (
+        <Badge bg="success" className="px-2 py-1" style={{ backgroundColor: '#28a745' }}>
+          <FaClock className="me-1" size={10} /> OT +{record.overtime_hours}h
+        </Badge>
+      );
+    }
+    
     if (record.comp_off_awarded) {
       return (
         <Badge bg="purple" className="px-2 py-1" style={{ backgroundColor: '#9b59b6' }}>
@@ -891,10 +835,8 @@ const AttendanceReports = () => {
       day === todayDay;
   };
 
-  // ============== RENDER ==============
   return (
     <div className="p-3">
-      {/* Header */}
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h5 className="mb-0">
           <FaCalendarAlt className="me-2 text-primary" />
@@ -903,14 +845,12 @@ const AttendanceReports = () => {
         <small className="text-muted">{activeView === 'daily' ? 'Daily View' : 'Monthly View'}</small>
       </div>
 
-      {/* Message Alert */}
       {message && (
         <Alert variant={messageType} onClose={() => setMessage('')} dismissible className="mb-3 py-2">
           <small>{message}</small>
         </Alert>
       )}
 
-      {/* View Tabs */}
       <div className="mb-3 border-bottom">
         <Button
           variant={activeView === 'daily' ? 'primary' : 'light'}
@@ -929,7 +869,6 @@ const AttendanceReports = () => {
         </Button>
       </div>
 
-      {/* Controls */}
       {activeView === 'daily' ? (
         <div className="d-flex mb-3">
           <Form.Control
@@ -1006,7 +945,6 @@ const AttendanceReports = () => {
         </div>
       )}
 
-      {/* Legend - Updated with Comp-Off */}
       <div className="d-flex flex-wrap gap-3 mb-3 small justify-content-center">
         <span><Badge bg="success" pill>P</Badge> Present</span>
         <span><Badge bg="warning" pill>HD</Badge> Half Day</span>
@@ -1016,12 +954,12 @@ const AttendanceReports = () => {
         <span><Badge bg="secondary" pill><FaMoon className="me-1" size={10} /> W-OFF</Badge> Weekend Off</span>
         <span><Badge bg="secondary" pill>A</Badge> Absent</span>
         <span><Badge bg="warning" pill style={{ backgroundColor: '#fd7e14' }}>⚠️</Badge> Late Login</span>
+        <span><Badge bg="success" pill style={{ backgroundColor: '#28a745' }}><FaClock className="me-1" size={10} /> OT</Badge> Overtime</span>
         <span><Badge bg="purple" pill style={{ backgroundColor: '#9b59b6' }}><FaTrophy className="me-1" size={10} /> Comp-Off</Badge> Comp-Off Earned</span>
         <span className="text-muted">|</span>
         <span><FaClock className="me-1 text-muted" size={12} /> Hover for details</span>
       </div>
 
-      {/* Main Content */}
       {loading ? (
         <div className="text-center py-5">
           <Spinner animation="border" variant="primary" size="sm" />
@@ -1039,7 +977,6 @@ const AttendanceReports = () => {
           </Card.Header>
           <Card.Body className="p-0">
             {activeView === 'daily' ? (
-              /* Daily View Table - Added Comp-Off column */
               <div className="table-responsive" style={{ maxHeight: '400px', overflow: 'auto' }}>
                 <Table size="sm" striped className="mb-0">
                   <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
@@ -1052,6 +989,8 @@ const AttendanceReports = () => {
                       <th className="text-dark fw-normal small">Late</th>
                       <th className="text-dark fw-normal small">Clock Out</th>
                       <th className="text-dark fw-normal small">Hours</th>
+                      <th className="text-dark fw-normal small">Overtime</th>
+                      <th className="text-dark fw-normal small">OT Amount</th>
                       <th className="text-dark fw-normal small">Comp-Off</th>
                       <th className="text-dark fw-normal small">Status</th>
                     </tr>
@@ -1100,6 +1039,20 @@ const AttendanceReports = () => {
                             </span>
                           </td>
                           <td className="small">
+                            {record.overtime_hours > 0 ? (
+                              <Badge bg="success" pill>
+                                +{record.overtime_hours}h
+                              </Badge>
+                            ) : '-'}
+                          </td>
+                          <td className="small">
+                            {record.overtime_amount > 0 ? (
+                              <Badge bg="info" pill>
+                                ₹{record.overtime_amount}
+                              </Badge>
+                            ) : '-'}
+                          </td>
+                          <td className="small">
                             {record.comp_off_awarded ? (
                               <Badge bg="purple" pill style={{ backgroundColor: '#9b59b6' }}>
                                 <FaTrophy className="me-1" size={8} />
@@ -1111,13 +1064,12 @@ const AttendanceReports = () => {
                         </tr>
                       ))
                     ) : (
-                      <tr><td colSpan="10" className="text-center py-4">No attendance records for this date</td></tr>
+                      <tr><td colSpan="12" className="text-center py-4">No attendance records for this date</td></tr>
                     )}
                   </tbody>
                 </Table>
               </div>
             ) : (
-              /* Monthly Calendar Table with Fixed First Two Columns - Added Comp-Off columns */
               <div className="monthly-table-container" style={{ position: 'relative', height: '400px', overflow: 'auto' }}>
                 <style>
                   {`
@@ -1181,17 +1133,14 @@ const AttendanceReports = () => {
                 <table className="monthly-table table-sm mb-0">
                   <thead>
                     <tr>
-                      {/* Fixed First Column Header */}
                       <th className="fixed-col-header col-1 text-center fw-normal small bg-light"
                         style={{ left: 0, top: 0 }}>
                         #
                       </th>
-                      {/* Fixed Second Column Header */}
                       <th className="fixed-col-header col-2 text-center fw-normal small bg-light"
                         style={{ left: '50px', top: 0 }}>
                         Employee
                       </th>
-                      {/* Scrollable Date Columns */}
                       {[...Array(daysInMonth)].map((_, i) => {
                         const day = i + 1;
                         const isCurrent = isCurrentDate(day);
@@ -1208,7 +1157,6 @@ const AttendanceReports = () => {
                           </th>
                         );
                       })}
-                      {/* Scrollable Summary Columns */}
                       <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>P</th>
                       <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>H</th>
                       <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>L</th>
@@ -1216,6 +1164,8 @@ const AttendanceReports = () => {
                       <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>W</th>
                       <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>A</th>
                       <th className="text-center fw-normal small bg-light" style={{ minWidth: '60px', top: 0, zIndex: 10 }}>Late</th>
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '60px', top: 0, zIndex: 10 }}>OT</th>
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '60px', top: 0, zIndex: 10 }}>OT Amt</th>
                       <th className="text-center fw-normal small bg-light" style={{ minWidth: '60px', top: 0, zIndex: 10 }}>Comp-Off</th>
                       <th className="text-center fw-normal small bg-light" style={{ minWidth: '50px', top: 0, zIndex: 10 }}>Hours</th>
                     </tr>
@@ -1228,12 +1178,10 @@ const AttendanceReports = () => {
 
                         return (
                           <tr key={empId}>
-                            {/* Fixed First Column */}
                             <td className="fixed-col col-1 text-center small"
                               style={{ left: 0, backgroundColor: 'white' }}>
                               {idx + 1}
                             </td>
-                            {/* Fixed Second Column */}
                             <td className="fixed-col col-2 small"
                               style={{ left: '50px', backgroundColor: 'white' }}>
                               <div className="text-truncate" style={{ maxWidth: '130px' }} title={empStats.name}>
@@ -1243,7 +1191,6 @@ const AttendanceReports = () => {
                                 {empId}
                               </small>
                             </td>
-                            {/* Scrollable Date Columns */}
                             {[...Array(daysInMonth)].map((_, day) => {
                               const dayNum = day + 1;
                               const dayRecord = empRecords.find(r => r.day === dayNum);
@@ -1254,7 +1201,11 @@ const AttendanceReports = () => {
                               let iconStyle = {};
 
                               if (dayRecord) {
-                                if (dayRecord.comp_off_awarded) {
+                                if (dayRecord.overtime_hours > 0) {
+                                  statusIcon = '⏰';
+                                  iconClass = 'text-success fw-bold';
+                                  iconStyle = { fontSize: '14px' };
+                                } else if (dayRecord.comp_off_awarded) {
                                   statusIcon = '🎉';
                                   iconClass = 'text-purple';
                                   iconStyle = { fontSize: '14px', color: '#9b59b6' };
@@ -1300,7 +1251,6 @@ const AttendanceReports = () => {
                                 </td>
                               );
                             })}
-                            {/* Scrollable Summary Columns */}
                             <td className="text-center"><Badge bg="success" pill>{empStats.present}</Badge></td>
                             <td className="text-center"><Badge bg="warning" pill>{empStats.half_day}</Badge></td>
                             <td className="text-center"><Badge bg="purple" pill style={{ backgroundColor: '#6f42c1' }}>{empStats.on_leave || 0}</Badge></td>
@@ -1314,6 +1264,24 @@ const AttendanceReports = () => {
                                 </Badge>
                               ) : (
                                 <Badge bg="secondary" pill className="text-nowrap">0</Badge>
+                              )}
+                            </td>
+                            <td className="text-center">
+                              {empStats.overtime_hours > 0 ? (
+                                <Badge bg="success" pill className="text-nowrap">
+                                  ⏰ {empStats.overtime_hours}h
+                                </Badge>
+                              ) : (
+                                <Badge bg="secondary" pill className="text-nowrap">0</Badge>
+                              )}
+                            </td>
+                            <td className="text-center">
+                              {empStats.overtime_amount > 0 ? (
+                                <Badge bg="info" pill className="text-nowrap">
+                                  ₹{empStats.overtime_amount}
+                                </Badge>
+                              ) : (
+                                <Badge bg="secondary" pill className="text-nowrap">₹0</Badge>
                               )}
                             </td>
                             <td className="text-center">
@@ -1331,7 +1299,7 @@ const AttendanceReports = () => {
                         );
                       })
                     ) : (
-                      <tr><td colSpan={daysInMonth + 14} className="text-center py-4">No attendance data</td></tr>
+                      <tr><td colSpan={daysInMonth + 15} className="text-center py-4">No attendance data</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -1341,10 +1309,9 @@ const AttendanceReports = () => {
         </Card>
       )}
 
-      {/* Footer */}
       <div className="text-center mt-3 text-muted small">
         <p className="mb-0">
-          <FaClock className="me-1" /> Hover for details | <FaExclamationTriangle className="me-1 text-warning" size={10} /> * late login | <FaTrophy className="me-1 text-purple" size={10} /> 🎉 Comp-Off earned
+          <FaClock className="me-1" /> Hover for details | <FaExclamationTriangle className="me-1 text-warning" size={10} /> * late login | <FaClock className="me-1 text-success" size={10} /> ⏰ Overtime | <FaTrophy className="me-1 text-purple" size={10} /> 🎉 Comp-Off earned
         </p>
       </div>
     </div>

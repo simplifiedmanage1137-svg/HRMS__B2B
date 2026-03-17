@@ -21,7 +21,7 @@ export const NotificationProvider = ({ children }) => {
   // Fetch today's events (birthdays and anniversaries)
   const fetchTodayEvents = async () => {
     try {
-      const response = await axios.get('https://employee-management-system-git-main-b2bindemand-hubs-projects.vercel.app/api/employees/today-events');
+      const response = await axios.get('http://localhost:5000/api/employees/today-events');
       setTodayEvents(response.data);
       
       // Create notifications for events

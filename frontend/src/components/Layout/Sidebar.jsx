@@ -20,7 +20,8 @@ import {
   FaChartBar,
   FaEdit,
   FaCheckCircle,
-  FaHourglassHalf
+  FaHourglassHalf,
+  FaTrophy
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -34,6 +35,10 @@ const Sidebar = () => {
   const [isMobile, setIsMobile] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [overtimeStats, setOvertimeStats] = useState({
+    hasOvertime: false,
+    totalHours: 0
+  });
 
   // Sidebar widths
   const SIDEBAR_WIDTH_OPEN = '200px';
@@ -44,6 +49,8 @@ const Sidebar = () => {
       fetchEmployeeName();
       if (user?.role === 'admin') {
         fetchPendingCount();
+      } else if (user?.role === 'employee') {
+        fetchOvertimeStats();
       }
     }
   }, [user]);
@@ -114,6 +121,28 @@ const Sidebar = () => {
     } catch (error) {
       console.error('Error fetching employee name:', error);
       setEmployeeName(user?.role === 'admin' ? 'Administrator' : 'Employee');
+    }
+  };
+
+  const fetchOvertimeStats = async () => {
+    try {
+      const today = new Date();
+      const currentMonth = today.getMonth() + 1;
+      const currentYear = today.getFullYear();
+      
+      const response = await axios.get(
+        `${API_ENDPOINTS.ATTENDANCE}/overtime/${user?.employeeId}/${currentMonth}/${currentYear}`
+      );
+      
+      if (response.data.success) {
+        const totalHours = response.data.summary?.total_hours || 0;
+        setOvertimeStats({
+          hasOvertime: totalHours > 0,
+          totalHours: totalHours
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching overtime stats:', error);
     }
   };
 
@@ -369,11 +398,13 @@ const Sidebar = () => {
                 />
 
                 <NavItem
-                  to="/admin/attendance/reports"
+                  to="/admin/attendance-reports"
                   icon={<FaClock size={18} />}
                   label="Attendance"
                   onClick={closeSidebar}
                 />
+
+
 
                 {/* SEND UPDATE REQUEST LINK */}
                 <NavItem
@@ -413,12 +444,14 @@ const Sidebar = () => {
                   onClick={closeSidebar}
                 />
 
+
                 <NavItem
                   to="/apply-leave"
                   icon={<FaCalendarAlt size={18} />}
                   label="Apply Leave"
                   onClick={closeSidebar}
                 />
+
 
                 <NavItem
                   to="/salary-slip"
@@ -432,14 +465,6 @@ const Sidebar = () => {
                   to="/employee/update-requests"
                   icon={<FaEdit size={18} />}
                   label="Update Requests"
-                  onClick={closeSidebar}
-                />
-
-                {/* HOLIDAY CALENDAR LINK */}
-                <NavItem
-                  to="/holiday-calendar"
-                  icon={<FaCalendarAlt size={18} />}
-                  label="Holidays"
                   onClick={closeSidebar}
                 />
               </>
