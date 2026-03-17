@@ -18,8 +18,9 @@ dotenv.config();
 // }));
 app.use(cors({
   origin: [
-    'http://localhost:5173',
-    'https://employee-management-system-git-main-b2bindemand-hubs-projects.vercel.app'
+    'http://localhost:5173',  // For local development
+    'https://employee-management-system-one-bay.vercel.app',  // ✅ Your live frontend URL
+    'https://employee-management-system-git-main-b2bindemand-hubs-projects.vercel.app' // If this is also a frontend
   ],
   credentials: true
 }));
