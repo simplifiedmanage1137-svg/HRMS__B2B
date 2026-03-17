@@ -1,7 +1,7 @@
 // src/config/api.js
 
 // For Vite (uses import.meta.env)
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://employee-management-system-git-main-b2bindemand-hubs-projects.vercel.app';
 
 export const API_ENDPOINTS = {
     // Auth endpoints

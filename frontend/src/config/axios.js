@@ -3,7 +3,7 @@ import axios from 'axios';
 import API_ENDPOINTS from './api';
 
 // For Vite, use import.meta.env
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://employee-management-system-git-main-b2bindemand-hubs-projects.vercel.app';
 
 const axiosInstance = axios.create({
     baseURL: API_BASE_URL,

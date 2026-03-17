@@ -35,7 +35,7 @@ export const AuthProvider = ({ children }) => {
         try {
             console.log('📤 Attempting login with:', { email });
             
-            const response = await axios.post('http://localhost:5000/api/auth/login', {
+            const response = await axios.post('https://employee-management-system-git-main-b2bindemand-hubs-projects.vercel.app/api/auth/login', {
                 email,
                 password
             }, {
