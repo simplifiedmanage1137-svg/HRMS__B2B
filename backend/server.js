@@ -96,7 +96,8 @@ const corsOptions = {
     },
     credentials: true,
     optionsSuccessStatus: 200,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    methods: ['GET', 
+        'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: [
         'Content-Type',
         'Authorization',
@@ -110,20 +111,32 @@ const corsOptions = {
     exposedHeaders: ['Content-Range', 'X-Content-Range']
 };
 
-// Apply CORS middleware
+// Custom CORS middleware - explicitly set headers
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    const allowedOrigins = getCorsOrigins();
+    
+    console.log(`📍 Request: ${req.method} ${req.url} from origin: ${origin || 'no-origin'}`);
+    
+    // Allow if no origin (Postman, curl, etc) OR in development OR origin is whitelisted
+    if (!origin || !isProduction || allowedOrigins.includes(origin)) {
+        res.header('Access-Control-Allow-Origin', origin || '*');
+        res.header('Access-Control-Allow-Credentials', 'true');
+        res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+        res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin');
+        res.header('Access-Control-Expose-Headers', 'Content-Range,X-Content-Range');
+    }
+    
+    // Handle preflight OPTIONS requests
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    
+    next();
+});
+
+// Also apply cors middleware for redundancy
 app.use(cors(corsOptions));
-
-// Log CORS requests in development
-if (!isProduction) {
-    app.use((req, res, next) => {
-        const origin = req.headers.origin;
-        console.log(`🔐 CORS Request from: ${origin || 'no-origin'}`);
-        next();
-    });
-}
-
-// Handle preflight requests
-app.options('*', cors(corsOptions));
 
 // ============== OTHER MIDDLEWARE ==============
 app.use(express.json({ limit: '50mb' }));
