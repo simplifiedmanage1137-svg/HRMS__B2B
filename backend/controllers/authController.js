@@ -349,19 +349,8 @@ exports.changePassword = async (req, res) => {
 
         // Verify current password (if using hashed passwords)
         // Note: Your current setup uses plain text for testing
-        // If you switch to hashed passwords, uncomment this:
-        /*
-        const isValid = await bcrypt.compare(currentPassword, user.password);
-        if (!isValid) {
-            return res.status(401).json({
-                success: false,
-                message: 'Current password is incorrect'
-            });
-        }
-        */
-
-        // For now, simple check
-        if (currentPassword !== 'admin123' && currentPassword !== 'Welcome@123') {
+        // Only accept the current password: Hr3007
+        if (currentPassword !== 'Hr3007') {
             return res.status(401).json({
                 success: false,
                 message: 'Current password is incorrect'
