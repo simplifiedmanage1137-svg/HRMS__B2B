@@ -41,7 +41,7 @@ console.log('='.repeat(70));
 // ============== SIMPLIFIED CORS CONFIGURATION ==============
 // Allowed origins
 const allowedOrigins = [
-    'https://employee-management-system-theta-six.vercel.app', // Naya frontend URL
+    'https://employee-management-system-taupe-xi.vercel.app/', // Naya frontend URL
     'http://localhost:5173',  // Local development
     'http://localhost:3000',
     'https://employee-management-system-brvo.onrender.com' // Backend URL (optional)
