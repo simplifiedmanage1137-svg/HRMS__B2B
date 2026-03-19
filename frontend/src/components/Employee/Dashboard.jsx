@@ -618,7 +618,7 @@ const EmployeeDashboard = () => {
     if (seconds > 0 || (hours === 0 && minutes === 0)) parts.push(`${seconds}s`);
     
     return parts.join(' ');
-};
+  };
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -668,7 +668,7 @@ const EmployeeDashboard = () => {
 
   if (loading) {
     return (
-      <div className="d-flex justify-content-center align-items-center vh-100">
+      <div className="d-flex justify-content-center align-items-center min-vh-100">
         <div className="text-center">
           <Spinner animation="border" variant="primary" />
           <p className="mt-3 text-muted">Loading dashboard...</p>
@@ -678,24 +678,25 @@ const EmployeeDashboard = () => {
   }
 
   return (
-    <div className="p-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
-      {/* Welcome Header with Refresh Button */}
-      <div className="d-flex justify-content-between align-items-center mb-4">
+    <div className="p-2 p-md-3 p-lg-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
+      {/* Welcome Header with Refresh Button - Responsive */}
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
         <div>
-          <h4 className="mb-1">
+          <h5 className="mb-1 d-flex align-items-center">
             <FaUserCircle className="me-2 text-primary" />
             Welcome back, {employee?.first_name || 'Employee'}!
-          </h4>
+          </h5>
           <p className="text-muted mb-0 small">
             {employee?.designation || 'Employee'} • {employee?.department || 'Department'}
           </p>
         </div>
-        <div className="d-flex gap-2">
+        <div className="d-flex flex-wrap gap-2 ms-0 ms-md-auto">
           <Button 
             variant="outline-primary" 
             size="sm" 
             onClick={refreshData}
             disabled={refreshing}
+            className="d-inline-flex align-items-center"
           >
             <FaSyncAlt className={`me-2 ${refreshing ? 'fa-spin' : ''}`} size={12} />
             Refresh
@@ -711,28 +712,28 @@ const EmployeeDashboard = () => {
 
       {/* Error Alert */}
       {error && (
-        <Alert variant="danger" onClose={() => setError('')} dismissible className="mb-3">
-          {error}
+        <Alert variant="danger" onClose={() => setError('')} dismissible className="mb-3 py-2">
+          <small>{error}</small>
         </Alert>
       )}
 
-      {/* Today's Events Widget */}
+      {/* Today's Events Widget - Responsive */}
       {todayEvents?.total > 0 && (
         <Card className="mb-4 border-0 shadow-sm" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-          <Card.Body className="p-3 text-white">
+          <Card.Body className="p-2 p-md-3 text-white">
             <div className="d-flex align-items-center mb-2">
-              <FaBirthdayCake className="me-2" size={20} />
-              <FaTrophy className="me-2" size={20} />
-              <h6 className="mb-0">Today's Celebrations 🎉</h6>
+              <FaBirthdayCake className="me-2" size={16} />
+              <FaTrophy className="me-2" size={16} />
+              <h6 className="mb-0 small">Today's Celebrations 🎉</h6>
             </div>
             <div className="d-flex flex-wrap gap-2">
               {todayEvents.birthdays?.map(emp => (
-                <Badge key={`birthday-${emp.id}`} bg="light" text="dark" className="p-2">
+                <Badge key={`birthday-${emp.id}`} bg="light" text="dark" className="p-2 small">
                   🎂 {emp.first_name} {emp.last_name} ({emp.department})
                 </Badge>
               ))}
               {todayEvents.anniversaries?.map(emp => (
-                <Badge key={`anniversary-${emp.id}`} bg="light" text="dark" className="p-2">
+                <Badge key={`anniversary-${emp.id}`} bg="light" text="dark" className="p-2 small">
                   🏆 {emp.first_name} {emp.last_name} - {emp.years} Years
                 </Badge>
               ))}
@@ -741,14 +742,14 @@ const EmployeeDashboard = () => {
         </Card>
       )}
 
-      {/* Today's Status Card */}
+      {/* Today's Status Card - Responsive */}
       {isTodayWeeklyOff() ? (
         <Card className="mb-4 border-0 shadow-sm bg-secondary bg-opacity-10">
-          <Card.Body>
+          <Card.Body className="p-2 p-md-3">
             <div className="d-flex align-items-center">
-              <FaSun size={30} className="me-3 text-secondary" />
+              <FaSun size={24} className="me-3 text-secondary flex-shrink-0" />
               <div>
-                <h6 className="mb-1">Today is Weekly Off</h6>
+                <h6 className="mb-1 small">Today is Weekly Off</h6>
                 <p className="mb-0 text-muted small">Enjoy your day off! No attendance required.</p>
               </div>
             </div>
@@ -756,13 +757,13 @@ const EmployeeDashboard = () => {
         </Card>
       ) : todayAttendance && (
         <Card className="mb-4 border-0 shadow-sm bg-white text-dark">
-          <Card.Body>
-            <div className="d-flex align-items-center justify-content-between">
+          <Card.Body className="p-2 p-md-3">
+            <div className="d-flex flex-column flex-sm-row align-items-start align-items-sm-center justify-content-between gap-2">
               <div className="d-flex align-items-center">
-                <FaClock size={30} className="me-3 opacity-75" />
+                <FaClock size={24} className="me-3 opacity-75 flex-shrink-0" />
                 <div>
-                  <h6 className="mb-1">Today's Attendance</h6>
-                  <p className="mb-0">
+                  <h6 className="mb-1 small">Today's Attendance</h6>
+                  <p className="mb-0 small">
                     {todayAttendance.clock_in ? (
                       <>
                         In: <strong>{formatTime(todayAttendance.clock_in)}</strong>
@@ -785,9 +786,10 @@ const EmployeeDashboard = () => {
                 </div>
               </div>
               <Button 
-                variant="light" 
+                variant="dark" 
                 size="sm"
                 onClick={() => navigate('/attendance')}
+                className="ms-0 ms-sm-auto w-20 w-sm-auto"
               >
                 View Details <FaArrowRight className="ms-2" size={10} />
               </Button>
@@ -796,18 +798,18 @@ const EmployeeDashboard = () => {
         </Card>
       )}
 
-      {/* Statistics Cards */}
-      <Row className="mb-4 g-3">
-        <Col md={3}>
-          <Card className="border-0 shadow-sm h-70">
-            <Card.Body>
+      {/* Statistics Cards - Responsive grid */}
+      <Row className="mb-4 g-2 g-md-3">
+        <Col xs={12} sm={6} md={3}>
+          <Card className="border-0 shadow-sm h-100">
+            <Card.Body className="p-2 p-md-3">
               <div className="d-flex justify-content-between align-items-start">
-                <div>
-                  <p className="text-muted small mb-1">Leave Balance</p>
+                <div className="overflow-hidden">
+                  <p className="text-muted small mb-1 text-truncate">Leave Balance</p>
                   <h4 className="mb-0 fw-bold text-primary">{leaveBalance.available}</h4>
-                  <small className="text-muted">Available days</small>
+                  <small className="text-muted text-truncate d-block">Available days</small>
                 </div>
-                <div className="bg-primary bg-opacity-10 p-2 rounded-circle">
+                <div className="bg-primary bg-opacity-10 p-2 rounded-circle flex-shrink-0">
                   <FaUmbrellaBeach className="text-primary" size={20} />
                 </div>
               </div>
@@ -815,16 +817,16 @@ const EmployeeDashboard = () => {
           </Card>
         </Col>
 
-        <Col md={3}>
-          <Card className="border-0 shadow-sm h-70">
-            <Card.Body>
+        <Col xs={12} sm={6} md={3}>
+          <Card className="border-0 shadow-sm h-100">
+            <Card.Body className="p-2 p-md-3">
               <div className="d-flex justify-content-between align-items-start">
-                <div>
-                  <p className="text-muted small mb-1">Present Days</p>
+                <div className="overflow-hidden">
+                  <p className="text-muted small mb-1 text-truncate">Present Days</p>
                   <h4 className="mb-0 fw-bold text-success">{stats.presentDays}</h4>
-                  <small className="text-muted">Last 30 days</small>
+                  <small className="text-muted text-truncate d-block">Last 30 days</small>
                 </div>
-                <div className="bg-success bg-opacity-10 p-2 rounded-circle">
+                <div className="bg-success bg-opacity-10 p-2 rounded-circle flex-shrink-0">
                   <FaCheckCircle className="text-success" size={20} />
                 </div>
               </div>
@@ -832,16 +834,16 @@ const EmployeeDashboard = () => {
           </Card>
         </Col>
 
-        <Col md={3}>
-          <Card className="border-0 shadow-sm h-70">
-            <Card.Body>
+        <Col xs={12} sm={6} md={3}>
+          <Card className="border-0 shadow-sm h-100">
+            <Card.Body className="p-2 p-md-3">
               <div className="d-flex justify-content-between align-items-start">
-                <div>
-                  <p className="text-muted small mb-1">Comp-Off Balance</p>
+                <div className="overflow-hidden">
+                  <p className="text-muted small mb-1 text-truncate">Comp-Off Balance</p>
                   <h4 className="mb-0 fw-bold text-purple">{leaveBalance.comp_off_balance || 0}</h4>
-                  <small className="text-muted">Earned on holidays</small>
+                  <small className="text-muted text-truncate d-block">Earned on holidays</small>
                 </div>
-                <div className="bg-purple bg-opacity-10 p-2 rounded-circle">
+                <div className="bg-purple bg-opacity-10 p-2 rounded-circle flex-shrink-0">
                   <FaTrophy className="text-purple" size={20} />
                 </div>
               </div>
@@ -849,25 +851,25 @@ const EmployeeDashboard = () => {
           </Card>
         </Col>
 
-        <Col md={3}>
-          <Card className="border-0 shadow-sm h-70">
-            <Card.Body>
+        <Col xs={12} sm={6} md={3}>
+          <Card className="border-0 shadow-sm h-100">
+            <Card.Body className="p-2 p-md-3">
               <div className="d-flex justify-content-between align-items-start">
-                <div>
-                  <p className="text-muted small mb-1">Upcoming Holiday</p>
+                <div className="overflow-hidden">
+                  <p className="text-muted small mb-1 text-truncate">Upcoming Holiday</p>
                   {upcomingHolidays.length > 0 ? (
                     <>
-                      <h6 className="mb-0 fw-bold">{upcomingHolidays[0].name}</h6>
-                      <small className="text-muted">{formatDate(upcomingHolidays[0].date)}</small>
-                      <Badge bg="info" className="ms-2">
+                      <h6 className="mb-0 fw-bold text-truncate">{upcomingHolidays[0].name}</h6>
+                      <small className="text-muted d-block text-truncate">{formatDate(upcomingHolidays[0].date)}</small>
+                      <Badge bg="info" className="mt-1">
                         {upcomingHolidays[0].daysLeft} days left
                       </Badge>
                     </>
                   ) : (
-                    <p className="mb-0">No upcoming holidays</p>
+                    <p className="mb-0 small">No upcoming holidays</p>
                   )}
                 </div>
-                <div className="bg-info bg-opacity-10 p-3 rounded-circle">
+                <div className="bg-info bg-opacity-10 p-2 rounded-circle flex-shrink-0">
                   <FaCalendarAlt className="text-info" size={24} />
                 </div>
               </div>
@@ -876,19 +878,19 @@ const EmployeeDashboard = () => {
         </Col>
       </Row>
 
-      <Row className="g-4">
+      <Row className="g-3 g-md-4">
         {/* Attendance Bar Chart */}
-        <Col md={6}>
-          <Card className="border-0 shadow-sm">
-            <Card.Header className="bg-white py-3 d-flex justify-content-between align-items-center">
-              <h6 className="mb-0">
+        <Col lg={6}>
+          <Card className="border-0 shadow-sm h-100">
+            <Card.Header className="bg-white py-2 py-md-3 d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
+              <h6 className="mb-0 small d-flex align-items-center">
                 <FaChartBar className="me-2 text-primary" />
                 Weekly Attendance Summary
               </h6>
-              <Badge bg="light" text="dark">Average hours per day</Badge>
+              <Badge bg="light" text="dark" className="ms-0 ms-sm-auto">Average hours per day</Badge>
             </Card.Header>
-            <Card.Body>
-              <div style={{ height: '320px', position: 'relative' }}>
+            <Card.Body className="p-2 p-md-3">
+              <div style={{ height: '280px', position: 'relative' }}>
                 <Bar 
                   data={attendanceChartData}
                   options={{
@@ -902,22 +904,17 @@ const EmployeeDashboard = () => {
                         backgroundColor: 'rgba(0, 0, 0, 0.8)',
                         titleColor: '#fff',
                         bodyColor: '#fff',
-                        titleFont: {
-                          size: 12,
-                          weight: 'bold'
-                        },
-                        bodyFont: {
-                          size: 11
-                        },
-                        padding: 8,
+                        titleFont: { size: 11 },
+                        bodyFont: { size: 10 },
+                        padding: 6,
                         callbacks: {
                           label: function(context) {
                             const value = context.raw;
                             const dayIndex = context.dataIndex;
                             if (dayIndex === 5 || dayIndex === 6) {
-                              return value > 0 ? `  ${value} hours (Worked on W-OFF)` : '  Weekly Off - No work';
+                              return value > 0 ? `  ${value}h (Worked on W-OFF)` : '  Weekly Off';
                             }
-                            return `  ${value} hours`;
+                            return `  ${value}h`;
                           }
                         }
                       }
@@ -930,67 +927,23 @@ const EmployeeDashboard = () => {
                           display: true,
                           text: 'Hours',
                           color: '#6c757d',
-                          font: {
-                            size: 11,
-                            weight: 'normal',
-                            family: 'sans-serif'
-                          },
-                          padding: { top: 0, bottom: 10 }
+                          font: { size: 10 },
+                          padding: { top: 0, bottom: 5 }
                         },
-                        grid: {
-                          color: 'rgba(0, 0, 0, 0.05)',
-                          drawBorder: true,
-                          lineWidth: 0.5
-                        },
+                        grid: { color: 'rgba(0, 0, 0, 0.05)' },
                         ticks: {
                           stepSize: 1,
-                          callback: function(value) {
-                            return value + 'h';
-                          },
-                          color: '#495057',
-                          font: {
-                            size: 10,
-                            weight: 'normal',
-                            family: 'sans-serif'
-                          },
-                          padding: 5,
-                          maxTicksLimit: 10
-                        },
-                        border: {
-                          display: true,
-                          color: '#dee2e6'
+                          callback: function(value) { return value + 'h'; },
+                          font: { size: 9 }
                         }
                       },
                       x: {
-                        grid: {
-                          display: false,
-                          drawBorder: true
-                        },
+                        grid: { display: false },
                         ticks: {
-                          color: '#495057',
-                          font: {
-                            size: 10,
-                            weight: function(context) {
-                              return (context.index === 5 || context.index === 6) ? 'bold' : 'normal';
-                            },
-                            family: 'sans-serif'
-                          },
-                          maxRotation: 0,
-                          minRotation: 0,
-                          padding: 5
-                        },
-                        border: {
-                          display: true,
-                          color: '#dee2e6'
+                          font: { size: 9 },
+                          maxRotation: 45,
+                          minRotation: 45
                         }
-                      }
-                    },
-                    layout: {
-                      padding: {
-                        top: 10,
-                        bottom: 10,
-                        left: 5,
-                        right: 10
                       }
                     },
                     barPercentage: 0.6,
@@ -999,72 +952,52 @@ const EmployeeDashboard = () => {
                 />
               </div>
               
-              {/* Legend with better formatting */}
-              <div className="mt-3 d-flex justify-content-center align-items-center gap-4 small">
+              {/* Legend - Responsive */}
+              <div className="mt-3 d-flex flex-wrap justify-content-center align-items-center gap-3 gap-md-4 small">
                 <div className="d-flex align-items-center">
-                  <div 
-                    style={{ 
-                      width: '16px', 
-                      height: '16px', 
-                      backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                      borderRadius: '3px',
-                      marginRight: '6px',
-                      border: '1px solid rgb(54, 162, 235)'
-                    }}
-                  ></div>
+                  <div style={{ width: '12px', height: '12px', backgroundColor: 'rgba(54, 162, 235, 0.6)', borderRadius: '3px', marginRight: '4px' }}></div>
                   <span className="text-muted">Working Days</span>
                 </div>
                 <div className="d-flex align-items-center">
-                  <div 
-                    style={{ 
-                      width: '16px', 
-                      height: '16px', 
-                      backgroundColor: 'rgba(169, 169, 169, 0.6)',
-                      borderRadius: '3px',
-                      marginRight: '6px',
-                      border: '1px solid rgb(128, 128, 128)'
-                    }}
-                  ></div>
-                  <span className="text-muted fw-semibold">W-OFF (Weekly Off)</span>
+                  <div style={{ width: '12px', height: '12px', backgroundColor: 'rgba(169, 169, 169, 0.6)', borderRadius: '3px', marginRight: '4px' }}></div>
+                  <span className="text-muted">W-OFF</span>
                 </div>
               </div>
               
-              {/* Additional info note */}
               <div className="mt-2 text-center text-muted small">
-                <FaInfoCircle className="me-1" size={10} />
-                Average working hours per day (based on last 30 days)
+                <FaInfoCircle className="me-1" size={8} />
+                Avg hours per day (last 30 days)
               </div>
             </Card.Body>
           </Card>
         </Col>
 
         {/* Leave Distribution Chart */}
-        <Col md={6}>
-          <Card className="border-0 shadow-sm">
-            <Card.Header className="bg-white py-3 d-flex justify-content-between align-items-center">
-              <h6 className="mb-0">
+        <Col lg={6}>
+          <Card className="border-0 shadow-sm h-100">
+            <Card.Header className="bg-white py-2 py-md-3 d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
+              <h6 className="mb-0 small d-flex align-items-center">
                 <FaUmbrellaBeach className="me-2 text-primary" />
                 Leave Distribution
               </h6>
-              <Badge bg="light" text="dark">Total: {leaveBalance.total_accrued} days</Badge>
+              <Badge bg="light" text="dark" className="ms-0 ms-sm-auto">Total: {leaveBalance.total_accrued} days</Badge>
             </Card.Header>
-            <Card.Body>
-              <div className="d-flex align-items-center" style={{ height: '250px' }}>
-                <div style={{ width: '60%', height: '250px' }}>
+            <Card.Body className="p-2 p-md-3">
+              <div className="d-flex flex-column flex-md-row align-items-center" style={{ minHeight: '220px' }}>
+                <div style={{ width: '100%', maxWidth: '250px', height: '200px' }}>
                   <Doughnut 
                     data={leaveChartData}
                     options={{
                       responsive: true,
                       maintainAspectRatio: false,
                       plugins: {
-                        legend: {
-                          position: 'bottom'
+                        legend: { 
+                          position: 'bottom',
+                          labels: { font: { size: 10 } }
                         },
                         tooltip: {
                           callbacks: {
-                            label: function(context) {
-                              return `${context.raw} days`;
-                            }
+                            label: function(context) { return `${context.raw} days`; }
                           }
                         }
                       },
@@ -1072,33 +1005,21 @@ const EmployeeDashboard = () => {
                     }}
                   />
                 </div>
-                <div className="ms-4">
+                <div className="ms-0 ms-md-4 mt-3 mt-md-0 w-100">
                   <div className="mb-3">
                     <small className="text-muted d-block">Used</small>
-                    <strong className="text-danger" style={{ fontSize: '1.2rem' }}>{leaveBalance.used} days</strong>
-                    <ProgressBar 
-                      now={(leaveBalance.used / leaveBalance.total_accrued) * 100} 
-                      variant="danger" 
-                      style={{ height: '4px', width: '100px' }} 
-                    />
+                    <strong className="text-danger" style={{ fontSize: '1.1rem' }}>{leaveBalance.used} days</strong>
+                    <ProgressBar now={(leaveBalance.used / leaveBalance.total_accrued) * 100} variant="danger" style={{ height: '4px', maxWidth: '120px' }} />
                   </div>
                   <div className="mb-3">
                     <small className="text-muted d-block">Available</small>
-                    <strong className="text-success" style={{ fontSize: '1.2rem' }}>{leaveBalance.available} days</strong>
-                    <ProgressBar 
-                      now={(leaveBalance.available / leaveBalance.total_accrued) * 100} 
-                      variant="success" 
-                      style={{ height: '4px', width: '100px' }} 
-                    />
+                    <strong className="text-success" style={{ fontSize: '1.1rem' }}>{leaveBalance.available} days</strong>
+                    <ProgressBar now={(leaveBalance.available / leaveBalance.total_accrued) * 100} variant="success" style={{ height: '4px', maxWidth: '120px' }} />
                   </div>
                   <div>
                     <small className="text-muted d-block">Pending</small>
-                    <strong className="text-warning" style={{ fontSize: '1.2rem' }}>{leaveBalance.pending} days</strong>
-                    <ProgressBar 
-                      now={(leaveBalance.pending / leaveBalance.total_accrued) * 100} 
-                      variant="warning" 
-                      style={{ height: '4px', width: '100px' }} 
-                    />
+                    <strong className="text-warning" style={{ fontSize: '1.1rem' }}>{leaveBalance.pending} days</strong>
+                    <ProgressBar now={(leaveBalance.pending / leaveBalance.total_accrued) * 100} variant="warning" style={{ height: '4px', maxWidth: '120px' }} />
                   </div>
                 </div>
               </div>
@@ -1107,10 +1028,10 @@ const EmployeeDashboard = () => {
         </Col>
 
         {/* Recent Leave Requests */}
-        <Col md={7}>
+        <Col lg={7}>
           <Card className="border-0 shadow-sm">
-            <Card.Header className="bg-white py-3 d-flex justify-content-between align-items-center">
-              <h6 className="mb-0">
+            <Card.Header className="bg-white py-2 py-md-3 d-flex justify-content-between align-items-center">
+              <h6 className="mb-0 small">
                 <FaHistory className="me-2 text-primary" />
                 Recent Leave Requests
               </h6>
@@ -1118,20 +1039,20 @@ const EmployeeDashboard = () => {
                 variant="link" 
                 size="sm" 
                 onClick={() => navigate('/apply-leave')}
-                className="text-decoration-none"
+                className="text-decoration-none p-0"
               >
                 View All <FaArrowRight className="ms-1" size={10} />
               </Button>
             </Card.Header>
             <Card.Body className="p-0">
               <div className="table-responsive">
-                <Table hover className="mb-0">
+                <Table hover className="mb-0" size="sm">
                   <thead className="bg-light">
                     <tr>
                       <th className="small text-dark">Leave Type</th>
-                      <th className="small text-dark">Duration</th>
+                      <th className="small text-dark d-none d-sm-table-cell">Duration</th>
                       <th className="small text-dark">Date Range</th>
-                      <th className="small text-dark">Days</th>
+                      <th className="small text-dark d-none d-md-table-cell">Days</th>
                       <th className="small text-dark">Status</th>
                     </tr>
                   </thead>
@@ -1142,25 +1063,27 @@ const EmployeeDashboard = () => {
                           <td className="small">
                             <Badge 
                               bg={leave.leave_type === 'Comp-Off' ? 'purple' : 'secondary'} 
-                              className="px-2 py-1"
+                              className="px-2 py-1 text-nowrap"
                             >
                               {leave.leave_type === 'Comp-Off' && '🎉 '}
                               {leave.leave_type}
                             </Badge>
                           </td>
-                          <td className="small">{leave.leave_duration || 'Full Day'}</td>
+                          <td className="small d-none d-sm-table-cell">{leave.leave_duration || 'Full Day'}</td>
                           <td className="small">
-                            {formatDate(leave.start_date)}
-                            {leave.start_date !== leave.end_date && ` - ${formatDate(leave.end_date)}`}
+                            <span className="text-nowrap">{formatDate(leave.start_date)}</span>
+                            {leave.start_date !== leave.end_date && (
+                              <span className="text-nowrap d-block d-sm-inline"> - {formatDate(leave.end_date)}</span>
+                            )}
                           </td>
-                          <td className="small fw-bold">{leave.days_count || 1}</td>
+                          <td className="small fw-bold d-none d-md-table-cell">{leave.days_count || 1}</td>
                           <td className="small">{getStatusBadge(leave.status)}</td>
                         </tr>
                       ))
                     ) : (
                       <tr>
                         <td colSpan="5" className="text-center py-4">
-                          <FaUmbrellaBeach size={30} className="text-muted mb-2 opacity-50" />
+                          <FaUmbrellaBeach size={24} className="text-muted mb-2 opacity-50" />
                           <p className="text-muted small mb-2">No leave requests found</p>
                           <Button 
                             variant="primary" 
@@ -1180,33 +1103,28 @@ const EmployeeDashboard = () => {
         </Col>
 
         {/* Upcoming Holidays & Quick Actions */}
-        <Col md={5}>
+        <Col lg={5}>
           {/* Upcoming Holidays Card */}
           <Card className="border-0 shadow-sm mb-3">
-            <Card.Header className="bg-white py-3 d-flex justify-content-between align-items-center">
-              <h6 className="mb-0">
+            <Card.Header className="bg-white py-2 py-md-3 d-flex justify-content-between align-items-center">
+              <h6 className="mb-0 small">
                 <FaCalendarAlt className="me-2 text-primary" />
                 Upcoming Holidays
               </h6>
-              <Badge bg="light" text="dark">
-                Next {upcomingHolidays.length}
-              </Badge>
+              <Badge bg="light" text="dark">Next {upcomingHolidays.length}</Badge>
             </Card.Header>
             <Card.Body className="p-0">
               {upcomingHolidays.length > 0 ? (
                 <div className="list-group list-group-flush">
                   {upcomingHolidays.map((holiday, index) => (
                     <div key={index} className="list-group-item d-flex justify-content-between align-items-center py-2">
-                      <div>
-                        <span className="fw-semibold small">{holiday.name}</span>
-                        <br />
-                        <small className="text-muted">{formatDate(holiday.date)}</small>
-                        <div className="mt-1">
-                          {getRegionBadge(holiday.region)}
-                        </div>
+                      <div style={{ maxWidth: '60%' }}>
+                        <span className="fw-semibold small text-truncate d-block">{holiday.name}</span>
+                        <small className="text-muted d-block">{formatDate(holiday.date)}</small>
+                        <div className="mt-1">{getRegionBadge(holiday.region)}</div>
                       </div>
                       <Badge bg="info" pill>
-                        {holiday.daysLeft} {holiday.daysLeft === 1 ? 'day' : 'days'} left
+                        {holiday.daysLeft}d
                       </Badge>
                     </div>
                   ))}
@@ -1233,13 +1151,12 @@ const EmployeeDashboard = () => {
                   {compOffHistory.slice(0, 3).map((item, index) => (
                     <div key={index} className="list-group-item py-2">
                       <div className="d-flex justify-content-between align-items-center">
-                        <div>
-                          <small className="fw-semibold">{item.holiday_name}</small>
-                          <br />
+                        <div style={{ maxWidth: '70%' }}>
+                          <small className="fw-semibold text-truncate d-block">{item.holiday_name}</small>
                           <small className="text-muted">{formatDate(item.attendance_date)}</small>
                         </div>
                         <Badge bg={item.is_used ? 'secondary' : 'success'} pill>
-                          {item.is_used ? 'Used' : `${item.comp_off_days} day`}
+                          {item.is_used ? 'Used' : `${item.comp_off_days}d`}
                         </Badge>
                       </div>
                     </div>
@@ -1251,37 +1168,40 @@ const EmployeeDashboard = () => {
 
           {/* Quick Actions Card */}
           <Card className="border-0 shadow-sm">
-            <Card.Header className="bg-white py-3">
-              <h6 className="mb-0">
+            <Card.Header className="bg-white py-2 py-md-3">
+              <h6 className="mb-0 small">
                 <FaBell className="me-2 text-primary" />
                 Quick Actions
               </h6>
             </Card.Header>
-            <Card.Body>
+            <Card.Body className="p-2 p-md-3">
               <div className="d-grid gap-2">
                 <Button 
                   variant="primary" 
                   onClick={() => navigate('/apply-leave')}
                   className="d-flex align-items-center justify-content-between"
+                  size="sm"
                 >
-                  <span><FaUmbrellaBeach className="me-2" /> Apply for Leave</span>
-                  <FaArrowRight size={12} />
+                  <span><FaUmbrellaBeach className="me-2" size={12} /> Apply for Leave</span>
+                  <FaArrowRight size={10} />
                 </Button>
                 <Button 
                   variant="outline-primary" 
                   onClick={() => navigate('/attendance')}
                   className="d-flex align-items-center justify-content-between"
+                  size="sm"
                 >
-                  <span><FaClock className="me-2" /> Mark Attendance</span>
-                  <FaArrowRight size={12} />
+                  <span><FaClock className="me-2" size={12} /> Mark Attendance</span>
+                  <FaArrowRight size={10} />
                 </Button>
                 <Button 
                   variant="outline-success" 
                   onClick={() => navigate('/salary-slip')}
                   className="d-flex align-items-center justify-content-between"
+                  size="sm"
                 >
-                  <span><FaChartLine className="me-2" /> View Salary Slip</span>
-                  <FaArrowRight size={12} />
+                  <span><FaChartLine className="me-2" size={12} /> View Salary Slip</span>
+                  <FaArrowRight size={10} />
                 </Button>
               </div>
             </Card.Body>

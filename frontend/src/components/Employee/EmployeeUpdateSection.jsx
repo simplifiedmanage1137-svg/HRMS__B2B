@@ -136,11 +136,11 @@ const EmployeeUpdateSection = () => {
   const getStatusBadge = (status) => {
     switch(status) {
       case 'pending':
-        return <Badge bg="warning" pill><FaHourglassHalf className="me-1" /> Pending</Badge>;
+        return <Badge bg="warning" pill className="d-inline-flex align-items-center"><FaHourglassHalf className="me-1" /> Pending</Badge>;
       case 'approved':
-        return <Badge bg="success" pill><FaCheckCircle className="me-1" /> Approved</Badge>;
+        return <Badge bg="success" pill className="d-inline-flex align-items-center"><FaCheckCircle className="me-1" /> Approved</Badge>;
       case 'rejected':
-        return <Badge bg="danger" pill><FaExclamationTriangle className="me-1" /> Rejected</Badge>;
+        return <Badge bg="danger" pill className="d-inline-flex align-items-center"><FaExclamationTriangle className="me-1" /> Rejected</Badge>;
       default:
         return <Badge bg="secondary" pill>{status}</Badge>;
     }
@@ -151,7 +151,7 @@ const EmployeeUpdateSection = () => {
       <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '400px' }}>
         <div className="text-center">
           <Spinner animation="border" variant="primary" />
-          <p className="mt-3 text-muted">Loading update requests...</p>
+          <p className="mt-3 text-muted small">Loading update requests...</p>
         </div>
       </div>
     );
@@ -164,8 +164,8 @@ const EmployeeUpdateSection = () => {
           <div className="mb-3">
             <FaInfoCircle size={50} className="text-muted opacity-50" />
           </div>
-          <h5>No Pending Update Requests</h5>
-          <p className="text-muted mb-0">
+          <h5 className="small">No Pending Update Requests</h5>
+          <p className="text-muted small mb-0">
             You don't have any pending update requests from admin at the moment.
           </p>
         </Card.Body>
@@ -174,11 +174,11 @@ const EmployeeUpdateSection = () => {
   }
 
   return (
-    <div className="employee-update-section p-4">
-      <h4 className="mb-4">
+    <div className="p-2 p-md-3 p-lg-4">
+      <h5 className="mb-4 d-flex align-items-center">
         <FaEdit className="me-2 text-primary" />
         Pending Update Requests
-      </h4>
+      </h5>
 
       {/* Message Alert */}
       {message.text && (
@@ -186,21 +186,23 @@ const EmployeeUpdateSection = () => {
           variant={message.type} 
           onClose={() => setMessage({ type: '', text: '' })} 
           dismissible
-          className="mb-4"
+          className="mb-4 py-2"
         >
-          {message.type === 'success' && <FaCheckCircle className="me-2" />}
-          {message.type === 'danger' && <FaExclamationTriangle className="me-2" />}
-          {message.text}
+          <div className="d-flex align-items-center">
+            {message.type === 'success' && <FaCheckCircle className="me-2 flex-shrink-0" />}
+            {message.type === 'danger' && <FaExclamationTriangle className="me-2 flex-shrink-0" />}
+            <span className="small">{message.text}</span>
+          </div>
         </Alert>
       )}
 
       {selectedRequest ? (
         // Edit Form View
         <Card className="border-0 shadow-sm">
-          <Card.Header className="bg-white py-3 d-flex justify-content-between align-items-center">
+          <Card.Header className="bg-white py-2 py-md-3 d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
             <div>
-              <h5 className="mb-1">Edit Your Information</h5>
-              <small className="text-muted">
+              <h6 className="mb-1 small">Edit Your Information</h6>
+              <small className="text-muted d-block">
                 Request ID: #{selectedRequest._id?.slice(-6) || 'N/A'}
               </small>
             </div>
@@ -208,41 +210,42 @@ const EmployeeUpdateSection = () => {
               variant="outline-secondary" 
               size="sm"
               onClick={handleCancel}
+              className="d-inline-flex align-items-center ms-0 ms-md-auto"
             >
               <FaTimes className="me-2" size={12} />
               Cancel
             </Button>
           </Card.Header>
-          <Card.Body>
+          <Card.Body className="p-2 p-md-3">
             <form onSubmit={handleSubmit}>
-              {/* Tabs for different sections */}
-              <Nav variant="tabs" className="mb-3" activeKey={activeTab} onSelect={(k) => setActiveTab(k)}>
+              {/* Tabs for different sections - Scrollable on mobile */}
+              <Nav variant="tabs" className="mb-3 flex-nowrap overflow-auto" activeKey={activeTab} onSelect={(k) => setActiveTab(k)}>
                 <Nav.Item>
-                  <Nav.Link eventKey="pending" className="small">
+                  <Nav.Link eventKey="pending" className="small text-nowrap">
                     <FaUser className="me-2" size={12} />
                     Personal
                   </Nav.Link>
                 </Nav.Item>
                 <Nav.Item>
-                  <Nav.Link eventKey="contact" className="small">
+                  <Nav.Link eventKey="contact" className="small text-nowrap">
                     <FaEnvelope className="me-2" size={12} />
                     Contact
                   </Nav.Link>
                 </Nav.Item>
                 <Nav.Item>
-                  <Nav.Link eventKey="address" className="small">
+                  <Nav.Link eventKey="address" className="small text-nowrap">
                     <FaMapMarkerAlt className="me-2" size={12} />
                     Address
                   </Nav.Link>
                 </Nav.Item>
                 <Nav.Item>
-                  <Nav.Link eventKey="employment" className="small">
+                  <Nav.Link eventKey="employment" className="small text-nowrap">
                     <FaBriefcase className="me-2" size={12} />
                     Employment
                   </Nav.Link>
                 </Nav.Item>
                 <Nav.Item>
-                  <Nav.Link eventKey="bank" className="small">
+                  <Nav.Link eventKey="bank" className="small text-nowrap">
                     <FaUniversity className="me-2" size={12} />
                     Bank
                   </Nav.Link>
@@ -252,9 +255,9 @@ const EmployeeUpdateSection = () => {
               {/* Personal Information Tab */}
               {activeTab === 'pending' && (
                 <div>
-                  <h6 className="mb-3">Personal Information</h6>
-                  <Row className="mb-3">
-                    <Col md={6}>
+                  <h6 className="mb-3 small">Personal Information</h6>
+                  <Row className="g-2 mb-3">
+                    <Col xs={12} md={6}>
                       <Form.Group>
                         <Form.Label className="small fw-semibold">First Name</Form.Label>
                         <Form.Control
@@ -266,7 +269,7 @@ const EmployeeUpdateSection = () => {
                         />
                       </Form.Group>
                     </Col>
-                    <Col md={6}>
+                    <Col xs={12} md={6}>
                       <Form.Group>
                         <Form.Label className="small fw-semibold">Last Name</Form.Label>
                         <Form.Control
@@ -280,8 +283,8 @@ const EmployeeUpdateSection = () => {
                     </Col>
                   </Row>
 
-                  <Row className="mb-3">
-                    <Col md={6}>
+                  <Row className="g-2 mb-3">
+                    <Col xs={12} md={6}>
                       <Form.Group>
                         <Form.Label className="small fw-semibold">Date of Birth</Form.Label>
                         <Form.Control
@@ -293,7 +296,7 @@ const EmployeeUpdateSection = () => {
                         />
                       </Form.Group>
                     </Col>
-                    <Col md={6}>
+                    <Col xs={12} md={6}>
                       <Form.Group>
                         <Form.Label className="small fw-semibold">Blood Group</Form.Label>
                         <Form.Select
@@ -321,9 +324,9 @@ const EmployeeUpdateSection = () => {
               {/* Contact Information Tab */}
               {activeTab === 'contact' && (
                 <div>
-                  <h6 className="mb-3">Contact Information</h6>
-                  <Row className="mb-3">
-                    <Col md={6}>
+                  <h6 className="mb-3 small">Contact Information</h6>
+                  <Row className="g-2 mb-3">
+                    <Col xs={12} md={6}>
                       <Form.Group>
                         <Form.Label className="small fw-semibold">Email</Form.Label>
                         <Form.Control
@@ -335,7 +338,7 @@ const EmployeeUpdateSection = () => {
                         />
                       </Form.Group>
                     </Col>
-                    <Col md={6}>
+                    <Col xs={12} md={6}>
                       <Form.Group>
                         <Form.Label className="small fw-semibold">Phone</Form.Label>
                         <Form.Control
@@ -355,7 +358,7 @@ const EmployeeUpdateSection = () => {
               {/* Address Tab */}
               {activeTab === 'address' && (
                 <div>
-                  <h6 className="mb-3">Address</h6>
+                  <h6 className="mb-3 small">Address</h6>
                   <Form.Group className="mb-3">
                     <Form.Label className="small fw-semibold">Address</Form.Label>
                     <Form.Control
@@ -369,8 +372,8 @@ const EmployeeUpdateSection = () => {
                     />
                   </Form.Group>
 
-                  <Row className="mb-3">
-                    <Col md={4}>
+                  <Row className="g-2 mb-3">
+                    <Col xs={12} md={4}>
                       <Form.Group>
                         <Form.Label className="small fw-semibold">City</Form.Label>
                         <Form.Control
@@ -382,7 +385,7 @@ const EmployeeUpdateSection = () => {
                         />
                       </Form.Group>
                     </Col>
-                    <Col md={4}>
+                    <Col xs={12} md={4}>
                       <Form.Group>
                         <Form.Label className="small fw-semibold">State</Form.Label>
                         <Form.Control
@@ -394,7 +397,7 @@ const EmployeeUpdateSection = () => {
                         />
                       </Form.Group>
                     </Col>
-                    <Col md={4}>
+                    <Col xs={12} md={4}>
                       <Form.Group>
                         <Form.Label className="small fw-semibold">Pincode</Form.Label>
                         <Form.Control
@@ -413,9 +416,9 @@ const EmployeeUpdateSection = () => {
               {/* Employment Details Tab */}
               {activeTab === 'employment' && (
                 <div>
-                  <h6 className="mb-3">Employment Details</h6>
-                  <Row className="mb-3">
-                    <Col md={6}>
+                  <h6 className="mb-3 small">Employment Details</h6>
+                  <Row className="g-2 mb-3">
+                    <Col xs={12} md={6}>
                       <Form.Group>
                         <Form.Label className="small fw-semibold">Designation</Form.Label>
                         <Form.Control
@@ -427,7 +430,7 @@ const EmployeeUpdateSection = () => {
                         />
                       </Form.Group>
                     </Col>
-                    <Col md={6}>
+                    <Col xs={12} md={6}>
                       <Form.Group>
                         <Form.Label className="small fw-semibold">Department</Form.Label>
                         <Form.Control
@@ -441,8 +444,8 @@ const EmployeeUpdateSection = () => {
                     </Col>
                   </Row>
 
-                  <Row className="mb-3">
-                    <Col md={6}>
+                  <Row className="g-2 mb-3">
+                    <Col xs={12} md={6}>
                       <Form.Group>
                         <Form.Label className="small fw-semibold">Employment Type</Form.Label>
                         <Form.Select
@@ -460,7 +463,7 @@ const EmployeeUpdateSection = () => {
                         </Form.Select>
                       </Form.Group>
                     </Col>
-                    <Col md={6}>
+                    <Col xs={12} md={6}>
                       <Form.Group>
                         <Form.Label className="small fw-semibold">Shift Timing</Form.Label>
                         <Form.Control
@@ -491,9 +494,9 @@ const EmployeeUpdateSection = () => {
               {/* Bank Details Tab */}
               {activeTab === 'bank' && (
                 <div>
-                  <h6 className="mb-3">Bank Details</h6>
-                  <Row className="mb-3">
-                    <Col md={6}>
+                  <h6 className="mb-3 small">Bank Details</h6>
+                  <Row className="g-2 mb-3">
+                    <Col xs={12} md={6}>
                       <Form.Group>
                         <Form.Label className="small fw-semibold">Bank Account Name</Form.Label>
                         <Form.Control
@@ -505,7 +508,7 @@ const EmployeeUpdateSection = () => {
                         />
                       </Form.Group>
                     </Col>
-                    <Col md={6}>
+                    <Col xs={12} md={6}>
                       <Form.Group>
                         <Form.Label className="small fw-semibold">Account Number</Form.Label>
                         <Form.Control
@@ -519,8 +522,8 @@ const EmployeeUpdateSection = () => {
                     </Col>
                   </Row>
 
-                  <Row className="mb-3">
-                    <Col md={4}>
+                  <Row className="g-2 mb-3">
+                    <Col xs={12} md={4}>
                       <Form.Group>
                         <Form.Label className="small fw-semibold">IFSC Code</Form.Label>
                         <Form.Control
@@ -533,7 +536,7 @@ const EmployeeUpdateSection = () => {
                         />
                       </Form.Group>
                     </Col>
-                    <Col md={4}>
+                    <Col xs={12} md={4}>
                       <Form.Group>
                         <Form.Label className="small fw-semibold">Branch Name</Form.Label>
                         <Form.Control
@@ -545,7 +548,7 @@ const EmployeeUpdateSection = () => {
                         />
                       </Form.Group>
                     </Col>
-                    <Col md={4}>
+                    <Col xs={12} md={4}>
                       <Form.Group>
                         <Form.Label className="small fw-semibold">PAN Number</Form.Label>
                         <Form.Control
@@ -561,17 +564,18 @@ const EmployeeUpdateSection = () => {
                 </div>
               )}
 
-              <div className="text-end mt-4">
+              <div className="text-center text-md-end mt-4">
                 <Button
                   type="submit"
                   variant="success"
                   disabled={loading}
-                  className="px-4"
+                  className="px-4 w-100 w-md-auto d-inline-flex align-items-center justify-content-center"
+                  size="sm"
                 >
                   {loading ? (
                     <>
                       <Spinner size="sm" animation="border" className="me-2" />
-                      Submitting...
+                      <span className="d-none d-sm-inline">Submitting...</span>
                     </>
                   ) : (
                     <>
@@ -586,22 +590,22 @@ const EmployeeUpdateSection = () => {
         </Card>
       ) : (
         // List View of Pending Requests
-        <Row>
+        <Row className="g-3">
           {pendingRequests.map(request => (
-            <Col md={6} lg={4} key={request._id} className="mb-3">
+            <Col xs={12} md={6} lg={4} key={request._id} className="mb-3">
               <Card className="border-0 shadow-sm h-100">
                 <Card.Header className="bg-white py-2">
-                  <div className="d-flex justify-content-between align-items-center">
+                  <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
                     <small className="fw-semibold">Request #{request._id?.slice(-6)}</small>
                     {getStatusBadge(request.status)}
                   </div>
                 </Card.Header>
-                <Card.Body>
+                <Card.Body className="p-2 p-md-3">
                   <div className="mb-3">
                     <small className="text-muted d-block mb-2">Fields to Update:</small>
                     <div className="d-flex flex-wrap gap-1">
                       {request.requestedFields?.map(field => (
-                        <Badge key={field} bg="light" text="dark" className="px-2 py-1">
+                        <Badge key={field} bg="light" text="dark" className="px-2 py-1 small">
                           {field}
                         </Badge>
                       ))}
@@ -610,20 +614,20 @@ const EmployeeUpdateSection = () => {
 
                   <div className="mb-2">
                     <small className="text-muted d-block">Requested on:</small>
-                    <small className="fw-semibold">{formatDate(request.createdAt)}</small>
+                    <small className="fw-semibold d-block">{formatDate(request.createdAt)}</small>
                   </div>
 
                   {request.notes && (
                     <div className="bg-light p-2 rounded small mb-3">
-                      <FaInfoCircle className="text-muted me-1" size={10} />
-                      {request.notes}
+                      <FaInfoCircle className="text-muted me-1 flex-shrink-0" size={10} />
+                      <span className="text-wrap">{request.notes}</span>
                     </div>
                   )}
 
                   <Button
                     variant="primary"
                     size="sm"
-                    className="w-100"
+                    className="w-100 d-inline-flex align-items-center justify-content-center"
                     onClick={() => handleEdit(request)}
                   >
                     <FaEdit className="me-2" size={12} />

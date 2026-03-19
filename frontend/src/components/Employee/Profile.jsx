@@ -176,11 +176,11 @@ const Profile = () => {
     const getLeaveStatusBadge = (status) => {
         switch(status) {
             case 'approved':
-                return <Badge bg="success" pill><FaCheckCircle className="me-1" size={10} /> Approved</Badge>;
+                return <Badge bg="success" pill className="d-inline-flex align-items-center"><FaCheckCircle className="me-1" size={10} /> Approved</Badge>;
             case 'pending':
-                return <Badge bg="warning" pill><FaHourglassHalf className="me-1" size={10} /> Pending</Badge>;
+                return <Badge bg="warning" pill className="d-inline-flex align-items-center"><FaHourglassHalf className="me-1" size={10} /> Pending</Badge>;
             case 'rejected':
-                return <Badge bg="danger" pill><FaTimesCircle className="me-1" size={10} /> Rejected</Badge>;
+                return <Badge bg="danger" pill className="d-inline-flex align-items-center"><FaTimesCircle className="me-1" size={10} /> Rejected</Badge>;
             default:
                 return <Badge bg="secondary" pill>Unknown</Badge>;
         }
@@ -202,7 +202,7 @@ const Profile = () => {
 
     if (loading) {
         return (
-            <div className="d-flex justify-content-center align-items-center vh-100">
+            <div className="d-flex justify-content-center align-items-center min-vh-100">
                 <div className="text-center">
                     <Spinner animation="border" variant="primary" style={{ width: '3rem', height: '3rem' }} />
                     <p className="mt-3 text-muted small">Loading profile...</p>
@@ -213,31 +213,35 @@ const Profile = () => {
 
     if (error) {
         return (
-            <Alert variant="danger" className="m-4" onClose={() => setError('')} dismissible>
-                <FaExclamationTriangle className="me-2" />
-                {error}
+            <Alert variant="danger" className="m-3 m-md-4" onClose={() => setError('')} dismissible>
+                <div className="d-flex align-items-center">
+                    <FaExclamationTriangle className="me-2 flex-shrink-0" />
+                    <span className="small">{error}</span>
+                </div>
             </Alert>
         );
     }
 
     if (!employee) {
         return (
-            <Alert variant="warning" className="m-4">
-                <FaInfoCircle className="me-2" />
-                No employee data found. Please contact admin.
+            <Alert variant="warning" className="m-3 m-md-4">
+                <div className="d-flex align-items-center">
+                    <FaInfoCircle className="me-2 flex-shrink-0" />
+                    <span className="small">No employee data found. Please contact admin.</span>
+                </div>
             </Alert>
         );
     }
 
     return (
-        <div className="p-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
-            {/* Header */}
-            <div className="d-flex justify-content-between align-items-center mb-4">
-                <h4 className="mb-0">
+        <div className="p-2 p-md-3 p-lg-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
+            {/* Header - Responsive */}
+            <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+                <h5 className="mb-0 d-flex align-items-center">
                     <FaUserCircle className="me-2 text-primary" />
                     My Profile
-                </h4>
-                <div className="d-flex gap-2">
+                </h5>
+                <div className="d-flex flex-wrap gap-2 ms-0 ms-md-auto">
                     <Badge bg="dark" className="px-3 py-2">
                         ID: {employee.employee_id}
                     </Badge>
@@ -245,6 +249,7 @@ const Profile = () => {
                         variant="outline-primary" 
                         size="sm"
                         onClick={handleEditProfile}
+                        className="d-inline-flex align-items-center"
                     >
                         <FaEdit className="me-2" size={12} />
                         Update Profile
@@ -254,13 +259,13 @@ const Profile = () => {
 
             {/* Main Profile Card */}
             <Card className="mb-4 border-0 shadow-sm">
-                <Card.Header className="bg-white py-2 border-0">
-                    <div className="d-flex border-bottom">
+                <Card.Header className="bg-white py-2 border-0 overflow-auto">
+                    <div className="d-flex" style={{ minWidth: '600px' }}>
                         <Button
                             variant={activeTab === 'personal' ? 'primary' : 'light'}
                             size="sm"
                             onClick={() => setActiveTab('personal')}
-                            className="me-1 rounded-0 border-0"
+                            className="me-1 rounded-0 border-0 text-nowrap"
                             style={{ 
                                 backgroundColor: activeTab === 'personal' ? '#0d6efd' : '#f8f9fa',
                                 color: activeTab === 'personal' ? 'white' : '#6c757d',
@@ -275,7 +280,7 @@ const Profile = () => {
                             variant={activeTab === 'leave' ? 'primary' : 'light'}
                             size="sm"
                             onClick={() => setActiveTab('leave')}
-                            className="me-1 rounded-0 border-0"
+                            className="me-1 rounded-0 border-0 text-nowrap"
                             style={{ 
                                 backgroundColor: activeTab === 'leave' ? '#0d6efd' : '#f8f9fa',
                                 color: activeTab === 'leave' ? 'white' : '#6c757d',
@@ -290,7 +295,7 @@ const Profile = () => {
                             variant={activeTab === 'comp-off' ? 'primary' : 'light'}
                             size="sm"
                             onClick={() => setActiveTab('comp-off')}
-                            className="me-1 rounded-0 border-0"
+                            className="me-1 rounded-0 border-0 text-nowrap"
                             style={{ 
                                 backgroundColor: activeTab === 'comp-off' ? '#0d6efd' : '#f8f9fa',
                                 color: activeTab === 'comp-off' ? 'white' : '#6c757d',
@@ -305,7 +310,7 @@ const Profile = () => {
                             variant={activeTab === 'bank' ? 'primary' : 'light'}
                             size="sm"
                             onClick={() => setActiveTab('bank')}
-                            className="me-1 rounded-0 border-0"
+                            className="me-1 rounded-0 border-0 text-nowrap"
                             style={{ 
                                 backgroundColor: activeTab === 'bank' ? '#0d6efd' : '#f8f9fa',
                                 color: activeTab === 'bank' ? 'white' : '#6c757d',
@@ -320,7 +325,7 @@ const Profile = () => {
                             variant={activeTab === 'salary' ? 'primary' : 'light'}
                             size="sm"
                             onClick={() => setActiveTab('salary')}
-                            className="me-1 rounded-0 border-0"
+                            className="me-1 rounded-0 border-0 text-nowrap"
                             style={{ 
                                 backgroundColor: activeTab === 'salary' ? '#0d6efd' : '#f8f9fa',
                                 color: activeTab === 'salary' ? 'white' : '#6c757d',
@@ -335,7 +340,7 @@ const Profile = () => {
                             variant={activeTab === 'policy' ? 'primary' : 'light'}
                             size="sm"
                             onClick={() => setActiveTab('policy')}
-                            className="me-1 rounded-0 border-0"
+                            className="me-1 rounded-0 border-0 text-nowrap"
                             style={{ 
                                 backgroundColor: activeTab === 'policy' ? '#0d6efd' : '#f8f9fa',
                                 color: activeTab === 'policy' ? 'white' : '#6c757d',
@@ -349,14 +354,14 @@ const Profile = () => {
                     </div>
                 </Card.Header>
                 
-                <Card.Body className="p-3">
+                <Card.Body className="p-2 p-md-3">
                     {/* Personal Tab */}
                     {activeTab === 'personal' && (
-                        <Row>
+                        <Row className="g-3">
                             {/* Profile Picture Card */}
-                            <Col md={4}>
+                            <Col lg={4}>
                                 <Card className="text-center mb-3 border-0 shadow-sm">
-                                    <Card.Body className="p-3">
+                                    <Card.Body className="p-2 p-md-3">
                                         <div className="mb-3">
                                             {employee.profile_image && !imageError ? (
                                                 <img 
@@ -364,39 +369,39 @@ const Profile = () => {
                                                     alt="Profile"
                                                     className="rounded-circle border"
                                                     style={{ 
-                                                        width: '120px', 
-                                                        height: '120px', 
+                                                        width: '100px', 
+                                                        height: '100px', 
                                                         objectFit: 'cover',
                                                         border: '3px solid #4e73df'
                                                     }}
                                                     onError={handleImageError}
                                                 />
                                             ) : (
-                                                <FaUserCircle size={100} className="text-secondary" />
+                                                <FaUserCircle size={80} className="text-secondary" />
                                             )}
                                         </div>
-                                        <h5 className="mb-1">
+                                        <h6 className="mb-1 text-truncate">
                                             {employee.first_name} {employee.middle_name} {employee.last_name}
-                                        </h5>
-                                        <p className="text-muted small mb-2">{employee.designation}</p>
+                                        </h6>
+                                        <p className="text-muted small mb-2 text-truncate">{employee.designation}</p>
                                         <Badge bg="info" className="px-3 py-2 mb-2 small">{employee.employment_type}</Badge>
                                         
                                         <div className="text-start mt-3">
                                             <ListGroup variant="flush" className="border-0">
-                                                <ListGroup.Item className="px-0 py-1 border-0 bg-transparent">
-                                                    <FaEnvelope className="text-primary me-2" size={12} />
-                                                    <small>{employee.email}</small>
+                                                <ListGroup.Item className="px-0 py-1 border-0 bg-transparent d-flex align-items-center">
+                                                    <FaEnvelope className="text-primary me-2 flex-shrink-0" size={12} />
+                                                    <small className="text-truncate">{employee.email}</small>
                                                 </ListGroup.Item>
                                                 {employee.phone && (
-                                                    <ListGroup.Item className="px-0 py-1 border-0 bg-transparent">
-                                                        <FaPhoneAlt className="text-primary me-2" size={12} />
-                                                        <small>{employee.phone}</small>
+                                                    <ListGroup.Item className="px-0 py-1 border-0 bg-transparent d-flex align-items-center">
+                                                        <FaPhoneAlt className="text-primary me-2 flex-shrink-0" size={12} />
+                                                        <small className="text-truncate">{employee.phone}</small>
                                                     </ListGroup.Item>
                                                 )}
                                                 {employee.emergency_contact && (
-                                                    <ListGroup.Item className="px-0 py-1 border-0 bg-transparent">
-                                                        <FaHeartbeat className="text-danger me-2" size={12} />
-                                                        <small>Emergency: {employee.emergency_contact}</small>
+                                                    <ListGroup.Item className="px-0 py-1 border-0 bg-transparent d-flex align-items-center">
+                                                        <FaHeartbeat className="text-danger me-2 flex-shrink-0" size={12} />
+                                                        <small className="text-truncate">Emergency: {employee.emergency_contact}</small>
                                                     </ListGroup.Item>
                                                 )}
                                             </ListGroup>
@@ -414,8 +419,8 @@ const Profile = () => {
                             </Col>
 
                             {/* Personal Details */}
-                            <Col md={8}>
-                                <Row>
+                            <Col lg={8}>
+                                <Row className="g-3">
                                     <Col md={6}>
                                         <Card className="mb-3 border-0 shadow-sm">
                                             <Card.Header className="bg-light py-2">
@@ -424,19 +429,19 @@ const Profile = () => {
                                                     Personal Details
                                                 </h6>
                                             </Card.Header>
-                                            <Card.Body className="p-3">
+                                            <Card.Body className="p-2 p-md-3">
                                                 <ListGroup variant="flush" className="border-0">
-                                                    <ListGroup.Item className="px-0 py-2 border-0 d-flex">
+                                                    <ListGroup.Item className="px-0 py-2 border-0 d-flex flex-column flex-sm-row">
                                                         <span className="text-muted small" style={{ minWidth: '100px' }}>Full Name:</span>
-                                                        <span className="small">{employee.first_name} {employee.middle_name} {employee.last_name}</span>
+                                                        <span className="small mt-1 mt-sm-0">{employee.first_name} {employee.middle_name} {employee.last_name}</span>
                                                     </ListGroup.Item>
-                                                    <ListGroup.Item className="px-0 py-2 border-0 d-flex">
+                                                    <ListGroup.Item className="px-0 py-2 border-0 d-flex flex-column flex-sm-row">
                                                         <span className="text-muted small" style={{ minWidth: '100px' }}>Date of Birth:</span>
-                                                        <span className="small">{formatDate(employee.dob)}</span>
+                                                        <span className="small mt-1 mt-sm-0">{formatDate(employee.dob)}</span>
                                                     </ListGroup.Item>
-                                                    <ListGroup.Item className="px-0 py-2 border-0 d-flex">
+                                                    <ListGroup.Item className="px-0 py-2 border-0 d-flex flex-column flex-sm-row">
                                                         <span className="text-muted small" style={{ minWidth: '100px' }}>Blood Group:</span>
-                                                        <Badge bg="danger" pill className="px-2 py-1">
+                                                        <Badge bg="danger" pill className="px-2 py-1 mt-1 mt-sm-0">
                                                             {employee.blood_group || 'N/A'}
                                                         </Badge>
                                                     </ListGroup.Item>
@@ -453,27 +458,27 @@ const Profile = () => {
                                                     Employment Details
                                                 </h6>
                                             </Card.Header>
-                                            <Card.Body className="p-3">
+                                            <Card.Body className="p-2 p-md-3">
                                                 <ListGroup variant="flush" className="border-0">
-                                                    <ListGroup.Item className="px-0 py-2 border-0 d-flex">
+                                                    <ListGroup.Item className="px-0 py-2 border-0 d-flex flex-column flex-sm-row">
                                                         <span className="text-muted small" style={{ minWidth: '120px' }}>Department:</span>
-                                                        <span className="small">{employee.department}</span>
+                                                        <span className="small mt-1 mt-sm-0">{employee.department}</span>
                                                     </ListGroup.Item>
-                                                    <ListGroup.Item className="px-0 py-2 border-0 d-flex">
+                                                    <ListGroup.Item className="px-0 py-2 border-0 d-flex flex-column flex-sm-row">
                                                         <span className="text-muted small" style={{ minWidth: '120px' }}>Designation:</span>
-                                                        <span className="small">{employee.designation}</span>
+                                                        <span className="small mt-1 mt-sm-0">{employee.designation}</span>
                                                     </ListGroup.Item>
-                                                    <ListGroup.Item className="px-0 py-2 border-0 d-flex">
+                                                    <ListGroup.Item className="px-0 py-2 border-0 d-flex flex-column flex-sm-row">
                                                         <span className="text-muted small" style={{ minWidth: '120px' }}>Joining Date:</span>
-                                                        <span className="small">{formatDate(employee.joining_date)}</span>
+                                                        <span className="small mt-1 mt-sm-0">{formatDate(employee.joining_date)}</span>
                                                     </ListGroup.Item>
-                                                    <ListGroup.Item className="px-0 py-2 border-0 d-flex">
+                                                    <ListGroup.Item className="px-0 py-2 border-0 d-flex flex-column flex-sm-row">
                                                         <span className="text-muted small" style={{ minWidth: '130px' }}>Reporting Manager:</span>
-                                                        <span className="small">{employee.reporting_manager || 'N/A'}</span>
+                                                        <span className="small mt-1 mt-sm-0">{employee.reporting_manager || 'N/A'}</span>
                                                     </ListGroup.Item>
-                                                    <ListGroup.Item className="px-0 py-2 border-0 d-flex">
+                                                    <ListGroup.Item className="px-0 py-2 border-0 d-flex flex-column flex-sm-row">
                                                         <span className="text-muted small" style={{ minWidth: '120px' }}>Shift Timing:</span>
-                                                        <span className="small">{employee.shift_timing || '9:00 AM - 6:00 PM'}</span>
+                                                        <span className="small mt-1 mt-sm-0">{employee.shift_timing || '9:00 AM - 6:00 PM'}</span>
                                                     </ListGroup.Item>
                                                 </ListGroup>
                                             </Card.Body>
@@ -490,7 +495,7 @@ const Profile = () => {
                                                 Address
                                             </h6>
                                         </Card.Header>
-                                        <Card.Body className="p-3">
+                                        <Card.Body className="p-2 p-md-3">
                                             <p className="mb-0 small">{employee.address}</p>
                                             {(employee.city || employee.state || employee.pincode) && (
                                                 <small className="text-muted d-block mt-1">
@@ -506,8 +511,8 @@ const Profile = () => {
 
                     {/* Leave Tab */}
                     {activeTab === 'leave' && (
-                        <Row>
-                            <Col md={4}>
+                        <Row className="g-3">
+                            <Col lg={4}>
                                 {/* Leave Balance Card */}
                                 <Card className="border-0 shadow-sm">
                                     <Card.Header className="bg-primary text-white py-2">
@@ -516,7 +521,7 @@ const Profile = () => {
                                             Leave Balance
                                         </h6>
                                     </Card.Header>
-                                    <Card.Body className="p-3">
+                                    <Card.Body className="p-2 p-md-3">
                                         {/* Comp-Off Balance Display */}
                                         {parseFloat(leaveBalance.comp_off_balance) > 0 && (
                                             <div className="text-center mb-3 p-2 bg-purple bg-opacity-10 rounded">
@@ -530,7 +535,7 @@ const Profile = () => {
                                         )}
 
                                         <div className="text-center mb-3">
-                                            <h1 className="display-4 text-primary fw-bold">{leaveBalance.available}</h1>
+                                            <h2 className="display-5 text-primary fw-bold">{leaveBalance.available}</h2>
                                             <p className="text-muted small">Available Leaves</p>
                                         </div>
                                         
@@ -603,12 +608,12 @@ const Profile = () => {
                                 </Card>
                             </Col>
 
-                            <Col md={8}>
+                            <Col lg={8}>
                                 {/* Leave History */}
                                 <Card className="border-0 shadow-sm">
-                                    <Card.Header className="bg-light py-2 d-flex justify-content-between align-items-center">
+                                    <Card.Header className="bg-light py-2 d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
                                         <h6 className="mb-0 small fw-semibold">Leave History</h6>
-                                        <Badge bg="dark" pill>
+                                        <Badge bg="dark" pill className="ms-0 ms-sm-auto">
                                             {leaveRequests.length} Records
                                         </Badge>
                                     </Card.Header>
@@ -619,9 +624,9 @@ const Profile = () => {
                                                     <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
                                                         <tr>
                                                             <th className="small text-dark">Leave Type</th>
-                                                            <th className="small text-dark">Duration</th>
+                                                            <th className="small text-dark d-none d-sm-table-cell">Duration</th>
                                                             <th className="small text-dark">Date Range</th>
-                                                            <th className="small text-dark">Days</th>
+                                                            <th className="small text-dark d-none d-md-table-cell">Days</th>
                                                             <th className="small text-dark">Status</th>
                                                         </tr>
                                                     </thead>
@@ -631,18 +636,20 @@ const Profile = () => {
                                                                 <td className="small">
                                                                     <Badge 
                                                                         bg={leave.leave_type === 'Comp-Off' ? 'purple' : 'secondary'} 
-                                                                        className="px-2 py-1"
+                                                                        className="px-2 py-1 text-nowrap"
                                                                     >
                                                                         {leave.leave_type === 'Comp-Off' && '🎉 '}
                                                                         {leave.leave_type}
                                                                     </Badge>
                                                                 </td>
-                                                                <td className="small">{leave.leave_duration || 'Full Day'}</td>
+                                                                <td className="small d-none d-sm-table-cell">{leave.leave_duration || 'Full Day'}</td>
                                                                 <td className="small">
-                                                                    {formatShortDate(leave.start_date)}
-                                                                    {leave.start_date !== leave.end_date && ` - ${formatShortDate(leave.end_date)}`}
+                                                                    <span className="text-nowrap">{formatShortDate(leave.start_date)}</span>
+                                                                    {leave.start_date !== leave.end_date && (
+                                                                        <span className="text-nowrap d-block d-sm-inline"> - {formatShortDate(leave.end_date)}</span>
+                                                                    )}
                                                                 </td>
-                                                                <td className="small fw-bold">{leave.days_count || 1}</td>
+                                                                <td className="small fw-bold d-none d-md-table-cell">{leave.days_count || 1}</td>
                                                                 <td className="small">{getLeaveStatusBadge(leave.status)}</td>
                                                             </tr>
                                                         ))}
@@ -674,7 +681,7 @@ const Profile = () => {
                         <Row>
                             <Col md={12}>
                                 <Card className="border-0 shadow-sm">
-                                    <Card.Header className="bg-purple text-white py-2 d-flex justify-content-between align-items-center">
+                                    <Card.Header className="bg-purple text-white py-2 d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
                                         <h6 className="mb-0 small fw-semibold">
                                             <FaTrophy className="me-2" size={12} />
                                             Comp-Off Earnings History
@@ -689,26 +696,26 @@ const Profile = () => {
                                                 <Table hover size="sm" className="mb-0">
                                                     <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
                                                         <tr>
-                                                            <th className="small text-dark">#</th>
-                                                            <th className="small text-dark">Date Earned</th>
+                                                            <th className="small text-dark">Sr No</th>
+                                                            <th className="small text-dark d-none d-sm-table-cell">Date Earned</th>
                                                             <th className="small text-dark">Holiday</th>
-                                                            <th className="small text-dark">Hours Worked</th>
-                                                            <th className="small text-dark">Comp-Off Days</th>
+                                                            <th className="small text-dark d-none d-md-table-cell">Hours Worked</th>
+                                                            <th className="small text-dark">Days</th>
                                                             <th className="small text-dark">Status</th>
-                                                            <th className="small text-dark">Used Date</th>
+                                                            <th className="small text-dark d-none d-lg-table-cell">Used Date</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
                                                         {compOffHistory.map((item, index) => (
                                                             <tr key={item.id || index}>
                                                                 <td className="small">{index + 1}</td>
-                                                                <td className="small">{formatDate(item.attendance_date)}</td>
+                                                                <td className="small d-none d-sm-table-cell">{formatDate(item.attendance_date)}</td>
                                                                 <td className="small">
-                                                                    <Badge bg="info" pill className="px-2 py-1">
+                                                                    <Badge bg="info" pill className="px-2 py-1 text-nowrap">
                                                                         {item.holiday_name}
                                                                     </Badge>
                                                                 </td>
-                                                                <td className="small">{item.hours_worked} hrs</td>
+                                                                <td className="small d-none d-md-table-cell">{item.hours_worked} hrs</td>
                                                                 <td className="small fw-bold">{item.comp_off_days}</td>
                                                                 <td className="small">
                                                                     {item.is_used ? (
@@ -717,7 +724,7 @@ const Profile = () => {
                                                                         <Badge bg="success" pill>Available</Badge>
                                                                     )}
                                                                 </td>
-                                                                <td className="small">
+                                                                <td className="small d-none d-lg-table-cell">
                                                                     {item.used_date ? formatDate(item.used_date) : '-'}
                                                                 </td>
                                                             </tr>
@@ -749,37 +756,37 @@ const Profile = () => {
                                     Bank Details
                                 </h6>
                             </Card.Header>
-                            <Card.Body className="p-3">
-                                <Row>
+                            <Card.Body className="p-2 p-md-3">
+                                <Row className="g-3">
                                     <Col md={6}>
                                         <ListGroup variant="flush" className="border-0">
-                                            <ListGroup.Item className="px-0 py-2 border-0 d-flex">
+                                            <ListGroup.Item className="px-0 py-2 border-0 d-flex flex-column flex-sm-row">
                                                 <span className="text-muted small" style={{ minWidth: '120px' }}>Account Name:</span>
-                                                <span className="small fw-semibold">{employee.bank_account_name || 'N/A'}</span>
+                                                <span className="small fw-semibold mt-1 mt-sm-0">{employee.bank_account_name || 'N/A'}</span>
                                             </ListGroup.Item>
-                                            <ListGroup.Item className="px-0 py-2 border-0 d-flex">
+                                            <ListGroup.Item className="px-0 py-2 border-0 d-flex flex-column flex-sm-row">
                                                 <span className="text-muted small" style={{ minWidth: '120px' }}>Account Number:</span>
-                                                <span className="small fw-semibold">{employee.account_number || 'N/A'}</span>
+                                                <span className="small fw-semibold mt-1 mt-sm-0">{employee.account_number || 'N/A'}</span>
                                             </ListGroup.Item>
-                                            <ListGroup.Item className="px-0 py-2 border-0 d-flex">
+                                            <ListGroup.Item className="px-0 py-2 border-0 d-flex flex-column flex-sm-row">
                                                 <span className="text-muted small" style={{ minWidth: '120px' }}>IFSC Code:</span>
-                                                <span className="small fw-semibold">{employee.ifsc_code || 'N/A'}</span>
+                                                <span className="small fw-semibold mt-1 mt-sm-0">{employee.ifsc_code || 'N/A'}</span>
                                             </ListGroup.Item>
                                         </ListGroup>
                                     </Col>
                                     <Col md={6}>
                                         <ListGroup variant="flush" className="border-0">
-                                            <ListGroup.Item className="px-0 py-2 border-0 d-flex">
+                                            <ListGroup.Item className="px-0 py-2 border-0 d-flex flex-column flex-sm-row">
                                                 <span className="text-muted small" style={{ minWidth: '120px' }}>Branch Name:</span>
-                                                <span className="small fw-semibold">{employee.branch_name || 'N/A'}</span>
+                                                <span className="small fw-semibold mt-1 mt-sm-0">{employee.branch_name || 'N/A'}</span>
                                             </ListGroup.Item>
-                                            <ListGroup.Item className="px-0 py-2 border-0 d-flex">
+                                            <ListGroup.Item className="px-0 py-2 border-0 d-flex flex-column flex-sm-row">
                                                 <span className="text-muted small" style={{ minWidth: '120px' }}>PAN Number:</span>
-                                                <span className="small fw-semibold">{employee.pan_number || 'N/A'}</span>
+                                                <span className="small fw-semibold mt-1 mt-sm-0">{employee.pan_number || 'N/A'}</span>
                                             </ListGroup.Item>
-                                            <ListGroup.Item className="px-0 py-2 border-0 d-flex">
+                                            <ListGroup.Item className="px-0 py-2 border-0 d-flex flex-column flex-sm-row">
                                                 <span className="text-muted small" style={{ minWidth: '120px' }}>Aadhar Number:</span>
-                                                <span className="small fw-semibold">{employee.aadhar_number || 'N/A'}</span>
+                                                <span className="small fw-semibold mt-1 mt-sm-0">{employee.aadhar_number || 'N/A'}</span>
                                             </ListGroup.Item>
                                         </ListGroup>
                                     </Col>
@@ -797,23 +804,23 @@ const Profile = () => {
                                     Salary Information
                                 </h6>
                             </Card.Header>
-                            <Card.Body className="p-3">
-                                <Row>
-                                    <Col md={6}>
+                            <Card.Body className="p-2 p-md-3">
+                                <Row className="g-3">
+                                    <Col sm={6}>
                                         <div className="bg-light p-3 rounded mb-3">
                                             <small className="text-muted d-block mb-1">Gross Salary</small>
-                                            <h4 className="text-primary mb-0">{formatCurrency(employee.gross_salary)}</h4>
+                                            <h5 className="text-primary mb-0">{formatCurrency(employee.gross_salary)}</h5>
                                         </div>
                                     </Col>
-                                    <Col md={6}>
+                                    <Col sm={6}>
                                         <div className="bg-light p-3 rounded mb-3">
                                             <small className="text-muted d-block mb-1">In-hand Salary</small>
-                                            <h4 className="text-success mb-0">{formatCurrency(employee.in_hand_salary)}</h4>
+                                            <h5 className="text-success mb-0">{formatCurrency(employee.in_hand_salary)}</h5>
                                         </div>
                                     </Col>
                                 </Row>
                                 <Alert variant="info" className="py-2 small mb-0">
-                                    <FaInfoCircle className="me-2" size={10} />
+                                    <FaInfoCircle className="me-2 flex-shrink-0" size={10} />
                                     Monthly Deduction: ₹200 (Fixed)
                                 </Alert>
                             </Card.Body>
@@ -829,10 +836,10 @@ const Profile = () => {
                                     Employment Contract Policy
                                 </h6>
                             </Card.Header>
-                            <Card.Body className="p-3">
+                            <Card.Body className="p-2 p-md-3">
                                 {employee.contract_policy ? (
                                     <div 
-                                        className="bg-light p-3 rounded"
+                                        className="bg-light p-2 p-md-3 rounded"
                                         style={{ 
                                             maxHeight: '400px', 
                                             overflowY: 'auto',

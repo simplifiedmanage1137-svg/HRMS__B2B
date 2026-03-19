@@ -85,8 +85,6 @@ const SendUpdateRequest = () => {
     applyFilters();
   }, [searchTerm, departmentFilter, employees]);
 
-  // src/components/Admin/SendUpdateRequest.jsx
-
   const fetchEmployees = async () => {
     try {
       setFetching(true);
@@ -247,55 +245,57 @@ const SendUpdateRequest = () => {
   };
 
   return (
-    <div className="p-4">
-      {/* Header */}
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h4 className="mb-0">
+    <div className="p-2 p-md-3 p-lg-4">
+      {/* Header - Responsive */}
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+        <h5 className="mb-0 d-flex align-items-center">
           <FaPaperPlane className="me-2 text-primary" />
           Send Update Request to Employee
-        </h4>
-        <Badge bg="info" pill className="px-3 py-2">
+        </h5>
+        <Badge bg="info" pill className="px-3 py-2 ms-0 ms-md-auto">
           {filteredEmployees.length} Employees Available
         </Badge>
       </div>
 
-      {/* Message Alert */}
+      {/* Message Alert - Responsive */}
       {message.text && (
         <Alert
           variant={message.type}
           onClose={() => setMessage({ type: '', text: '' })}
           dismissible
-          className="mb-4"
+          className="mb-4 py-2"
         >
-          {message.type === 'success' && <FaCheckCircle className="me-2" size={14} />}
-          {message.type === 'danger' && <FaTimesCircle className="me-2" size={14} />}
-          {message.text}
+          <div className="d-flex align-items-center">
+            {message.type === 'success' && <FaCheckCircle className="me-2 flex-shrink-0" size={14} />}
+            {message.type === 'danger' && <FaTimesCircle className="me-2 flex-shrink-0" size={14} />}
+            <span className="small">{message.text}</span>
+          </div>
         </Alert>
       )}
 
       <Card className="border-0 shadow-sm">
-        <Card.Header className="bg-light py-3">
-          <h5 className="mb-0">Request Information Update</h5>
+        <Card.Header className="bg-light py-2 py-md-3">
+          <h6 className="mb-0">Request Information Update</h6>
         </Card.Header>
-        <Card.Body>
+        <Card.Body className="p-2 p-md-3">
           <Form onSubmit={handleSubmit}>
             {/* Employee Selection with Search */}
             <Form.Group className="mb-4">
-              <Form.Label className="fw-semibold">
+              <Form.Label className="fw-semibold small d-flex align-items-center">
                 <FaUser className="me-2 text-primary" size={14} />
                 Select Employee
               </Form.Label>
 
-              {/* Search and Filter */}
+              {/* Search and Filter - Responsive */}
               <Row className="mb-3 g-2">
-                <Col md={8}>
+                <Col xs={12} md={8}>
                   <InputGroup size="sm">
                     <InputGroup.Text className="bg-light border-0">
                       <FaSearch size={12} className="text-muted" />
                     </InputGroup.Text>
                     <Form.Control
                       type="text"
-                      placeholder="Search by name, ID, department, designation..."
+                      placeholder="Search by name, ID, department..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="border-0 bg-light"
@@ -312,7 +312,7 @@ const SendUpdateRequest = () => {
                     )}
                   </InputGroup>
                 </Col>
-                <Col md={4}>
+                <Col xs={12} md={4}>
                   <Form.Select
                     size="sm"
                     value={departmentFilter}
@@ -344,17 +344,17 @@ const SendUpdateRequest = () => {
                 ))}
               </Form.Select>
 
-              {/* Filter Info */}
+              {/* Filter Info - Responsive */}
               {(searchTerm || departmentFilter !== 'all') && (
-                <div className="mt-2 d-flex align-items-center">
-                  <small className="text-muted me-2">Active filters:</small>
+                <div className="mt-2 d-flex flex-wrap align-items-center gap-2">
+                  <small className="text-muted">Active filters:</small>
                   {departmentFilter !== 'all' && (
-                    <Badge bg="info" className="me-2 px-2 py-1">
-                      Department: {departmentFilter}
+                    <Badge bg="info" className="px-2 py-1">
+                      Dept: {departmentFilter}
                     </Badge>
                   )}
                   {searchTerm && (
-                    <Badge bg="info" className="me-2 px-2 py-1">
+                    <Badge bg="info" className="px-2 py-1">
                       Search: "{searchTerm}"
                     </Badge>
                   )}
@@ -379,8 +379,8 @@ const SendUpdateRequest = () => {
 
             {/* Fields Selection */}
             <Form.Group className="mb-4">
-              <div className="d-flex justify-content-between align-items-center mb-2">
-                <Form.Label className="fw-semibold mb-0">
+              <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-2 gap-2">
+                <Form.Label className="fw-semibold small mb-0 d-flex align-items-center">
                   <FaInfoCircle className="me-2 text-primary" size={14} />
                   Select Fields to Update
                 </Form.Label>
@@ -388,15 +388,16 @@ const SendUpdateRequest = () => {
                   variant="outline-secondary"
                   size="sm"
                   onClick={handleSelectAll}
+                  className="ms-0 ms-sm-auto"
                 >
                   {selectedFields.length === fieldOptions.length ? 'Deselect All' : 'Select All'}
                 </Button>
               </div>
 
-              <Row>
+              <Row className="g-2">
                 {fieldOptions.map(field => (
-                  <Col md={6} lg={3} key={field.value} className="mb-2">
-                    <div className={`p-2 rounded border ${selectedFields.includes(field.value) ? 'bg-primary bg-opacity-10 border-primary' : ''}`}>
+                  <Col xs={12} sm={6} lg={3} key={field.value} className="mb-2">
+                    <div className={`p-2 rounded border h-100 ${selectedFields.includes(field.value) ? 'bg-primary bg-opacity-10 border-primary' : ''}`}>
                       <Form.Check
                         type="checkbox"
                         id={field.value}
@@ -404,8 +405,8 @@ const SendUpdateRequest = () => {
                         onChange={() => handleFieldChange(field.value)}
                         label={
                           <span className="d-flex align-items-center">
-                            <span className="me-2">{field.icon}</span>
-                            <span className="small">{field.label}</span>
+                            <span className="me-2 flex-shrink-0">{field.icon}</span>
+                            <span className="small text-wrap">{field.label}</span>
                           </span>
                         }
                       />
@@ -415,11 +416,11 @@ const SendUpdateRequest = () => {
               </Row>
             </Form.Group>
 
-            {/* Selected Fields Summary */}
+            {/* Selected Fields Summary - Responsive */}
             {selectedFields.length > 0 && (
-              <div className="mb-4 p-3 bg-light rounded">
+              <div className="mb-4 p-2 p-md-3 bg-light rounded">
                 <div className="d-flex align-items-center mb-2">
-                  <FaCheckCircle className="text-success me-2" size={14} />
+                  <FaCheckCircle className="text-success me-2 flex-shrink-0" size={14} />
                   <small className="fw-semibold">Selected fields to update:</small>
                 </div>
                 <div className="d-flex flex-wrap gap-2">
@@ -429,15 +430,15 @@ const SendUpdateRequest = () => {
                       <Badge
                         key={field}
                         bg="info"
-                        className="px-3 py-2 d-flex align-items-center"
+                        className="px-2 px-md-3 py-1 py-md-2 d-flex align-items-center"
                       >
-                        {fieldObj?.icon}
-                        <span className="ms-1">{fieldObj?.label}</span>
+                        <span className="me-1">{fieldObj?.icon}</span>
+                        <span className="small">{fieldObj?.label}</span>
                       </Badge>
                     );
                   })}
                 </div>
-                <small className="text-muted d-block mt-2">
+                <small className="text-muted d-block mt-2 small">
                   Total fields to update: {
                     selectedFields.reduce((total, field) => {
                       const fieldObj = fieldOptions.find(f => f.value === field);
@@ -448,19 +449,19 @@ const SendUpdateRequest = () => {
               </div>
             )}
 
-            {/* Submit Button */}
-            <div className="text-end">
+            {/* Submit Button - Responsive */}
+            <div className="text-center text-md-end">
               <Button
                 type="submit"
                 variant="primary"
                 size="sm"
                 disabled={loading || fetching}
-                className="px-4"
+                className="px-4 w-100 w-md-auto"
               >
                 {loading ? (
                   <>
                     <Spinner size="sm" animation="border" className="me-2" />
-                    Sending Request...
+                    <span className="d-none d-sm-inline">Sending Request...</span>
                   </>
                 ) : (
                   <>
@@ -474,13 +475,13 @@ const SendUpdateRequest = () => {
         </Card.Body>
       </Card>
 
-      {/* Info Card */}
+      {/* Info Card - Responsive */}
       <Card className="border-0 shadow-sm mt-4 bg-light">
-        <Card.Body className="p-3">
-          <div className="d-flex align-items-start">
-            <FaInfoCircle className="text-primary me-3 mt-1" size={20} />
+        <Card.Body className="p-2 p-md-3">
+          <div className="d-flex align-items-start gap-2">
+            <FaInfoCircle className="text-primary me-2 me-md-3 mt-1 flex-shrink-0" size={20} />
             <div>
-              <h6 className="mb-2">About Update Requests</h6>
+              <h6 className="mb-2 small fw-bold">About Update Requests</h6>
               <p className="small text-muted mb-1">
                 • Sending an update request will notify the employee to review and update their information.
               </p>

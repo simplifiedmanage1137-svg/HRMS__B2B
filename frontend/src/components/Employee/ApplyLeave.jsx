@@ -401,7 +401,7 @@ const ApplyLeave = () => {
 
   if (loading) {
     return (
-      <div className="d-flex justify-content-center align-items-center vh-100">
+      <div className="d-flex justify-content-center align-items-center min-vh-100">
         <div className="text-center">
           <Spinner animation="border" variant="primary" />
           <p className="mt-3 text-muted small">Loading leave application...</p>
@@ -413,14 +413,14 @@ const ApplyLeave = () => {
   const availableLeaveTypes = getAvailableLeaveTypes();
 
   return (
-    <div className="p-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
-      {/* Header */}
-      <div className="d-flex justify-content-between align-items-center mb-4">
+    <div className="p-2 p-md-3 p-lg-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
+      {/* Header - Responsive */}
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
         <div>
-          <h4 className="mb-1">
+          <h5 className="mb-1 d-flex align-items-center">
             <FaUmbrellaBeach className="me-2 text-primary" />
             Apply for Leave
-          </h4>
+          </h5>
           <p className="text-muted mb-0 small">
             {leaveBalance.is_eligible 
               ? 'You can apply for any type of leave' 
@@ -433,27 +433,28 @@ const ApplyLeave = () => {
           variant="outline-secondary" 
           size="sm"
           onClick={handleCancel}
+          className="d-inline-flex align-items-center ms-0 ms-md-auto"
         >
           <FaTimes className="me-2" size={12} />
           Cancel
         </Button>
       </div>
 
-      <Row>
+      <Row className="g-3">
         {/* Main Form Column */}
         <Col lg={8}>
           <Card className="border-0 shadow-sm">
-            <Card.Header className="bg-white py-3">
-              <h6 className="mb-0">Leave Request Form</h6>
+            <Card.Header className="bg-white py-2 py-md-3">
+              <h6 className="mb-0 small">Leave Request Form</h6>
             </Card.Header>
-            <Card.Body>
+            <Card.Body className="p-2 p-md-3">
               {/* Probation Status Alert */}
               {!leaveBalance.is_eligible && (
-                <Alert variant="info" className="mb-4">
-                  <div className="d-flex align-items-center">
-                    <FaInfoCircle className="me-3 text-primary" size={20} />
+                <Alert variant="info" className="mb-4 py-2">
+                  <div className="d-flex align-items-start">
+                    <FaInfoCircle className="me-3 text-primary mt-1 flex-shrink-0" size={20} />
                     <div>
-                      <h6 className="alert-heading mb-1">Probation Period</h6>
+                      <h6 className="alert-heading mb-1 small">Probation Period</h6>
                       <p className="mb-0 small">
                         You are currently in your probation period. 
                         {leaveBalance.comp_off_balance > 0 && (
@@ -468,11 +469,11 @@ const ApplyLeave = () => {
 
               {/* Comp-Off Info Alert */}
               {leaveBalance.comp_off_balance > 0 && (
-                <Alert variant="purple" className="mb-4" style={{ backgroundColor: '#f3e8ff', borderColor: '#d6b4ff' }}>
-                  <div className="d-flex align-items-center">
-                    <FaTrophy className="me-3 text-purple" size={20} />
+                <Alert variant="purple" className="mb-4 py-2" style={{ backgroundColor: '#f3e8ff', borderColor: '#d6b4ff' }}>
+                  <div className="d-flex align-items-start">
+                    <FaTrophy className="me-3 text-purple mt-1 flex-shrink-0" size={20} />
                     <div>
-                      <h6 className="alert-heading mb-1">Comp-Off Available! 🎉</h6>
+                      <h6 className="alert-heading mb-1 small">Comp-Off Available! 🎉</h6>
                       <p className="mb-0 small">
                         You have <strong>{leaveBalance.comp_off_balance} Comp-Off day(s)</strong> earned by working on holidays.
                         You can use these like regular leaves, even during probation.
@@ -525,7 +526,7 @@ const ApplyLeave = () => {
                     </Form.Control.Feedback>
                   )}
                   {formData.leave_type === 'Comp-Off' && (
-                    <Form.Text className="text-purple">
+                    <Form.Text className="text-purple small d-block mt-1">
                       <FaTrophy className="me-1" size={10} />
                       Using Comp-Off leave - this won't affect your regular leave balance
                     </Form.Text>
@@ -537,25 +538,26 @@ const ApplyLeave = () => {
                   <Form.Label className="small fw-semibold text-muted">
                     Leave Duration <span className="text-danger">*</span>
                   </Form.Label>
-                  <div>
+                  <div className="d-flex flex-wrap">
                     <Form.Check
-                      inline
                       type="radio"
                       label="Full Day"
                       name="leave_duration"
                       value="Full Day"
                       checked={formData.leave_duration === 'Full Day'}
                       onChange={handleChange}
-                      className="me-3"
+                      className="me-3 mb-2"
+                      id="full-day-radio"
                     />
                     <Form.Check
-                      inline
                       type="radio"
                       label="Half Day"
                       name="leave_duration"
                       value="Half Day"
                       checked={formData.leave_duration === 'Half Day'}
                       onChange={handleChange}
+                      className="mb-2"
+                      id="half-day-radio"
                     />
                   </div>
                 </Form.Group>
@@ -589,8 +591,8 @@ const ApplyLeave = () => {
                 )}
 
                 {/* Date Range */}
-                <Row className="mb-3">
-                  <Col md={6}>
+                <Row className="g-2 mb-3">
+                  <Col sm={6}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         Start Date <span className="text-danger">*</span>
@@ -611,7 +613,7 @@ const ApplyLeave = () => {
                       )}
                     </Form.Group>
                   </Col>
-                  <Col md={6}>
+                  <Col sm={6}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         {formData.leave_duration === 'Half Day' ? 'Date' : 'End Date'} 
@@ -656,7 +658,7 @@ const ApplyLeave = () => {
                       {errors.reason}
                     </Form.Control.Feedback>
                   )}
-                  <Form.Text className="text-muted">
+                  <Form.Text className="text-muted small">
                     {formData.reason.length}/500 characters
                   </Form.Text>
                 </Form.Group>
@@ -681,13 +683,13 @@ const ApplyLeave = () => {
                 {/* Balance Error */}
                 {errors.balance && (
                   <Alert variant="danger" className="py-2 small">
-                    <FaExclamationTriangle className="me-2" />
+                    <FaExclamationTriangle className="me-2 flex-shrink-0" />
                     {errors.balance}
                   </Alert>
                 )}
 
                 {/* Submit Buttons */}
-                <div className="d-flex gap-2">
+                <div className="d-flex flex-wrap gap-2">
                   <Button
                     type="submit"
                     variant="primary"
@@ -697,12 +699,12 @@ const ApplyLeave = () => {
                         ? calculatedDays > leaveBalance.comp_off_balance
                         : (leaveBalance.is_eligible && formData.leave_type !== 'Unpaid' && calculatedDays > leaveBalance.available)
                     )}
-                    className="px-4"
+                    className="px-4 d-inline-flex align-items-center"
                   >
                     {submitting ? (
                       <>
                         <Spinner size="sm" animation="border" className="me-2" />
-                        Submitting...
+                        <span className="d-none d-sm-inline">Submitting...</span>
                       </>
                     ) : (
                       <>
@@ -729,13 +731,13 @@ const ApplyLeave = () => {
         <Col lg={4}>
           {/* Leave Balance Card */}
           <Card className="border-0 shadow-sm mb-3">
-            <Card.Header className="bg-white py-3">
-              <h6 className="mb-0">
+            <Card.Header className="bg-white py-2 py-md-3">
+              <h6 className="mb-0 small d-flex align-items-center">
                 <FaInfoCircle className="me-2 text-primary" size={14} />
                 Your Leave Balance
               </h6>
             </Card.Header>
-            <Card.Body>
+            <Card.Body className="p-2 p-md-3">
               {/* Status Badge */}
               <div className={`text-center mb-3 p-2 rounded ${leaveBalance.is_eligible ? 'bg-success bg-opacity-10' : 'bg-info bg-opacity-10'}`}>
                 {leaveBalance.is_eligible ? (
@@ -815,24 +817,28 @@ const ApplyLeave = () => {
               {/* Days Calculation Preview */}
               {calculatedDays > 0 && (
                 <Alert variant="info" className="py-2 small mb-0">
-                  <FaClock className="me-2" />
-                  This request is for <strong>{calculatedDays} day{calculatedDays > 1 ? 's' : ''}</strong>
-                  {formData.leave_type === 'Comp-Off' ? (
-                    <>
-                      <br />
-                      <small>Comp-Off balance after request: <strong>{(leaveBalance.comp_off_balance - calculatedDays).toFixed(1)}</strong> days</small>
-                    </>
-                  ) : leaveBalance.is_eligible && formData.leave_type !== 'Unpaid' ? (
-                    <>
-                      <br />
-                      <small>Balance after request: <strong>{(leaveBalance.available - calculatedDays).toFixed(1)}</strong> days</small>
-                    </>
-                  ) : (
-                    <>
-                      <br />
-                      <small className="text-muted">Unpaid Leave - No deduction from balance</small>
-                    </>
-                  )}
+                  <div className="d-flex align-items-start">
+                    <FaClock className="me-2 mt-1 flex-shrink-0" />
+                    <div>
+                      <span>This request is for <strong>{calculatedDays} day{calculatedDays > 1 ? 's' : ''}</strong></span>
+                      {formData.leave_type === 'Comp-Off' ? (
+                        <>
+                          <br />
+                          <small className="d-block">Comp-Off balance after request: <strong>{(leaveBalance.comp_off_balance - calculatedDays).toFixed(1)}</strong> days</small>
+                        </>
+                      ) : leaveBalance.is_eligible && formData.leave_type !== 'Unpaid' ? (
+                        <>
+                          <br />
+                          <small className="d-block">Balance after request: <strong>{(leaveBalance.available - calculatedDays).toFixed(1)}</strong> days</small>
+                        </>
+                      ) : (
+                        <>
+                          <br />
+                          <small className="text-muted d-block">Unpaid Leave - No deduction from balance</small>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </Alert>
               )}
 
@@ -860,8 +866,8 @@ const ApplyLeave = () => {
           {/* Recent Leaves Card */}
           {recentLeaves.length > 0 && (
             <Card className="border-0 shadow-sm mb-3">
-              <Card.Header className="bg-white py-3">
-                <h6 className="mb-0">
+              <Card.Header className="bg-white py-2 py-md-3">
+                <h6 className="mb-0 small d-flex align-items-center">
                   <FaCalendarAlt className="me-2 text-primary" size={14} />
                   Recent Requests
                 </h6>
@@ -870,15 +876,14 @@ const ApplyLeave = () => {
                 <div className="list-group list-group-flush">
                   {recentLeaves.map((leave, index) => (
                     <div key={leave.id || index} className="list-group-item py-2">
-                      <div className="d-flex justify-content-between align-items-center">
+                      <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
                         <div>
-                          <span className="small fw-semibold">
+                          <span className="small fw-semibold d-block">
                             {leave.leave_type === 'Comp-Off' ? '🎉 ' : 
                              leave.leave_type === 'Unpaid' ? '💰 ' : '🌴 '}
                             {leave.leave_type}
                           </span>
-                          <br />
-                          <small className="text-muted">
+                          <small className="text-muted d-block">
                             {formatDate(leave.start_date)}
                             {leave.start_date !== leave.end_date && ` - ${formatDate(leave.end_date)}`}
                           </small>
@@ -889,6 +894,7 @@ const ApplyLeave = () => {
                             leave.status === 'pending' ? 'warning' : 'danger'
                           }
                           pill
+                          className="ms-0 ms-sm-auto"
                         >
                           {leave.status}
                         </Badge>
@@ -902,7 +908,7 @@ const ApplyLeave = () => {
 
           {/* Info Card */}
           <Card className="border-0 shadow-sm bg-light">
-            <Card.Body className="p-3">
+            <Card.Body className="p-2 p-md-3">
               <h6 className="small fw-semibold mb-2">Leave Policy</h6>
               <ul className="small text-muted ps-3 mb-0">
                 <li>

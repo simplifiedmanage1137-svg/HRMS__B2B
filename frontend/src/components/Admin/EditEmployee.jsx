@@ -5,12 +5,12 @@ import { Form, Button, Card, Row, Col, Spinner, Alert, Modal, Table, Badge, Prog
 import { FaSave, FaArrowLeft, FaFileAlt, FaFileImage, FaFilePdf, FaDownload, FaEye, FaUpload, FaTrash, FaPlus } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
-import { useNotification } from '../../context/NotificationContext'; // 👈 Import this
+import { useNotification } from '../../context/NotificationContext';
 
 const EditEmployee = () => {
     const { id } = useParams();
     const navigate = useNavigate();
-    const { showNotification } = useNotification(); // 👈 Add this
+    const { showNotification } = useNotification();
 
     // Form states
     const [formData, setFormData] = useState({
@@ -378,7 +378,7 @@ const EditEmployee = () => {
 
     if (loading) {
         return (
-            <div className="d-flex justify-content-center align-items-center vh-100">
+            <div className="d-flex justify-content-center align-items-center min-vh-100">
                 <div className="text-center">
                     <Spinner animation="border" variant="primary" style={{ width: '3rem', height: '3rem' }} />
                     <p className="mt-3 text-muted">Loading employee details...</p>
@@ -388,22 +388,24 @@ const EditEmployee = () => {
     }
 
     return (
-        <div className="container-fluid py-4">
-            {/* Header */}
-            <div className="d-flex justify-content-between align-items-center mb-4">
-                <div>
+        <div className="container-fluid p-2 p-md-3 p-lg-4">
+            {/* Header - Responsive */}
+            <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+                <div className="d-flex flex-wrap align-items-center gap-2">
                     <Button
                         variant="outline-secondary"
                         size="sm"
                         onClick={() => navigate('/admin/employees')}
-                        className="me-3"
+                        className="me-2"
                     >
-                        <FaArrowLeft className="me-2" /> Back
+                        <FaArrowLeft className="me-2" /> <span className="d-none d-sm-inline">Back</span>
                     </Button>
-                    <h4 className="d-inline-block mb-0">Edit Employee: {formData.first_name} {formData.last_name}</h4>
+                    <h5 className="d-inline-block mb-0">
+                        Edit Employee: {formData.first_name} {formData.last_name}
+                    </h5>
                 </div>
 
-                <Badge bg="info" className="px-3 py-2">
+                <Badge bg="info" className="px-3 py-2 ms-0 ms-md-auto">
                     ID: {formData.employee_id}
                 </Badge>
             </div>
@@ -424,14 +426,14 @@ const EditEmployee = () => {
             <Form onSubmit={handleSubmit}>
                 {/* Personal Information */}
                 <Card className="shadow-sm mb-4">
-                    <Card.Header className="bg-light py-3">
-                        <h5 className="mb-0">Personal Information</h5>
+                    <Card.Header className="bg-light py-2 py-md-3">
+                        <h6 className="mb-0">Personal Information</h6>
                     </Card.Header>
-                    <Card.Body>
-                        <Row className="mb-3">
-                            <Col md={4}>
+                    <Card.Body className="p-2 p-md-3">
+                        <Row className="g-2 g-md-3 mb-3">
+                            <Col xs={12} md={4}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">First Name <span className="text-danger">*</span></Form.Label>
+                                    <Form.Label className="fw-semibold small">First Name <span className="text-danger">*</span></Form.Label>
                                     <Form.Control
                                         type="text"
                                         name="first_name"
@@ -442,9 +444,9 @@ const EditEmployee = () => {
                                     />
                                 </Form.Group>
                             </Col>
-                            <Col md={4}>
+                            <Col xs={12} md={4}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">Middle Name</Form.Label>
+                                    <Form.Label className="fw-semibold small">Middle Name</Form.Label>
                                     <Form.Control
                                         type="text"
                                         name="middle_name"
@@ -454,9 +456,9 @@ const EditEmployee = () => {
                                     />
                                 </Form.Group>
                             </Col>
-                            <Col md={4}>
+                            <Col xs={12} md={4}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">Last Name <span className="text-danger">*</span></Form.Label>
+                                    <Form.Label className="fw-semibold small">Last Name <span className="text-danger">*</span></Form.Label>
                                     <Form.Control
                                         type="text"
                                         name="last_name"
@@ -469,10 +471,10 @@ const EditEmployee = () => {
                             </Col>
                         </Row>
 
-                        <Row className="mb-3">
-                            <Col md={4}>
+                        <Row className="g-2 g-md-3 mb-3">
+                            <Col xs={12} md={4}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">Date of Birth</Form.Label>
+                                    <Form.Label className="fw-semibold small">Date of Birth</Form.Label>
                                     <Form.Control
                                         type="date"
                                         name="dob"
@@ -482,9 +484,9 @@ const EditEmployee = () => {
                                     />
                                 </Form.Group>
                             </Col>
-                            <Col md={4}>
+                            <Col xs={12} md={4}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">Blood Group</Form.Label>
+                                    <Form.Label className="fw-semibold small">Blood Group</Form.Label>
                                     <Form.Select
                                         name="blood_group"
                                         value={formData.blood_group}
@@ -504,14 +506,14 @@ const EditEmployee = () => {
 
                 {/* Contact Information */}
                 <Card className="shadow-sm mb-4">
-                    <Card.Header className="bg-light py-3">
-                        <h5 className="mb-0">Contact Information</h5>
+                    <Card.Header className="bg-light py-2 py-md-3">
+                        <h6 className="mb-0">Contact Information</h6>
                     </Card.Header>
-                    <Card.Body>
-                        <Row className="mb-3">
-                            <Col md={6}>
+                    <Card.Body className="p-2 p-md-3">
+                        <Row className="g-2 g-md-3 mb-3">
+                            <Col xs={12} md={6}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">Email <span className="text-danger">*</span></Form.Label>
+                                    <Form.Label className="fw-semibold small">Email <span className="text-danger">*</span></Form.Label>
                                     <Form.Control
                                         type="email"
                                         name="email"
@@ -522,9 +524,9 @@ const EditEmployee = () => {
                                     />
                                 </Form.Group>
                             </Col>
-                            <Col md={6}>
+                            <Col xs={12} md={6}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">Phone</Form.Label>
+                                    <Form.Label className="fw-semibold small">Phone</Form.Label>
                                     <Form.Control
                                         type="text"
                                         name="phone"
@@ -536,10 +538,10 @@ const EditEmployee = () => {
                             </Col>
                         </Row>
 
-                        <Row className="mb-3">
-                            <Col md={12}>
+                        <Row className="g-2 g-md-3 mb-3">
+                            <Col xs={12}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">Address</Form.Label>
+                                    <Form.Label className="fw-semibold small">Address</Form.Label>
                                     <Form.Control
                                         as="textarea"
                                         rows={2}
@@ -552,10 +554,10 @@ const EditEmployee = () => {
                             </Col>
                         </Row>
 
-                        <Row className="mb-3">
-                            <Col md={4}>
+                        <Row className="g-2 g-md-3 mb-3">
+                            <Col xs={12} md={4}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">City</Form.Label>
+                                    <Form.Label className="fw-semibold small">City</Form.Label>
                                     <Form.Control
                                         type="text"
                                         name="city"
@@ -565,9 +567,9 @@ const EditEmployee = () => {
                                     />
                                 </Form.Group>
                             </Col>
-                            <Col md={4}>
+                            <Col xs={12} md={4}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">State</Form.Label>
+                                    <Form.Label className="fw-semibold small">State</Form.Label>
                                     <Form.Control
                                         type="text"
                                         name="state"
@@ -577,9 +579,9 @@ const EditEmployee = () => {
                                     />
                                 </Form.Group>
                             </Col>
-                            <Col md={4}>
+                            <Col xs={12} md={4}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">Pincode</Form.Label>
+                                    <Form.Label className="fw-semibold small">Pincode</Form.Label>
                                     <Form.Control
                                         type="text"
                                         name="pincode"
@@ -595,14 +597,14 @@ const EditEmployee = () => {
 
                 {/* Employment Details */}
                 <Card className="shadow-sm mb-4">
-                    <Card.Header className="bg-light py-3">
-                        <h5 className="mb-0">Employment Details</h5>
+                    <Card.Header className="bg-light py-2 py-md-3">
+                        <h6 className="mb-0">Employment Details</h6>
                     </Card.Header>
-                    <Card.Body>
-                        <Row className="mb-3">
-                            <Col md={4}>
+                    <Card.Body className="p-2 p-md-3">
+                        <Row className="g-2 g-md-3 mb-3">
+                            <Col xs={12} md={4}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">Designation <span className="text-danger">*</span></Form.Label>
+                                    <Form.Label className="fw-semibold small">Designation <span className="text-danger">*</span></Form.Label>
                                     <Form.Control
                                         type="text"
                                         name="designation"
@@ -613,9 +615,9 @@ const EditEmployee = () => {
                                     />
                                 </Form.Group>
                             </Col>
-                            <Col md={4}>
+                            <Col xs={12} md={4}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">Department <span className="text-danger">*</span></Form.Label>
+                                    <Form.Label className="fw-semibold small">Department <span className="text-danger">*</span></Form.Label>
                                     <Form.Select
                                         name="department"
                                         value={formData.department}
@@ -630,9 +632,9 @@ const EditEmployee = () => {
                                     </Form.Select>
                                 </Form.Group>
                             </Col>
-                            <Col md={4}>
+                            <Col xs={12} md={4}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">Joining Date <span className="text-danger">*</span></Form.Label>
+                                    <Form.Label className="fw-semibold small">Joining Date <span className="text-danger">*</span></Form.Label>
                                     <Form.Control
                                         type="date"
                                         name="joining_date"
@@ -645,10 +647,10 @@ const EditEmployee = () => {
                             </Col>
                         </Row>
 
-                        <Row className="mb-3">
-                            <Col md={4}>
+                        <Row className="g-2 g-md-3 mb-3">
+                            <Col xs={12} md={4}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">Employment Type</Form.Label>
+                                    <Form.Label className="fw-semibold small">Employment Type</Form.Label>
                                     <Form.Select
                                         name="employment_type"
                                         value={formData.employment_type}
@@ -661,9 +663,9 @@ const EditEmployee = () => {
                                     </Form.Select>
                                 </Form.Group>
                             </Col>
-                            <Col md={4}>
+                            <Col xs={12} md={4}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">Shift Timing</Form.Label>
+                                    <Form.Label className="fw-semibold small">Shift Timing</Form.Label>
                                     <Form.Control
                                         type="text"
                                         name="shift_timing"
@@ -674,9 +676,9 @@ const EditEmployee = () => {
                                     />
                                 </Form.Group>
                             </Col>
-                            <Col md={4}>
+                            <Col xs={12} md={4}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">Reporting Manager</Form.Label>
+                                    <Form.Label className="fw-semibold small">Reporting Manager</Form.Label>
                                     <Form.Control
                                         type="text"
                                         name="reporting_manager"
@@ -692,14 +694,14 @@ const EditEmployee = () => {
 
                 {/* Bank Details */}
                 <Card className="shadow-sm mb-4">
-                    <Card.Header className="bg-light py-3">
-                        <h5 className="mb-0">Bank Details</h5>
+                    <Card.Header className="bg-light py-2 py-md-3">
+                        <h6 className="mb-0">Bank Details</h6>
                     </Card.Header>
-                    <Card.Body>
-                        <Row className="mb-3">
-                            <Col md={4}>
+                    <Card.Body className="p-2 p-md-3">
+                        <Row className="g-2 g-md-3 mb-3">
+                            <Col xs={12} md={4}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">Bank Account Name</Form.Label>
+                                    <Form.Label className="fw-semibold small">Bank Account Name</Form.Label>
                                     <Form.Control
                                         type="text"
                                         name="bank_account_name"
@@ -709,9 +711,9 @@ const EditEmployee = () => {
                                     />
                                 </Form.Group>
                             </Col>
-                            <Col md={4}>
+                            <Col xs={12} md={4}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">Account Number</Form.Label>
+                                    <Form.Label className="fw-semibold small">Account Number</Form.Label>
                                     <Form.Control
                                         type="text"
                                         name="account_number"
@@ -721,9 +723,9 @@ const EditEmployee = () => {
                                     />
                                 </Form.Group>
                             </Col>
-                            <Col md={4}>
+                            <Col xs={12} md={4}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">IFSC Code</Form.Label>
+                                    <Form.Label className="fw-semibold small">IFSC Code</Form.Label>
                                     <Form.Control
                                         type="text"
                                         name="ifsc_code"
@@ -735,10 +737,10 @@ const EditEmployee = () => {
                             </Col>
                         </Row>
 
-                        <Row className="mb-3">
-                            <Col md={4}>
+                        <Row className="g-2 g-md-3 mb-3">
+                            <Col xs={12} md={4}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">Branch Name</Form.Label>
+                                    <Form.Label className="fw-semibold small">Branch Name</Form.Label>
                                     <Form.Control
                                         type="text"
                                         name="branch_name"
@@ -748,9 +750,9 @@ const EditEmployee = () => {
                                     />
                                 </Form.Group>
                             </Col>
-                            <Col md={4}>
+                            <Col xs={12} md={4}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">PAN Number</Form.Label>
+                                    <Form.Label className="fw-semibold small">PAN Number</Form.Label>
                                     <Form.Control
                                         type="text"
                                         name="pan_number"
@@ -760,9 +762,9 @@ const EditEmployee = () => {
                                     />
                                 </Form.Group>
                             </Col>
-                            <Col md={4}>
+                            <Col xs={12} md={4}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">Aadhar Number</Form.Label>
+                                    <Form.Label className="fw-semibold small">Aadhar Number</Form.Label>
                                     <Form.Control
                                         type="text"
                                         name="aadhar_number"
@@ -778,14 +780,14 @@ const EditEmployee = () => {
 
                 {/* Salary Information */}
                 <Card className="shadow-sm mb-4">
-                    <Card.Header className="bg-light py-3">
-                        <h5 className="mb-0">Salary Information</h5>
+                    <Card.Header className="bg-light py-2 py-md-3">
+                        <h6 className="mb-0">Salary Information</h6>
                     </Card.Header>
-                    <Card.Body>
-                        <Row className="mb-3">
-                            <Col md={6}>
+                    <Card.Body className="p-2 p-md-3">
+                        <Row className="g-2 g-md-3 mb-3">
+                            <Col xs={12} md={6}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">Gross Salary (₹)</Form.Label>
+                                    <Form.Label className="fw-semibold small">Gross Salary (₹)</Form.Label>
                                     <Form.Control
                                         type="number"
                                         name="gross_salary"
@@ -795,9 +797,9 @@ const EditEmployee = () => {
                                     />
                                 </Form.Group>
                             </Col>
-                            <Col md={6}>
+                            <Col xs={12} md={6}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">In Hand Salary (₹)</Form.Label>
+                                    <Form.Label className="fw-semibold small">In Hand Salary (₹)</Form.Label>
                                     <Form.Control
                                         type="number"
                                         name="in_hand_salary"
@@ -813,14 +815,14 @@ const EditEmployee = () => {
 
                 {/* Emergency Contact */}
                 <Card className="shadow-sm mb-4">
-                    <Card.Header className="bg-light py-3">
-                        <h5 className="mb-0">Emergency Contact</h5>
+                    <Card.Header className="bg-light py-2 py-md-3">
+                        <h6 className="mb-0">Emergency Contact</h6>
                     </Card.Header>
-                    <Card.Body>
-                        <Row className="mb-3">
-                            <Col md={6}>
+                    <Card.Body className="p-2 p-md-3">
+                        <Row className="g-2 g-md-3 mb-3">
+                            <Col xs={12} md={6}>
                                 <Form.Group>
-                                    <Form.Label className="fw-semibold">Emergency Contact Number</Form.Label>
+                                    <Form.Label className="fw-semibold small">Emergency Contact Number</Form.Label>
                                     <Form.Control
                                         type="text"
                                         name="emergency_contact"
@@ -834,50 +836,52 @@ const EditEmployee = () => {
                     </Card.Body>
                 </Card>
 
-                {/* Documents Section with Upload */}
+                {/* Documents Section with Upload - Responsive */}
                 <Card className="shadow-sm mb-4">
-                    <Card.Header className="bg-light py-3 d-flex justify-content-between align-items-center">
-                        <h5 className="mb-0">Employee Documents</h5>
-                        <div>
+                    <Card.Header className="bg-light py-2 py-md-3 d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
+                        <h6 className="mb-0">Employee Documents</h6>
+                        <div className="d-flex flex-wrap gap-2">
                             <Button
                                 variant="success"
                                 size="sm"
                                 onClick={() => setShowUploadModal(true)}
-                                className="me-2"
+                                className="d-inline-flex align-items-center"
                             >
-                                <FaUpload className="me-2" /> Upload New Document
+                                <FaUpload className="me-2" /> <span className="d-none d-sm-inline">Upload New</span>
+                                <span className="d-inline d-sm-none">Upload</span>
                             </Button>
                             <Button
                                 variant="outline-primary"
                                 size="sm"
                                 onClick={() => setShowDocumentModal(true)}
+                                className="d-inline-flex align-items-center"
                             >
                                 <FaFileAlt className="me-2" /> View All ({employeeDocuments.length})
                             </Button>
                         </div>
                     </Card.Header>
-                    <Card.Body>
+                    <Card.Body className="p-2 p-md-3">
                         {docLoading ? (
                             <div className="text-center py-3">
                                 <Spinner animation="border" variant="primary" size="sm" />
                                 <p className="mt-2 small text-muted">Loading documents...</p>
                             </div>
                         ) : employeeDocuments.length > 0 ? (
-                            <Row>
+                            <Row className="g-2 g-md-3">
                                 {employeeDocuments.slice(0, 6).map((doc, index) => (
-                                    <Col md={4} key={index} className="mb-3">
-                                        <div className="d-flex align-items-center p-3 bg-light rounded border h-100">
-                                            <div className="me-3 fs-4">
+                                    <Col xs={12} sm={6} md={4} key={index} className="mb-2">
+                                        <div className="d-flex align-items-center p-2 p-md-3 bg-light rounded border h-100">
+                                            <div className="me-3 fs-4 flex-shrink-0">
                                                 {doc.icon}
                                             </div>
                                             <div className="flex-grow-1" style={{ minWidth: 0 }}>
                                                 <div className="fw-semibold small text-truncate">{doc.displayName}</div>
                                                 <small className="text-muted text-truncate d-block">{doc.filename}</small>
-                                                <div className="mt-2">
+                                                <div className="mt-2 d-flex flex-wrap gap-1">
                                                     <Button
                                                         variant="outline-info"
                                                         size="sm"
-                                                        className="me-1"
+                                                        className="p-1 p-md-2"
                                                         onClick={() => handleViewDocument(doc)}
                                                         title="View"
                                                     >
@@ -886,7 +890,7 @@ const EditEmployee = () => {
                                                     <Button
                                                         variant="outline-success"
                                                         size="sm"
-                                                        className="me-1"
+                                                        className="p-1 p-md-2"
                                                         onClick={() => handleDownloadDocument(doc)}
                                                         title="Download"
                                                     >
@@ -895,6 +899,7 @@ const EditEmployee = () => {
                                                     <Button
                                                         variant="outline-danger"
                                                         size="sm"
+                                                        className="p-1 p-md-2"
                                                         onClick={() => handleDeleteDocument(doc)}
                                                         title="Delete"
                                                     >
@@ -906,7 +911,7 @@ const EditEmployee = () => {
                                     </Col>
                                 ))}
                                 {employeeDocuments.length > 6 && (
-                                    <Col md={12} className="text-center mt-2">
+                                    <Col xs={12} className="text-center mt-2">
                                         <small className="text-muted">
                                             +{employeeDocuments.length - 6} more documents. Click "View All" to see all.
                                         </small>
@@ -929,14 +934,14 @@ const EditEmployee = () => {
                     </Card.Body>
                 </Card>
 
-                {/* Submit Button */}
-                <div className="text-end mt-4">
+                {/* Submit Button - Responsive */}
+                <div className="text-center text-md-end mt-4">
                     <Button
                         type="submit"
                         variant="primary"
-                        size="lg"
+                        size="sm"
                         disabled={saving}
-                        className="px-5"
+                        className="px-4 px-md-5 w-100 w-md-auto"
                     >
                         {saving ? (
                             <>
@@ -953,17 +958,17 @@ const EditEmployee = () => {
                 </div>
             </Form>
 
-            {/* Upload Documents Modal */}
-            <Modal show={showUploadModal} onHide={() => setShowUploadModal(false)} size="lg" centered>
+            {/* Upload Documents Modal - Responsive */}
+            <Modal show={showUploadModal} onHide={() => setShowUploadModal(false)} size="lg" centered dialogClassName="mx-2 mx-md-auto">
                 <Modal.Header closeButton className="bg-success text-white py-2">
-                    <Modal.Title as="h6" className="mb-0 small fw-semibold">
+                    <Modal.Title as="h6" className="mb-0 small fw-semibold d-flex align-items-center">
                         <FaUpload className="me-2" size={14} />
-                        Upload Documents for {formData.first_name} {formData.last_name}
+                        <span className="text-truncate">Upload Documents for {formData.first_name} {formData.last_name}</span>
                     </Modal.Title>
                 </Modal.Header>
-                <Modal.Body className="p-3">
+                <Modal.Body className="p-2 p-md-3">
                     <div className="mb-3">
-                        <div className="d-flex justify-content-between align-items-center mb-3">
+                        <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-3 gap-2">
                             <h6 className="small fw-semibold mb-0">Select Documents to Upload</h6>
                             <Button
                                 variant="outline-primary"
@@ -977,14 +982,14 @@ const EditEmployee = () => {
 
                         {selectedFiles.map((_, index) => (
                             <Row key={index} className="g-2 mb-2 align-items-center">
-                                <Col md={4}>
+                                <Col xs={12} sm={4}>
                                     <Form.Select
                                         size="sm"
                                         value={selectedDocTypes[index] || ''}
                                         onChange={(e) => handleDocumentTypeChange(index, e.target.value)}
                                         disabled={uploading}
                                     >
-                                        <option value="">Select Document Type</option>
+                                        <option value="">Select Type</option>
                                         {documentTypes.map(doc => (
                                             <option key={doc.value} value={doc.value}>
                                                 {doc.label}
@@ -992,7 +997,7 @@ const EditEmployee = () => {
                                         ))}
                                     </Form.Select>
                                 </Col>
-                                <Col md={6}>
+                                <Col xs={8} sm={6}>
                                     <Form.Control
                                         type="file"
                                         onChange={(e) => handleFileSelect(index, e.target.files[0])}
@@ -1001,12 +1006,13 @@ const EditEmployee = () => {
                                         disabled={uploading}
                                     />
                                 </Col>
-                                <Col md={2}>
+                                <Col xs={4} sm={2}>
                                     <Button
                                         variant="outline-danger"
                                         size="sm"
                                         onClick={() => removeUploadRow(index)}
                                         disabled={uploading || selectedFiles.length === 1}
+                                        className="w-100"
                                     >
                                         Remove
                                     </Button>
@@ -1022,7 +1028,7 @@ const EditEmployee = () => {
                                     size="sm"
                                     onClick={addUploadRow}
                                 >
-                                    <FaPlus className="me-2" size={10} /> Add Document to Upload
+                                    <FaPlus className="me-2" size={10} /> Add Document
                                 </Button>
                             </div>
                         )}
@@ -1031,18 +1037,19 @@ const EditEmployee = () => {
                             <div className="mt-3">
                                 <ProgressBar
                                     now={uploadProgress}
-                                    label={`Uploading... ${uploadProgress}%`}
+                                    label={`${uploadProgress}%`}
                                     striped
                                     animated
                                     size="sm"
                                 />
+                                <small className="text-muted mt-1 d-block">Uploading...</small>
                             </div>
                         )}
 
                         <div className="mt-3 small text-muted bg-light p-2 rounded">
                             <FaFileAlt className="me-2 text-primary" size={12} />
                             <small>
-                                <strong>Note:</strong> Supported formats: PDF, DOC, DOCX, JPG, JPEG, PNG (Max 10MB each)
+                                <strong>Note:</strong> Supported: PDF, DOC, DOCX, JPG, JPEG, PNG (Max 10MB)
                             </small>
                         </div>
                     </div>
@@ -1060,27 +1067,28 @@ const EditEmployee = () => {
                         {uploading ? (
                             <>
                                 <Spinner size="sm" animation="border" className="me-2" />
-                                Uploading...
+                                <span className="d-none d-sm-inline">Uploading...</span>
                             </>
                         ) : (
                             <>
                                 <FaUpload className="me-2" size={10} />
-                                Upload Documents
+                                <span className="d-none d-sm-inline">Upload Documents</span>
+                                <span className="d-inline d-sm-none">Upload</span>
                             </>
                         )}
                     </Button>
                 </Modal.Footer>
             </Modal>
 
-            {/* View Documents Modal */}
-            <Modal show={showDocumentModal} onHide={() => setShowDocumentModal(false)} size="lg" centered>
+            {/* View Documents Modal - Responsive */}
+            <Modal show={showDocumentModal} onHide={() => setShowDocumentModal(false)} size="lg" centered dialogClassName="mx-2 mx-md-auto">
                 <Modal.Header closeButton className="bg-info text-white py-2">
-                    <Modal.Title as="h6" className="mb-0 small fw-semibold">
+                    <Modal.Title as="h6" className="mb-0 small fw-semibold d-flex align-items-center">
                         <FaFileAlt className="me-2" size={14} />
-                        All Documents: {formData.first_name} {formData.last_name}
+                        <span className="text-truncate">All Documents: {formData.first_name} {formData.last_name}</span>
                     </Modal.Title>
                 </Modal.Header>
-                <Modal.Body className="p-3">
+                <Modal.Body className="p-2 p-md-3">
                     {docLoading ? (
                         <div className="text-center py-4">
                             <Spinner animation="border" variant="info" size="sm" />
@@ -1092,7 +1100,7 @@ const EditEmployee = () => {
                                 <thead className="bg-light">
                                     <tr>
                                         <th className="small text-dark">Document Type</th>
-                                        <th className="small text-dark">File Name</th>
+                                        <th className="small text-dark d-none d-sm-table-cell">File Name</th>
                                         <th className="small text-dark text-center" style={{ width: '180px' }}>Actions</th>
                                     </tr>
                                 </thead>
@@ -1102,41 +1110,46 @@ const EditEmployee = () => {
                                             <td>
                                                 <div className="d-flex align-items-center">
                                                     {doc.icon}
-                                                    <span className="ms-2 small fw-semibold">{doc.displayName}</span>
+                                                    <span className="ms-2 small fw-semibold text-truncate" style={{ maxWidth: '120px' }}>
+                                                        {doc.displayName}
+                                                    </span>
                                                 </div>
                                             </td>
-                                            <td>
-                                                <small className="text-muted">{doc.filename}</small>
+                                            <td className="d-none d-sm-table-cell">
+                                                <small className="text-muted text-truncate d-block" style={{ maxWidth: '150px' }} title={doc.filename}>
+                                                    {doc.filename}
+                                                </small>
                                             </td>
                                             <td className="text-center">
-                                                <Button
-                                                    variant="outline-info"
-                                                    size="sm"
-                                                    onClick={() => handleViewDocument(doc)}
-                                                    className="me-2"
-                                                    title="View Document"
-                                                >
-                                                    <FaEye size={12} className="me-1" />
-                                                    View
-                                                </Button>
-                                                <Button
-                                                    variant="outline-success"
-                                                    size="sm"
-                                                    onClick={() => handleDownloadDocument(doc)}
-                                                    className="me-2"
-                                                    title="Download Document"
-                                                >
-                                                    <FaDownload size={12} className="me-1" />
-                                                    Download
-                                                </Button>
-                                                <Button
-                                                    variant="outline-danger"
-                                                    size="sm"
-                                                    onClick={() => handleDeleteDocument(doc)}
-                                                    title="Delete Document"
-                                                >
-                                                    <FaTrash size={12} />
-                                                </Button>
+                                                <div className="d-flex flex-wrap gap-1 justify-content-center">
+                                                    <Button
+                                                        variant="outline-info"
+                                                        size="sm"
+                                                        onClick={() => handleViewDocument(doc)}
+                                                        className="p-1"
+                                                        title="View"
+                                                    >
+                                                        <FaEye size={12} />
+                                                    </Button>
+                                                    <Button
+                                                        variant="outline-success"
+                                                        size="sm"
+                                                        onClick={() => handleDownloadDocument(doc)}
+                                                        className="p-1"
+                                                        title="Download"
+                                                    >
+                                                        <FaDownload size={12} />
+                                                    </Button>
+                                                    <Button
+                                                        variant="outline-danger"
+                                                        size="sm"
+                                                        onClick={() => handleDeleteDocument(doc)}
+                                                        className="p-1"
+                                                        title="Delete"
+                                                    >
+                                                        <FaTrash size={12} />
+                                                    </Button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -1146,7 +1159,7 @@ const EditEmployee = () => {
                     ) : (
                         <div className="text-center py-4">
                             <FaFileAlt size={40} className="text-muted mb-3 opacity-50" />
-                            <p className="text-muted small mb-3">No documents found for this employee</p>
+                            <p className="text-muted small mb-3">No documents found</p>
                             <Button
                                 variant="primary"
                                 size="sm"

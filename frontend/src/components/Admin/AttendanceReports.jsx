@@ -807,7 +807,7 @@ const AttendanceReports = () => {
   const getStatusBadge = (record) => {
     if (record.overtime_hours > 0) {
       return (
-        <Badge bg="success" className="px-2 py-1" style={{ backgroundColor: '#28a745' }}>
+        <Badge bg="success" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#28a745' }}>
           <FaClock className="me-1" size={10} /> OT +{record.overtime_hours}h
         </Badge>
       );
@@ -815,7 +815,7 @@ const AttendanceReports = () => {
     
     if (record.comp_off_awarded) {
       return (
-        <Badge bg="purple" className="px-2 py-1" style={{ backgroundColor: '#9b59b6' }}>
+        <Badge bg="purple" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#9b59b6' }}>
           <FaTrophy className="me-1" size={10} /> Comp-Off +{record.comp_off_days}
         </Badge>
       );
@@ -823,23 +823,23 @@ const AttendanceReports = () => {
     
     if (record.status === 'working') {
       return record.is_late ?
-        <Badge bg="warning" className="px-2 py-1" style={{ backgroundColor: '#fd7e14' }}>
+        <Badge bg="warning" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#fd7e14' }}>
           Working ({formatLateDisplay(record.late_minutes)} late)
         </Badge> :
-        <Badge bg="info" className="px-2 py-1">Working</Badge>;
+        <Badge bg="info" className="px-2 py-1 text-nowrap">Working</Badge>;
     }
     if (record.status === 'present') {
       return record.is_late ?
-        <Badge bg="warning" className="px-2 py-1" style={{ backgroundColor: '#fd7e14' }}>
+        <Badge bg="warning" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#fd7e14' }}>
           Present ({formatLateDisplay(record.late_minutes)} late)
         </Badge> :
-        <Badge bg="success" className="px-2 py-1">Present</Badge>;
+        <Badge bg="success" className="px-2 py-1 text-nowrap">Present</Badge>;
     }
-    if (record.status === 'half_day') return <Badge bg="warning" className="px-2 py-1">Half Day</Badge>;
-    if (record.status === 'on_leave') return <Badge bg="purple" className="px-2 py-1" style={{ backgroundColor: '#6f42c1' }}>On Leave</Badge>;
-    if (record.status === 'holiday') return <Badge bg="warning" className="px-2 py-1" style={{ backgroundColor: '#ffc107' }}>Holiday</Badge>;
-    if (record.status === 'weekend') return <Badge bg="secondary" className="px-2 py-1"><FaMoon className="me-1" size={10} /> W-OFF</Badge>;
-    return <Badge bg="secondary" className="px-2 py-1">Absent</Badge>;
+    if (record.status === 'half_day') return <Badge bg="warning" className="px-2 py-1 text-nowrap">Half Day</Badge>;
+    if (record.status === 'on_leave') return <Badge bg="purple" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#6f42c1' }}>On Leave</Badge>;
+    if (record.status === 'holiday') return <Badge bg="warning" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#ffc107' }}>Holiday</Badge>;
+    if (record.status === 'weekend') return <Badge bg="secondary" className="px-2 py-1 text-nowrap"><FaMoon className="me-1" size={10} /> W-OFF</Badge>;
+    return <Badge bg="secondary" className="px-2 py-1 text-nowrap">Absent</Badge>;
   };
 
   const isCurrentDate = (day) => {
@@ -854,9 +854,10 @@ const AttendanceReports = () => {
   };
 
   return (
-    <div className="p-3">
-      <div className="d-flex justify-content-between align-items-center mb-3">
-        <h5 className="mb-0">
+    <div className="p-2 p-md-3 p-lg-4">
+      {/* Header - Responsive */}
+      <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-3 gap-2">
+        <h5 className="mb-0 d-flex align-items-center">
           <FaCalendarAlt className="me-2 text-primary" />
           Attendance Reports
         </h5>
@@ -869,12 +870,13 @@ const AttendanceReports = () => {
         </Alert>
       )}
 
-      <div className="mb-3 border-bottom">
+      {/* View Toggle Buttons - Responsive */}
+      <div className="mb-3 border-bottom pb-2 d-flex flex-wrap gap-2">
         <Button
           variant={activeView === 'daily' ? 'primary' : 'light'}
           size="sm"
           onClick={() => setActiveView('daily')}
-          className="me-2"
+          className="me-1"
         >
           <FaEye className="me-1" size={12} /> Daily View
         </Button>
@@ -888,23 +890,25 @@ const AttendanceReports = () => {
       </div>
 
       {activeView === 'daily' ? (
-        <div className="d-flex mb-3">
+        // Daily View Controls - Responsive
+        <div className="d-flex flex-column flex-sm-row mb-3 gap-2">
           <Form.Control
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
             size="sm"
-            className="me-2"
-            style={{ width: '200px' }}
+            className="flex-grow-1 flex-sm-grow-0"
+            style={{ maxWidth: '200px' }}
           />
-          <Button variant="success" size="sm" onClick={handleExportExcel}>
+          <Button variant="success" size="sm" onClick={handleExportExcel} className="w-20 w-sm-auto">
             <FaFileExcel className="me-2" size={12} /> Export
           </Button>
         </div>
       ) : (
+        // Monthly View Controls - Responsive
         <div className="mb-3">
           <Row className="g-2">
-            <Col md={8}>
+            <Col xs={12} lg={8}>
               <div className="d-flex flex-wrap gap-2">
                 <div className="d-flex">
                   <Button variant="outline-secondary" size="sm" onClick={handlePreviousMonth}>
@@ -915,7 +919,7 @@ const AttendanceReports = () => {
                     value={selectedMonth}
                     onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
                     className="mx-1"
-                    style={{ width: '100px' }}
+                    style={{ width: '90px' }}
                   >
                     {months.map(m => <option key={m.value} value={m.value}>{m.short}</option>)}
                   </Form.Select>
@@ -924,7 +928,7 @@ const AttendanceReports = () => {
                     value={selectedYear}
                     onChange={(e) => setSelectedYear(parseInt(e.target.value))}
                     className="me-1"
-                    style={{ width: '80px' }}
+                    style={{ width: '75px' }}
                   >
                     {years.map(y => <option key={y} value={y}>{y}</option>)}
                   </Form.Select>
@@ -933,7 +937,7 @@ const AttendanceReports = () => {
                   </Button>
                 </div>
 
-                <Button variant="outline-primary" size="sm" onClick={goToCurrentMonth}>
+                <Button variant="outline-primary" size="sm" onClick={goToCurrentMonth} className="text-nowrap">
                   Current
                 </Button>
 
@@ -941,7 +945,8 @@ const AttendanceReports = () => {
                   size="sm"
                   value={department}
                   onChange={(e) => setDepartment(e.target.value)}
-                  style={{ width: '120px' }}
+                  style={{ width: '130px' }}
+                  className="text-truncate"
                 >
                   {departments.map(dept => (
                     <option key={dept} value={dept}>
@@ -952,10 +957,10 @@ const AttendanceReports = () => {
               </div>
             </Col>
 
-            <Col md={4}>
-              <div className="d-flex gap-2 justify-content-end">
-                <Button variant="success" size="sm" onClick={handleExportExcel}>
-                  <FaFileExcel className="me-2" size={12} /> Export Complete Report
+            <Col xs={12} lg={4}>
+              <div className="d-flex gap-2 justify-content-start justify-content-lg-end">
+                <Button variant="success" size="sm" onClick={handleExportExcel} className="w-50 w-lg-auto">
+                  <FaFileExcel className="me-2" size={12} /> Export Report
                 </Button>
               </div>
             </Col>
@@ -963,19 +968,18 @@ const AttendanceReports = () => {
         </div>
       )}
 
-      <div className="d-flex flex-wrap gap-3 mb-3 small justify-content-center">
-        <span><Badge bg="success" pill>P</Badge> Present</span>
-        <span><Badge bg="warning" pill>HD</Badge> Half Day</span>
-        <span><Badge bg="info" pill>W</Badge> Working</span>
-        <span><Badge bg="purple" pill style={{ backgroundColor: '#6f42c1' }}>L</Badge> On Leave</span>
-        <span><Badge bg="warning" pill style={{ backgroundColor: '#ffc107' }}>H</Badge> Holiday</span>
-        <span><Badge bg="secondary" pill><FaMoon className="me-1" size={10} /> W-OFF</Badge> Weekend Off</span>
-        <span><Badge bg="secondary" pill>A</Badge> Absent</span>
-        <span><Badge bg="warning" pill style={{ backgroundColor: '#fd7e14' }}>⚠️</Badge> Late Login</span>
-        <span><Badge bg="success" pill style={{ backgroundColor: '#28a745' }}><FaClock className="me-1" size={10} /> OT</Badge> Overtime</span>
-        <span><Badge bg="purple" pill style={{ backgroundColor: '#9b59b6' }}><FaTrophy className="me-1" size={10} /> Comp-Off</Badge> Comp-Off Earned</span>
-        <span className="text-muted">|</span>
-        <span><FaClock className="me-1 text-muted" size={12} /> Hover for details</span>
+      {/* Legend - Responsive */}
+      <div className="d-flex flex-wrap gap-2 gap-md-3 mb-3 small justify-content-center justify-content-md-start">
+        <span className="d-flex align-items-center"><Badge bg="success" pill className="me-1">P</Badge> Present</span>
+        <span className="d-flex align-items-center"><Badge bg="warning" pill className="me-1">HD</Badge> Half Day</span>
+        <span className="d-flex align-items-center"><Badge bg="info" pill className="me-1">W</Badge> Working</span>
+        <span className="d-flex align-items-center"><Badge bg="purple" pill style={{ backgroundColor: '#6f42c1' }} className="me-1">L</Badge> On Leave</span>
+        <span className="d-flex align-items-center"><Badge bg="warning" pill style={{ backgroundColor: '#ffc107' }} className="me-1">H</Badge> Holiday</span>
+        <span className="d-flex align-items-center"><Badge bg="secondary" pill className="me-1"><FaMoon className="me-1" size={10} /> W-OFF</Badge> Weekend</span>
+        <span className="d-flex align-items-center"><Badge bg="secondary" pill className="me-1">A</Badge> Absent</span>
+        <span className="d-flex align-items-center"><Badge bg="warning" pill style={{ backgroundColor: '#fd7e14' }} className="me-1">⚠️</Badge> Late</span>
+        <span className="d-flex align-items-center"><Badge bg="success" pill style={{ backgroundColor: '#28a745' }} className="me-1"><FaClock className="me-1" size={10} /> OT</Badge> Overtime</span>
+        <span className="d-flex align-items-center"><Badge bg="purple" pill style={{ backgroundColor: '#9b59b6' }} className="me-1"><FaTrophy className="me-1" size={10} /> Comp-Off</Badge> Comp-Off</span>
       </div>
 
       {loading ? (
@@ -985,31 +989,32 @@ const AttendanceReports = () => {
         </div>
       ) : (
         <Card className="border-0 shadow-sm">
-          <Card.Header className="bg-light py-2 d-flex justify-content-between align-items-center">
+          <Card.Header className="bg-light py-2 d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
             <h6 className="mb-0 fw-semibold small">
               {activeView === 'daily' ? 'Daily Attendance' : 'Monthly Calendar'}
             </h6>
-            <Badge bg="secondary" pill>
+            <Badge bg="secondary" pill className="ms-0 ms-sm-auto">
               {activeView === 'daily' ? dailyAttendance.length : daysInMonth} Records
             </Badge>
           </Card.Header>
           <Card.Body className="p-0">
             {activeView === 'daily' ? (
+              // Daily Attendance Table - Responsive
               <div className="table-responsive" style={{ maxHeight: '400px', overflow: 'auto' }}>
                 <Table size="sm" striped className="mb-0">
                   <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
                     <tr>
-                      <th className="text-dark fw-normal small text-center" style={{ width: '60px' }}>Sr No</th>
+                      <th className="text-dark fw-normal small text-center" style={{ width: '50px' }}>Sr No</th>
                       <th className="text-dark fw-normal small">Employee</th>
-                      <th className="text-dark fw-normal small">Department</th>
-                      <th className="text-dark fw-normal small">Shift</th>
-                      <th className="text-dark fw-normal small">Clock In</th>
-                      <th className="text-dark fw-normal small">Late</th>
-                      <th className="text-dark fw-normal small">Clock Out</th>
-                      <th className="text-dark fw-normal small">Hours</th>
-                      <th className="text-dark fw-normal small">Overtime</th>
-                      <th className="text-dark fw-normal small">OT Amount</th>
-                      <th className="text-dark fw-normal small">Comp-Off</th>
+                      <th className="text-dark fw-normal small d-none d-sm-table-cell">Dept</th>
+                      <th className="text-dark fw-normal small d-none d-md-table-cell">Shift</th>
+                      <th className="text-dark fw-normal small">In</th>
+                      <th className="text-dark fw-normal small d-none d-lg-table-cell">Late</th>
+                      <th className="text-dark fw-normal small d-none d-lg-table-cell">Out</th>
+                      <th className="text-dark fw-normal small d-none d-xl-table-cell">Hours</th>
+                      <th className="text-dark fw-normal small d-none d-xl-table-cell">OT</th>
+                      <th className="text-dark fw-normal small d-none d-xl-table-cell">OT Amt</th>
+                      <th className="text-dark fw-normal small d-none d-xl-table-cell">Comp-Off</th>
                       <th className="text-dark fw-normal small">Status</th>
                     </tr>
                   </thead>
@@ -1017,69 +1022,65 @@ const AttendanceReports = () => {
                     {dailyAttendance.length > 0 ? (
                       dailyAttendance.map((record, index) => (
                         <tr key={index} className={record.is_late ? 'table-warning' : ''}>
-                          <td className="text-center">{index + 1}</td>
+                          <td className="text-center small">{index + 1}</td>
                           <td className="small">
-                            <div className="text-truncate" style={{ maxWidth: '150px' }} title={`${record.first_name} ${record.last_name}`}>
+                            <div className="text-truncate" style={{ maxWidth: '100px' }} title={`${record.first_name} ${record.last_name}`}>
                               {record.first_name} {record.last_name}
                             </div>
-                            <small className="text-muted text-truncate d-block" style={{ maxWidth: '150px' }} title={record.employee_id}>
+                            <small className="text-muted text-truncate d-block" style={{ maxWidth: '100px' }} title={record.employee_id}>
                               {record.employee_id}
                             </small>
                           </td>
-                          <td className="small">
-                            <span className="text-truncate d-inline-block" style={{ maxWidth: '100px' }} title={record.department}>
+                          <td className="small d-none d-sm-table-cell">
+                            <span className="text-truncate d-inline-block" style={{ maxWidth: '80px' }} title={record.department}>
                               {record.department}
                             </span>
                           </td>
-                          <td className="small">
-                            <span className="text-nowrap">{record.shift_time_used || 'Not set'}</span>
+                          <td className="small d-none d-md-table-cell">
+                            <span className="text-nowrap">{record.shift_time_used || '-'}</span>
                           </td>
                           <td className={`small ${record.clock_in ? 'text-success' : 'text-muted'}`}>
                             <span className="text-nowrap" title={formatShortTime(record.clock_in)}>
                               {formatShortTime(record.clock_in)}
                             </span>
                           </td>
-                          <td className="small">
+                          <td className="small d-none d-lg-table-cell">
                             {record.late_minutes > 0 ? (
                               <Badge bg="warning" pill className="text-nowrap" style={{ backgroundColor: '#fd7e14' }}>
                                 {formatLateDisplay(record.late_minutes)}
                               </Badge>
                             ) : '-'}
                           </td>
-                          <td className={`small ${record.clock_out ? 'text-danger' : 'text-muted'}`}>
+                          <td className={`small d-none d-lg-table-cell ${record.clock_out ? 'text-danger' : 'text-muted'}`}>
                             <span className="text-nowrap" title={formatShortTime(record.clock_out)}>
                               {formatShortTime(record.clock_out)}
                             </span>
                           </td>
-                          <td className="small">
+                          <td className="small d-none d-xl-table-cell">
                             {record.total_hours ? (
-                              <span 
-                                className="text-nowrap fw-bold" 
-                                title={`${record.total_hours} hours`}
-                              >
+                              <span className="text-nowrap">
                                 {formatHours(parseFloat(record.total_hours))}
                               </span>
                             ) : '-'}
                           </td>
-                          <td className="small">
+                          <td className="small d-none d-xl-table-cell">
                             {record.overtime_hours > 0 ? (
-                              <Badge bg="success" pill>
+                              <Badge bg="success" pill className="text-nowrap">
                                 +{record.overtime_hours}h
                               </Badge>
                             ) : '-'}
                           </td>
-                          <td className="small">
+                          <td className="small d-none d-xl-table-cell">
                             {record.overtime_amount > 0 ? (
-                              <Badge bg="info" pill>
+                              <Badge bg="info" pill className="text-nowrap">
                                 ₹{record.overtime_amount}
                               </Badge>
                             ) : '-'}
                           </td>
-                          <td className="small">
+                          <td className="small d-none d-xl-table-cell">
                             {record.comp_off_awarded ? (
-                              <Badge bg="purple" pill style={{ backgroundColor: '#9b59b6' }}>
-                                <FaTrophy className="me-1" size={8} />
-                                +{record.comp_off_days}
+                              <Badge bg="purple" pill className="text-nowrap" style={{ backgroundColor: '#9b59b6' }}>
+                                <FaTrophy className="me-1" size={8} /> +{record.comp_off_days}
                               </Badge>
                             ) : '-'}
                           </td>
@@ -1087,12 +1088,13 @@ const AttendanceReports = () => {
                         </tr>
                       ))
                     ) : (
-                      <tr><td colSpan="12" className="text-center py-4">No attendance records for this date</td></tr>
+                      <tr><td colSpan="12" className="text-center py-4">No attendance records</td></tr>
                     )}
                   </tbody>
                 </Table>
               </div>
             ) : (
+              // Monthly Attendance Table - Responsive
               <div className="monthly-table-container" style={{ position: 'relative', height: '400px', overflow: 'auto' }}>
                 <style>
                   {`
@@ -1118,7 +1120,7 @@ const AttendanceReports = () => {
                     .monthly-table th, 
                     .monthly-table td {
                       border: 1px solid #dee2e6;
-                      padding: 0.5rem;
+                      padding: 0.35rem;
                       white-space: nowrap;
                     }
                     
@@ -1136,20 +1138,30 @@ const AttendanceReports = () => {
                     
                     .col-1 {
                       left: 0;
-                      min-width: 50px;
+                      min-width: 40px;
                       border-right: 2px solid #dee2e6;
                       box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1);
                     }
                     
                     .col-2 {
-                      left: 50px;
-                      min-width: 140px;
+                      left: 40px;
+                      min-width: 120px;
                       border-right: 2px solid #dee2e6;
                       box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1);
                     }
                     
                     .monthly-table tbody tr:hover .fixed-col {
                       background-color: rgba(0,0,0,.075);
+                    }
+                    
+                    @media (max-width: 768px) {
+                      .monthly-table th, 
+                      .monthly-table td {
+                        padding: 0.25rem;
+                      }
+                      .col-2 {
+                        min-width: 100px;
+                      }
                     }
                   `}
                 </style>
@@ -1158,10 +1170,10 @@ const AttendanceReports = () => {
                     <tr>
                       <th className="fixed-col-header col-1 text-center fw-normal small bg-light"
                         style={{ left: 0, top: 0 }}>
-                        #
+                        Sr No
                       </th>
                       <th className="fixed-col-header col-2 text-center fw-normal small bg-light"
-                        style={{ left: '50px', top: 0 }}>
+                        style={{ left: '40px', top: 0 }}>
                         Employee
                       </th>
                       {[...Array(daysInMonth)].map((_, i) => {
@@ -1174,23 +1186,23 @@ const AttendanceReports = () => {
 
                         return (
                           <th key={i} className={`fw-normal small text-center ${isCurrent ? 'bg-primary text-white' : isWeekend ? 'bg-secondary text-white' : 'bg-light'}`}
-                            style={{ minWidth: '32px', top: 0, zIndex: 10 }}>
+                            style={{ minWidth: '30px', top: 0, zIndex: 10 }}>
                             {day}
-                            <div className="small fw-normal">{monthData?.short}</div>
+                            <div className="small fw-normal d-none d-sm-block">{monthData?.short}</div>
                           </th>
                         );
                       })}
-                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>P</th>
-                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>H</th>
-                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>L</th>
-                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>Hol</th>
-                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>W</th>
-                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '32px', top: 0, zIndex: 10 }}>A</th>
-                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '60px', top: 0, zIndex: 10 }}>Late</th>
-                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '60px', top: 0, zIndex: 10 }}>OT</th>
-                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '60px', top: 0, zIndex: 10 }}>OT Amt</th>
-                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '60px', top: 0, zIndex: 10 }}>Comp-Off</th>
-                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '60px', top: 0, zIndex: 10 }}>Hours</th>
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '28px', top: 0, zIndex: 10 }}>P</th>
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '28px', top: 0, zIndex: 10 }}>H</th>
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '28px', top: 0, zIndex: 10 }}>L</th>
+                      <th className="text-center fw-normal small bg-light d-none d-md-table-cell" style={{ minWidth: '28px', top: 0, zIndex: 10 }}>Hol</th>
+                      <th className="text-center fw-normal small bg-light d-none d-md-table-cell" style={{ minWidth: '28px', top: 0, zIndex: 10 }}>W</th>
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '28px', top: 0, zIndex: 10 }}>A</th>
+                      <th className="text-center fw-normal small bg-light d-none d-lg-table-cell" style={{ minWidth: '60px', top: 0, zIndex: 10 }}>Late</th>
+                      <th className="text-center fw-normal small bg-light d-none d-lg-table-cell" style={{ minWidth: '60px', top: 0, zIndex: 10 }}>OT</th>
+                      <th className="text-center fw-normal small bg-light d-none d-xl-table-cell" style={{ minWidth: '60px', top: 0, zIndex: 10 }}>OT Amt</th>
+                      <th className="text-center fw-normal small bg-light d-none d-xl-table-cell" style={{ minWidth: '60px', top: 0, zIndex: 10 }}>Comp-Off</th>
+                      <th className="text-center fw-normal small bg-light" style={{ minWidth: '50px', top: 0, zIndex: 10 }}>Hours</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1206,11 +1218,11 @@ const AttendanceReports = () => {
                               {idx + 1}
                             </td>
                             <td className="fixed-col col-2 small"
-                              style={{ left: '50px', backgroundColor: 'white' }}>
-                              <div className="text-truncate" style={{ maxWidth: '130px' }} title={empStats.name}>
+                              style={{ left: '40px', backgroundColor: 'white' }}>
+                              <div className="text-truncate" style={{ maxWidth: '110px' }} title={empStats.name}>
                                 <span className="fw-semibold">{empStats.name}</span>
                               </div>
-                              <small className="text-muted text-truncate d-block" style={{ maxWidth: '130px' }} title={empId}>
+                              <small className="text-muted text-truncate d-block" style={{ maxWidth: '110px' }} title={empId}>
                                 {empId}
                               </small>
                             </td>
@@ -1277,19 +1289,19 @@ const AttendanceReports = () => {
                             <td className="text-center"><Badge bg="success" pill>{empStats.present}</Badge></td>
                             <td className="text-center"><Badge bg="warning" pill>{empStats.half_day}</Badge></td>
                             <td className="text-center"><Badge bg="purple" pill style={{ backgroundColor: '#6f42c1' }}>{empStats.on_leave || 0}</Badge></td>
-                            <td className="text-center"><Badge bg="warning" pill style={{ backgroundColor: '#ffc107' }}>{empStats.holiday || 0}</Badge></td>
-                            <td className="text-center"><Badge bg="secondary" pill><FaMoon className="me-1" size={10} /> {empStats.weekend || 0}</Badge></td>
+                            <td className="text-center d-none d-md-table-cell"><Badge bg="warning" pill style={{ backgroundColor: '#ffc107' }}>{empStats.holiday || 0}</Badge></td>
+                            <td className="text-center d-none d-md-table-cell"><Badge bg="secondary" pill><FaMoon className="me-1" size={10} /> {empStats.weekend || 0}</Badge></td>
                             <td className="text-center"><Badge bg="danger" pill>{empStats.absent}</Badge></td>
-                            <td className="text-center">
+                            <td className="text-center d-none d-lg-table-cell">
                               {empStats.late_count > 0 ? (
                                 <Badge bg="warning" pill className="text-nowrap" style={{ backgroundColor: '#fd7e14' }} title={`Total: ${formatLateDisplay(empStats.total_late_minutes)}`}>
-                                  ⚠️ {empStats.late_count} ({formatLateDisplay(empStats.total_late_minutes)})
+                                  ⚠️ {empStats.late_count}
                                 </Badge>
                               ) : (
                                 <Badge bg="secondary" pill className="text-nowrap">0</Badge>
                               )}
                             </td>
-                            <td className="text-center">
+                            <td className="text-center d-none d-lg-table-cell">
                               {empStats.overtime_hours > 0 ? (
                                 <Badge bg="success" pill className="text-nowrap">
                                   ⏰ {empStats.overtime_hours}h
@@ -1298,7 +1310,7 @@ const AttendanceReports = () => {
                                 <Badge bg="secondary" pill className="text-nowrap">0</Badge>
                               )}
                             </td>
-                            <td className="text-center">
+                            <td className="text-center d-none d-xl-table-cell">
                               {empStats.overtime_amount > 0 ? (
                                 <Badge bg="info" pill className="text-nowrap">
                                   ₹{empStats.overtime_amount}
@@ -1307,18 +1319,17 @@ const AttendanceReports = () => {
                                 <Badge bg="secondary" pill className="text-nowrap">₹0</Badge>
                               )}
                             </td>
-                            <td className="text-center">
+                            <td className="text-center d-none d-xl-table-cell">
                               {empStats.comp_off_count > 0 ? (
-                                <Badge bg="purple" pill className="text-nowrap" style={{ backgroundColor: '#9b59b6' }} title={`Total Comp-Off Days: ${empStats.total_comp_off_days.toFixed(1)}`}>
-                                  <FaTrophy className="me-1" size={8} />
-                                  {empStats.comp_off_count} ({empStats.total_comp_off_days.toFixed(1)}d)
+                                <Badge bg="purple" pill className="text-nowrap" style={{ backgroundColor: '#9b59b6' }} title={`Total Days: ${empStats.total_comp_off_days.toFixed(1)}`}>
+                                  <FaTrophy className="me-1" size={8} /> {empStats.comp_off_count}
                                 </Badge>
                               ) : (
                                 <Badge bg="secondary" pill className="text-nowrap">0</Badge>
                               )}
                             </td>
                             <td className="text-center">
-                              <strong>{formatHours(empStats.total_hours)}</strong>
+                              <strong className="text-nowrap">{formatHours(empStats.total_hours)}</strong>
                             </td>
                           </tr>
                         );
@@ -1334,9 +1345,16 @@ const AttendanceReports = () => {
         </Card>
       )}
 
+      {/* Footer Note - Responsive */}
       <div className="text-center mt-3 text-muted small">
-        <p className="mb-0">
-          <FaClock className="me-1" /> Hover for details | <FaExclamationTriangle className="me-1 text-warning" size={10} /> * late login | <FaClock className="me-1 text-success" size={10} /> ⏰ Overtime | <FaTrophy className="me-1 text-purple" size={10} /> 🎉 Comp-Off earned
+        <p className="mb-0 d-flex flex-wrap justify-content-center gap-2">
+          <span><FaClock className="me-1" /> Hover for details</span>
+          <span className="d-none d-sm-inline">|</span>
+          <span><FaExclamationTriangle className="me-1 text-warning" size={10} /> * late login</span>
+          <span className="d-none d-sm-inline">|</span>
+          <span><FaClock className="me-1 text-success" size={10} /> ⏰ Overtime</span>
+          <span className="d-none d-sm-inline">|</span>
+          <span><FaTrophy className="me-1 text-purple" size={10} /> 🎉 Comp-Off</span>
         </p>
       </div>
     </div>

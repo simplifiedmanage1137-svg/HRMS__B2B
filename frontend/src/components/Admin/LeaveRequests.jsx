@@ -191,9 +191,10 @@ const LeaveRequests = () => {
       rejected: <FaTimesCircle className="me-1" />
     };
     return (
-      <Badge bg={colors[status]} className="px-3 py-2">
+      <Badge bg={colors[status]} className="px-2 px-sm-3 py-1 py-sm-2 d-inline-flex align-items-center">
         {icons[status]}
-        {status?.toUpperCase()}
+        <span className="d-none d-sm-inline">{status?.toUpperCase()}</span>
+        <span className="d-inline d-sm-none">{status?.charAt(0).toUpperCase()}</span>
       </Badge>
     );
   };
@@ -209,7 +210,7 @@ const LeaveRequests = () => {
       'Unpaid': 'danger'
     };
     return (
-      <Badge bg={colors[type] || 'light'} className="px-2 py-1">
+      <Badge bg={colors[type] || 'light'} className="px-2 py-1 text-nowrap">
         {type}
       </Badge>
     );
@@ -277,7 +278,7 @@ const LeaveRequests = () => {
 
   if (loading) {
     return (
-      <div className="d-flex justify-content-center align-items-center vh-100">
+      <div className="d-flex justify-content-center align-items-center min-vh-100">
         <div className="text-center">
           <Spinner animation="border" variant="primary" style={{ width: '3rem', height: '3rem' }} />
           <p className="mt-3 text-muted small">Loading leave requests...</p>
@@ -287,17 +288,17 @@ const LeaveRequests = () => {
   }
 
   return (
-    <div className="p-4">
-      {/* Header with title and Leave Reports button */}
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2 className="h4 mb-0">
+    <div className="p-2 p-md-3 p-lg-4">
+      {/* Header with title and Leave Reports button - Responsive */}
+      <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-4 gap-3">
+        <h2 className="h4 mb-0 d-flex align-items-center">
           <FaCalendarAlt className="me-2 text-dark" />
           Leave Requests Management
         </h2>
         <Button
           variant="dark"
           onClick={handleGoToReports}
-          className="d-flex align-items-center"
+          className="d-flex align-items-center ms-0 ms-sm-auto"
         >
           <FaChartBar className="me-2" />
           Leave Reports
@@ -310,71 +311,73 @@ const LeaveRequests = () => {
           variant={message.type}
           onClose={() => setMessage({ type: '', text: '' })}
           dismissible
-          className="mb-4 shadow-sm"
+          className="mb-4 shadow-sm py-2"
         >
-          {message.type === 'success' && <FaCheckCircle className="me-2" size={14} />}
-          {message.type === 'danger' && <FaExclamationTriangle className="me-2" size={14} />}
-          {message.text}
+          <div className="d-flex align-items-center">
+            {message.type === 'success' && <FaCheckCircle className="me-2 flex-shrink-0" size={14} />}
+            {message.type === 'danger' && <FaExclamationTriangle className="me-2 flex-shrink-0" size={14} />}
+            <span className="small">{message.text}</span>
+          </div>
         </Alert>
       )}
 
-      {/* Statistics Cards */}
-      <Row className="mb-4 g-3">
-        <Col md={3}>
-          <Card className="border-0 shadow-sm bg-white text-dark">
-            <Card.Body className="p-3">
+      {/* Statistics Cards - Responsive grid */}
+      <Row className="mb-4 g-2 g-md-3">
+        <Col xs={6} lg={3}>
+          <Card className="border-0 shadow-sm bg-white text-dark h-100">
+            <Card.Body className="p-2 p-md-3">
               <div className="d-flex justify-content-between align-items-center">
-                <div>
-                  <h5 className="text-dark mb-2 medium">Total Requests</h5>
+                <div className="overflow-hidden">
+                  <h6 className="text-dark mb-2 small text-truncate">Total Requests</h6>
                   <h5 className="mb-0 fw-semibold">{stats.total}</h5>
                 </div>
-                <div className="bg-dark bg-opacity-10 rounded-circle p-2">
-                  <FaCalendarAlt className="text-dark" size={24} />
+                <div className="bg-dark bg-opacity-10 rounded-circle p-2 flex-shrink-0">
+                  <FaCalendarAlt className="text-dark" size={20} />
                 </div>
               </div>
             </Card.Body>
           </Card>
         </Col>
-        <Col md={3}>
-          <Card className="border-0 shadow-sm bg-white text-dark">
-            <Card.Body className="p-3">
+        <Col xs={6} lg={3}>
+          <Card className="border-0 shadow-sm bg-white text-dark h-100">
+            <Card.Body className="p-2 p-md-3">
               <div className="d-flex justify-content-between align-items-center">
-                <div>
-                  <h5 className="text-dark mb-2 medium">Pending</h5>
+                <div className="overflow-hidden">
+                  <h6 className="text-dark mb-2 small text-truncate">Pending</h6>
                   <h5 className="mb-0 fw-semibold">{stats.pending}</h5>
                 </div>
-                <div className="bg-dark bg-opacity-10 rounded-circle p-2">
-                  <FaClock className="text-dark" size={24} />
+                <div className="bg-dark bg-opacity-10 rounded-circle p-2 flex-shrink-0">
+                  <FaClock className="text-dark" size={20} />
                 </div>
               </div>
             </Card.Body>
           </Card>
         </Col>
-        <Col md={3}>
-          <Card className="border-0 shadow-sm bg-white text-dark">
-            <Card.Body className="p-3">
+        <Col xs={6} lg={3}>
+          <Card className="border-0 shadow-sm bg-white text-dark h-100">
+            <Card.Body className="p-2 p-md-3">
               <div className="d-flex justify-content-between align-items-center">
-                <div>
-                  <h5 className="text-dark mb-2 medium">Approved</h5>
+                <div className="overflow-hidden">
+                  <h6 className="text-dark mb-2 small text-truncate">Approved</h6>
                   <h5 className="mb-0 fw-semibold">{stats.approved}</h5>
                 </div>
-                <div className="bg-dark bg-opacity-10 rounded-circle p-2">
-                  <FaCheckCircle className="text-dark" size={24} />
+                <div className="bg-dark bg-opacity-10 rounded-circle p-2 flex-shrink-0">
+                  <FaCheckCircle className="text-dark" size={20} />
                 </div>
               </div>
             </Card.Body>
           </Card>
         </Col>
-        <Col md={3}>
-          <Card className="border-0 shadow-sm bg-white text-dark">
-            <Card.Body className="p-3">
+        <Col xs={6} lg={3}>
+          <Card className="border-0 shadow-sm bg-white text-dark h-100">
+            <Card.Body className="p-2 p-md-3">
               <div className="d-flex justify-content-between align-items-center">
-                <div>
-                  <h5 className="text-dark mb-2 medium">Rejected</h5>
+                <div className="overflow-hidden">
+                  <h6 className="text-dark mb-2 small text-truncate">Rejected</h6>
                   <h5 className="mb-0 fw-semibold">{stats.rejected}</h5>
                 </div>
-                <div className="bg-dark bg-opacity-10 rounded-circle p-2">
-                  <FaTimesCircle className="text-dark" size={24} />
+                <div className="bg-dark bg-opacity-10 rounded-circle p-2 flex-shrink-0">
+                  <FaTimesCircle className="text-dark" size={20} />
                 </div>
               </div>
             </Card.Body>
@@ -384,16 +387,16 @@ const LeaveRequests = () => {
 
       {/* Filters */}
       <Card className="mb-4 border-0 shadow-sm">
-        <Card.Body className="p-3">
-          <Row className="g-3">
-            <Col md={7}>
+        <Card.Body className="p-2 p-md-3">
+          <Row className="g-2 g-md-3">
+            <Col xs={12} md={7}>
               <Form.Group>
-                 <div className="d-flex gap-2 flex-wrap">
+                <div className="d-flex gap-1 gap-sm-2 flex-wrap">
                   <Button
                     size="sm"
                     variant={filter === 'all' ? 'primary' : 'outline-secondary'}
                     onClick={() => setFilter('all')}
-                    className="px-3"
+                    className="px-2 px-sm-3"
                   >
                     All ({stats.total})
                   </Button>
@@ -401,7 +404,7 @@ const LeaveRequests = () => {
                     size="sm"
                     variant={filter === 'pending' ? 'warning' : 'outline-warning'}
                     onClick={() => setFilter('pending')}
-                    className="px-3"
+                    className="px-2 px-sm-3"
                   >
                     Pending ({stats.pending})
                   </Button>
@@ -409,7 +412,7 @@ const LeaveRequests = () => {
                     size="sm"
                     variant={filter === 'approved' ? 'success' : 'outline-success'}
                     onClick={() => setFilter('approved')}
-                    className="px-3"
+                    className="px-2 px-sm-3"
                   >
                     Approved ({stats.approved})
                   </Button>
@@ -417,7 +420,7 @@ const LeaveRequests = () => {
                     size="sm"
                     variant={filter === 'rejected' ? 'danger' : 'outline-danger'}
                     onClick={() => setFilter('rejected')}
-                    className="px-3"
+                    className="px-2 px-sm-3"
                   >
                     Rejected ({stats.rejected})
                   </Button>
@@ -425,7 +428,7 @@ const LeaveRequests = () => {
               </Form.Group>
             </Col>
 
-            <Col md={5}>
+            <Col xs={12} md={5}>
               <Form.Group>
                 <InputGroup size="sm">
                   <InputGroup.Text className="bg-light border-0">
@@ -449,22 +452,21 @@ const LeaveRequests = () => {
                     </Button>
                   )}
                 </InputGroup>
-               
               </Form.Group>
             </Col>
           </Row>
 
           {/* Active Filters Display */}
           {(filter !== 'all' || searchTerm) && (
-            <div className="mt-2 d-flex align-items-center">
-              <small className="text-muted me-2">Active filters:</small>
+            <div className="mt-2 d-flex flex-wrap align-items-center gap-2">
+              <small className="text-muted">Active filters:</small>
               {filter !== 'all' && (
-                <Badge bg="info" className="me-2 px-2 py-1">
+                <Badge bg="info" className="px-2 py-1">
                   Status: {filter}
                 </Badge>
               )}
               {searchTerm && (
-                <Badge bg="info" className="me-2 px-2 py-1">
+                <Badge bg="info" className="px-2 py-1">
                   Search: "{searchTerm}"
                 </Badge>
               )}
@@ -483,32 +485,30 @@ const LeaveRequests = () => {
 
       {/* Main Table Card with Vertical Scroll */}
       <Card className="border-0 shadow-sm">
-        <Card.Header className="bg-light d-flex justify-content-between align-items-center py-3">
-          <h5 className="mb-0">
+        <Card.Header className="bg-light d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center py-3 gap-2">
+          <h5 className="mb-0 d-flex align-items-center">
             <FaCalendarAlt className="me-2 text-dark" size={14} />
             Leave Requests List
           </h5>
-          <Badge bg="dark" pill>
+          <Badge bg="dark" pill className="ms-0 ms-sm-auto">
             {filteredRequests.length} Records
           </Badge>
         </Card.Header>
         <Card.Body className="p-0">
-          {/* Table with Vertical Scroll - maxHeight 400px */}
+          {/* Table with Vertical Scroll - Responsive */}
           <div className="table-responsive" style={{ maxHeight: '400px', overflowY: 'auto' }}>
-            <Table className="mb-0">
+            <Table className="mb-0" size="sm">
               <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
                 <tr>
-                  <th className="small fw-normal text-dark warp">
-                    Sr No
-                  </th>
-                  <th className=" small fw-normal text-dark">Employee</th>
-                  <th className=" small fw-normal text-dark">Leave Type</th>
-                  <th className=" small fw-normal text-dark">Duration</th>
-                  <th className=" small fw-normal text-dark">Date Range</th>
-                  <th className=" small fw-normal text-dark">Days</th>
-                  <th className=" small fw-normal text-dark">Reason</th>
-                  <th className=" small fw-normal text-dark">Status</th>
-                  <th className=" small fw-normal text-dark">Actions</th>
+                  <th className="small fw-normal text-dark text-center">Sr No</th>
+                  <th className="small fw-normal text-dark">Employee</th>
+                  <th className="small fw-normal text-dark d-none d-sm-table-cell">Leave Type</th>
+                  <th className="small fw-normal text-dark d-none d-md-table-cell">Duration</th>
+                  <th className="small fw-normal text-dark d-none d-lg-table-cell">Date Range</th>
+                  <th className="small fw-normal text-dark d-none d-xl-table-cell">Days</th>
+                  <th className="small fw-normal text-dark">Reason</th>
+                  <th className="small fw-normal text-dark">Status</th>
+                  <th className="small fw-normal text-dark text-center">Actions</th>
                 </tr>
               </thead>
 
@@ -516,42 +516,51 @@ const LeaveRequests = () => {
                 {currentItems.length > 0 ? (
                   currentItems.map((leave, index) => (
                     <tr key={leave.id}>
-                      {/* Sr No Column - Global index based on pagination */}
-                      <td className="text-center">
-                          {indexOfFirstItem + index + 1}
+                      {/* Sr No Column */}
+                      <td className="text-center small">
+                        {indexOfFirstItem + index + 1}
                       </td>
 
-                      <td className="">
-                        <div className="small">
-                          <div>{leave.first_name} {leave.last_name}</div>
-                          <div className="text-muted">{leave.employee_id}</div>
+                      {/* Employee Column */}
+                      <td className="small">
+                        <div className="text-truncate" style={{ maxWidth: '100px' }} title={`${leave.first_name} ${leave.last_name}`}>
+                          {leave.first_name} {leave.last_name}
+                        </div>
+                        <div className="text-muted small text-truncate" style={{ maxWidth: '100px' }} title={leave.employee_id}>
+                          {leave.employee_id}
                         </div>
                       </td>
 
-                      <td className=" small">
+                      {/* Leave Type - Hidden on xs */}
+                      <td className="small d-none d-sm-table-cell">
                         {getTypeBadge(leave.leave_type)}
                       </td>
 
-                      <td className=" small">
+                      {/* Duration - Hidden on sm and below */}
+                      <td className="small d-none d-md-table-cell">
                         {leave.leave_duration}
                       </td>
 
-                      <td className=" small">
-                        {formatDateRange(leave.start_date, leave.end_date)}
+                      {/* Date Range - Hidden on lg and below */}
+                      <td className="small d-none d-lg-table-cell">
+                        <span className="text-nowrap" title={formatDateRange(leave.start_date, leave.end_date)}>
+                          {formatDateRange(leave.start_date, leave.end_date)}
+                        </span>
                       </td>
 
-                      <td className=" small">
+                      {/* Days - Hidden on xl and below */}
+                      <td className="small d-none d-xl-table-cell">
                         {calculateDays(leave)} day's
                       </td>
 
-                      <td className="">
-                        <div style={{ margin: '0 auto' }}>
-                          <small className="text-truncate d-block">
+                      {/* Reason Column */}
+                      <td className="small">
+                        <div style={{ maxWidth: '120px' }}>
+                          <div className="text-truncate d-block" title={leave.reason}>
                             {leave.reason}
-                          </small>
-
+                          </div>
                           {leave.reporting_manager && (
-                            <small className="d-block text-muted">
+                            <small className="d-block text-muted text-truncate" title={leave.reporting_manager}>
                               <FaBriefcase className="me-1" size={10} />
                               {leave.reporting_manager}
                             </small>
@@ -559,13 +568,14 @@ const LeaveRequests = () => {
                         </div>
                       </td>
 
-                      <td className=" small">
+                      {/* Status Column */}
+                      <td className="small">
                         {getStatusBadge(leave.status)}
                       </td>
 
-                      <td className="">
-                        <div className="d-flex justify-content-center gap-3 align-items-center">
-
+                      {/* Actions Column */}
+                      <td className="text-center">
+                        <div className="d-flex justify-content-center gap-2 gap-sm-3 align-items-center">
                           {/* View */}
                           <FaEye
                             size={16}
@@ -605,7 +615,6 @@ const LeaveRequests = () => {
                     <td colSpan="9" className="text-center py-5">
                       <FaSearch size={40} className="text-muted mb-3 opacity-50" />
                       <p className="text-muted mb-0">No leave requests found</p>
-
                       {(filter !== "all" || searchTerm) && (
                         <Button
                           variant="link"
@@ -623,35 +632,90 @@ const LeaveRequests = () => {
             </Table>
           </div>
 
-          {/* Pagination - Separate from scrollable area */}
+          {/* Pagination - Responsive */}
           {totalPages > 1 && (
-            <div className="d-flex justify-content-between align-items-center px-3 py-2 border-top">
-              <small className="text-muted">
+            <div className="d-flex flex-column flex-sm-row justify-content-between align-items-center px-3 py-2 border-top gap-2">
+              <small className="text-muted order-2 order-sm-1">
                 Showing {indexOfFirstItem + 1} to{" "}
                 {Math.min(indexOfLastItem, filteredRequests.length)} of{" "}
                 {filteredRequests.length} entries
               </small>
 
-              <Pagination size="sm">
+              <Pagination size="sm" className="mb-0 order-1 order-sm-2">
                 <Pagination.First
                   onClick={() => paginate(1)}
                   disabled={currentPage === 1}
+                  className="d-none d-sm-inline"
                 />
                 <Pagination.Prev
                   onClick={() => paginate(currentPage - 1)}
                   disabled={currentPage === 1}
                 />
 
-                {[...Array(totalPages)].map((_, i) => (
-                  <Pagination.Item
-                    key={i + 1}
-                    active={i + 1 === currentPage}
-                    onClick={() => paginate(i + 1)}
-                  >
-                    {i + 1}
-                  </Pagination.Item>
-                ))}
+                {totalPages <= 5 ? (
+                  [...Array(totalPages)].map((_, i) => (
+                    <Pagination.Item
+                      key={i + 1}
+                      active={i + 1 === currentPage}
+                      onClick={() => paginate(i + 1)}
+                      className="d-none d-sm-inline"
+                    >
+                      {i + 1}
+                    </Pagination.Item>
+                  ))
+                ) : (
+                  <>
+                    {/* Show first page */}
+                    <Pagination.Item
+                      key={1}
+                      active={1 === currentPage}
+                      onClick={() => paginate(1)}
+                      className="d-none d-sm-inline"
+                    >
+                      1
+                    </Pagination.Item>
+                    
+                    {/* Show ellipsis if currentPage > 3 */}
+                    {currentPage > 3 && <Pagination.Ellipsis className="d-none d-sm-inline" />}
+                    
+                    {/* Show pages around current page */}
+                    {[...Array(totalPages)].map((_, i) => {
+                      const pageNum = i + 1;
+                      if (pageNum !== 1 && pageNum !== totalPages && 
+                          pageNum >= currentPage - 1 && pageNum <= currentPage + 1) {
+                        return (
+                          <Pagination.Item
+                            key={pageNum}
+                            active={pageNum === currentPage}
+                            onClick={() => paginate(pageNum)}
+                            className="d-none d-sm-inline"
+                          >
+                            {pageNum}
+                          </Pagination.Item>
+                        );
+                      }
+                      return null;
+                    })}
+                    
+                    {/* Show ellipsis if currentPage < totalPages - 2 */}
+                    {currentPage < totalPages - 2 && <Pagination.Ellipsis className="d-none d-sm-inline" />}
+                    
+                    {/* Show last page */}
+                    {totalPages > 1 && (
+                      <Pagination.Item
+                        key={totalPages}
+                        active={totalPages === currentPage}
+                        onClick={() => paginate(totalPages)}
+                        className="d-none d-sm-inline"
+                      >
+                        {totalPages}
+                      </Pagination.Item>
+                    )}
+                  </>
+                )}
 
+                <Pagination.Ellipsis className="d-inline d-sm-none" />
+                
                 <Pagination.Next
                   onClick={() => paginate(currentPage + 1)}
                   disabled={currentPage === totalPages}
@@ -659,6 +723,7 @@ const LeaveRequests = () => {
                 <Pagination.Last
                   onClick={() => paginate(totalPages)}
                   disabled={currentPage === totalPages}
+                  className="d-none d-sm-inline"
                 />
               </Pagination>
             </div>
@@ -666,23 +731,29 @@ const LeaveRequests = () => {
         </Card.Body>
       </Card>
 
-      {/* View Details Modal */}
-      <Modal show={showModal} onHide={() => setShowModal(false)} size="lg" centered>
+      {/* View Details Modal - Responsive */}
+      <Modal 
+        show={showModal} 
+        onHide={() => setShowModal(false)} 
+        size="lg" 
+        centered
+        dialogClassName="mx-2 mx-md-auto"
+      >
         <Modal.Header closeButton className="bg-primary text-white py-2">
-          <Modal.Title as="h6" className="mb-0 small fw-semibold">
+          <Modal.Title as="h6" className="mb-0 small fw-semibold d-flex align-items-center">
             <FaEye className="me-2" size={14} />
-            Leave Request Details
+            <span className="text-truncate">Leave Request Details</span>
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body className="p-3">
+        <Modal.Body className="p-2 p-md-3">
           {selectedLeave && (
             <div className="small">
-              <Row className="g-3">
-                <Col md={6}>
-                  <Card className="border-0 bg-light">
-                    <Card.Body className="p-3">
-                      <h6 className="text-primary mb-2 small fw-semibold">
-                        <FaUserCircle className="me-2" size={12} />
+              <Row className="g-2 g-md-3">
+                <Col xs={12} md={6}>
+                  <Card className="border-0 bg-light h-100">
+                    <Card.Body className="p-2 p-md-3">
+                      <h6 className="text-primary mb-2 small fw-semibold d-flex align-items-center">
+                        <FaUserCircle className="me-2 flex-shrink-0" size={12} />
                         Employee Information
                       </h6>
                       <p className="mb-1"><strong>Name:</strong> {selectedLeave.first_name} {selectedLeave.last_name}</p>
@@ -692,11 +763,11 @@ const LeaveRequests = () => {
                     </Card.Body>
                   </Card>
                 </Col>
-                <Col md={6}>
-                  <Card className="border-0 bg-light">
-                    <Card.Body className="p-3">
-                      <h6 className="text-primary mb-2 small fw-semibold">
-                        <FaCalendarAlt className="me-2" size={12} />
+                <Col xs={12} md={6}>
+                  <Card className="border-0 bg-light h-100">
+                    <Card.Body className="p-2 p-md-3">
+                      <h6 className="text-primary mb-2 small fw-semibold d-flex align-items-center">
+                        <FaCalendarAlt className="me-2 flex-shrink-0" size={12} />
                         Leave Information
                       </h6>
                       <p className="mb-1"><strong>Type:</strong> {selectedLeave.leave_type}</p>
@@ -710,10 +781,10 @@ const LeaveRequests = () => {
                 </Col>
               </Row>
 
-              <Row className="mt-3 g-3">
-                <Col md={6}>
+              <Row className="mt-2 mt-md-3 g-2 g-md-3">
+                <Col xs={12} md={6}>
                   <Card className="border-0 bg-light">
-                    <Card.Body className="p-3">
+                    <Card.Body className="p-2 p-md-3">
                       <h6 className="text-primary mb-2 small fw-semibold">Date Range</h6>
                       <p className="mb-1"><strong>Start Date:</strong> {formatDate(selectedLeave.start_date)}</p>
                       <p className="mb-1"><strong>End Date:</strong> {formatDate(selectedLeave.end_date)}</p>
@@ -721,9 +792,9 @@ const LeaveRequests = () => {
                     </Card.Body>
                   </Card>
                 </Col>
-                <Col md={6}>
+                <Col xs={12} md={6}>
                   <Card className="border-0 bg-light">
-                    <Card.Body className="p-3">
+                    <Card.Body className="p-2 p-md-3">
                       <h6 className="text-primary mb-2 small fw-semibold">Status</h6>
                       <p className="mb-2">{getStatusBadge(selectedLeave.status)}</p>
                       {selectedLeave.admin_comments && (
@@ -737,10 +808,10 @@ const LeaveRequests = () => {
                 </Col>
               </Row>
 
-              <Card className="border-0 bg-light mt-3">
-                <Card.Body className="p-3">
-                  <h6 className="text-primary mb-2 small fw-semibold">
-                    <FaInfoCircle className="me-2" size={12} />
+              <Card className="border-0 bg-light mt-2 mt-md-3">
+                <Card.Body className="p-2 p-md-3">
+                  <h6 className="text-primary mb-2 small fw-semibold d-flex align-items-center">
+                    <FaInfoCircle className="me-2 flex-shrink-0" size={12} />
                     Reason for Leave
                   </h6>
                   <p className="mb-0">{selectedLeave.reason}</p>
@@ -766,6 +837,7 @@ const LeaveRequests = () => {
                   setShowModal(false);
                   handleAction(selectedLeave, 'approve');
                 }}
+                className="d-inline-flex align-items-center"
               >
                 <FaCheck className="me-1" size={12} />
                 Approve
@@ -777,6 +849,7 @@ const LeaveRequests = () => {
                   setShowModal(false);
                   handleAction(selectedLeave, 'reject');
                 }}
+                className="d-inline-flex align-items-center"
               >
                 <FaTimes className="me-1" size={12} />
                 Reject
@@ -789,21 +862,26 @@ const LeaveRequests = () => {
         </Modal.Footer>
       </Modal>
 
-      {/* Action Modal (Approve/Reject) */}
-      <Modal show={showActionModal} onHide={() => setShowActionModal(false)} centered>
+      {/* Action Modal (Approve/Reject) - Responsive */}
+      <Modal 
+        show={showActionModal} 
+        onHide={() => setShowActionModal(false)} 
+        centered
+        dialogClassName="mx-2 mx-md-auto"
+      >
         <Modal.Header closeButton className={selectedLeave?.status === 'pending' ? 'bg-warning' : 'bg-info'} style={{ color: 'white' }}>
-          <Modal.Title as="h6" className="mb-0 small fw-semibold">
+          <Modal.Title as="h6" className="mb-0 small fw-semibold d-flex align-items-center">
             {selectedLeave?.status === 'pending' ? (
               <>
-                <FaCheckCircle className="me-2" size={14} />
-                {comments ? 'Reject' : 'Approve'} Leave Request
+                <FaCheckCircle className="me-2 flex-shrink-0" size={14} />
+                <span className="text-truncate">{comments ? 'Reject' : 'Approve'} Leave Request</span>
               </>
             ) : (
               'Update Leave Request'
             )}
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body className="p-3">
+        <Modal.Body className="p-2 p-md-3">
           {selectedLeave && (
             <div className="small">
               <p className="mb-2">
@@ -840,16 +918,17 @@ const LeaveRequests = () => {
             size="sm"
             onClick={() => handleStatusUpdate(selectedLeave?.id, 'approved')}
             disabled={processing}
+            className="d-inline-flex align-items-center"
           >
             {processing ? (
               <>
                 <Spinner size="sm" animation="border" className="me-1" />
-                Processing...
+                <span className="d-none d-sm-inline">Processing...</span>
               </>
             ) : (
               <>
                 <FaCheck className="me-1" size={12} />
-                Approve
+                <span className="d-none d-sm-inline">Approve</span>
               </>
             )}
           </Button>
@@ -858,16 +937,17 @@ const LeaveRequests = () => {
             size="sm"
             onClick={() => handleStatusUpdate(selectedLeave?.id, 'rejected')}
             disabled={processing}
+            className="d-inline-flex align-items-center"
           >
             {processing ? (
               <>
                 <Spinner size="sm" animation="border" className="me-1" />
-                Processing...
+                <span className="d-none d-sm-inline">Processing...</span>
               </>
             ) : (
               <>
                 <FaTimes className="me-1" size={12} />
-                Reject
+                <span className="d-none d-sm-inline">Reject</span>
               </>
             )}
           </Button>

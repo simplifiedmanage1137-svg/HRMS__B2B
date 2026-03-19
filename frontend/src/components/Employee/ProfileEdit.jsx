@@ -256,14 +256,14 @@ const ProfileEdit = () => {
     }
 
     return (
-        <div className="profile-edit p-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
+        <div className="p-2 p-md-3 p-lg-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
             {/* Header */}
-            <div className="d-flex justify-content-between align-items-center mb-4">
+            <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
                 <div>
-                    <h4 className="mb-1">
+                    <h5 className="mb-1 d-flex align-items-center">
                         <FaEdit className="me-2 text-primary" />
                         Edit Profile
-                    </h4>
+                    </h5>
                     <p className="text-muted small mb-0">
                         Update your personal and professional information
                     </p>
@@ -272,6 +272,7 @@ const ProfileEdit = () => {
                     variant="outline-secondary" 
                     size="sm"
                     onClick={handleCancel}
+                    className="d-inline-flex align-items-center ms-0 ms-md-auto"
                 >
                     <FaTimes className="me-2" size={12} />
                     Cancel
@@ -280,55 +281,59 @@ const ProfileEdit = () => {
 
             {/* Alerts */}
             {error && (
-                <Alert variant="danger" onClose={() => setError('')} dismissible className="mb-4">
-                    <FaExclamationTriangle className="me-2" />
-                    {error}
+                <Alert variant="danger" onClose={() => setError('')} dismissible className="mb-4 py-2">
+                    <div className="d-flex align-items-center">
+                        <FaExclamationTriangle className="me-2 flex-shrink-0" />
+                        <span className="small">{error}</span>
+                    </div>
                 </Alert>
             )}
 
             {success && (
-                <Alert variant="success" onClose={() => setSuccess('')} dismissible className="mb-4">
-                    <FaCheckCircle className="me-2" />
-                    {success}
+                <Alert variant="success" onClose={() => setSuccess('')} dismissible className="mb-4 py-2">
+                    <div className="d-flex align-items-center">
+                        <FaCheckCircle className="me-2 flex-shrink-0" />
+                        <span className="small">{success}</span>
+                    </div>
                 </Alert>
             )}
 
             {/* Main Form Card */}
             <Card className="border-0 shadow-sm">
-                <Card.Header className="bg-white py-3 border-0">
-                    <Nav variant="tabs" activeKey={activeTab} onSelect={(k) => setActiveTab(k)} className="border-0">
+                <Card.Header className="bg-white py-2 py-md-3 border-0 overflow-auto">
+                    <Nav variant="tabs" activeKey={activeTab} onSelect={(k) => setActiveTab(k)} className="border-0 flex-nowrap" style={{ minWidth: '600px' }}>
                         <Nav.Item>
-                            <Nav.Link eventKey="personal" className="small">
+                            <Nav.Link eventKey="personal" className="small text-nowrap">
                                 <FaUser className="me-2" size={12} />
                                 Personal
                             </Nav.Link>
                         </Nav.Item>
                         <Nav.Item>
-                            <Nav.Link eventKey="contact" className="small">
+                            <Nav.Link eventKey="contact" className="small text-nowrap">
                                 <FaEnvelope className="me-2" size={12} />
                                 Contact
                             </Nav.Link>
                         </Nav.Item>
                         <Nav.Item>
-                            <Nav.Link eventKey="address" className="small">
+                            <Nav.Link eventKey="address" className="small text-nowrap">
                                 <FaMapMarkerAlt className="me-2" size={12} />
                                 Address
                             </Nav.Link>
                         </Nav.Item>
                         <Nav.Item>
-                            <Nav.Link eventKey="employment" className="small">
+                            <Nav.Link eventKey="employment" className="small text-nowrap">
                                 <FaBriefcase className="me-2" size={12} />
                                 Employment
                             </Nav.Link>
                         </Nav.Item>
                         <Nav.Item>
-                            <Nav.Link eventKey="bank" className="small">
+                            <Nav.Link eventKey="bank" className="small text-nowrap">
                                 <FaUniversity className="me-2" size={12} />
                                 Bank
                             </Nav.Link>
                         </Nav.Item>
                         <Nav.Item>
-                            <Nav.Link eventKey="emergency" className="small">
+                            <Nav.Link eventKey="emergency" className="small text-nowrap">
                                 <FaHeartbeat className="me-2" size={12} />
                                 Emergency
                             </Nav.Link>
@@ -336,15 +341,15 @@ const ProfileEdit = () => {
                     </Nav>
                 </Card.Header>
 
-                <Card.Body className="p-4">
+                <Card.Body className="p-2 p-md-3 p-lg-4">
                     <Form onSubmit={handleSubmit}>
                         {/* Personal Information Tab */}
                         {activeTab === 'personal' && (
                             <div>
-                                <h6 className="mb-3">Personal Information</h6>
-                                <Row>
-                                    <Col md={4}>
-                                        <Form.Group className="mb-3">
+                                <h6 className="mb-3 small">Personal Information</h6>
+                                <Row className="g-2">
+                                    <Col xs={12} md={4}>
+                                        <Form.Group className="mb-2 mb-md-3">
                                             <Form.Label className="small fw-semibold">
                                                 First Name <span className="text-danger">*</span>
                                             </Form.Label>
@@ -361,8 +366,8 @@ const ProfileEdit = () => {
                                             </Form.Control.Feedback>
                                         </Form.Group>
                                     </Col>
-                                    <Col md={4}>
-                                        <Form.Group className="mb-3">
+                                    <Col xs={12} md={4}>
+                                        <Form.Group className="mb-2 mb-md-3">
                                             <Form.Label className="small fw-semibold">Middle Name</Form.Label>
                                             <Form.Control
                                                 type="text"
@@ -373,8 +378,8 @@ const ProfileEdit = () => {
                                             />
                                         </Form.Group>
                                     </Col>
-                                    <Col md={4}>
-                                        <Form.Group className="mb-3">
+                                    <Col xs={12} md={4}>
+                                        <Form.Group className="mb-2 mb-md-3">
                                             <Form.Label className="small fw-semibold">
                                                 Last Name <span className="text-danger">*</span>
                                             </Form.Label>
@@ -393,9 +398,9 @@ const ProfileEdit = () => {
                                     </Col>
                                 </Row>
 
-                                <Row>
-                                    <Col md={6}>
-                                        <Form.Group className="mb-3">
+                                <Row className="g-2">
+                                    <Col xs={12} md={6}>
+                                        <Form.Group className="mb-2 mb-md-3">
                                             <Form.Label className="small fw-semibold">Date of Birth</Form.Label>
                                             <Form.Control
                                                 type="date"
@@ -406,8 +411,8 @@ const ProfileEdit = () => {
                                             />
                                         </Form.Group>
                                     </Col>
-                                    <Col md={6}>
-                                        <Form.Group className="mb-3">
+                                    <Col xs={12} md={6}>
+                                        <Form.Group className="mb-2 mb-md-3">
                                             <Form.Label className="small fw-semibold">Blood Group</Form.Label>
                                             <Form.Select
                                                 name="blood_group"
@@ -429,10 +434,10 @@ const ProfileEdit = () => {
                         {/* Contact Information Tab */}
                         {activeTab === 'contact' && (
                             <div>
-                                <h6 className="mb-3">Contact Information</h6>
-                                <Row>
-                                    <Col md={6}>
-                                        <Form.Group className="mb-3">
+                                <h6 className="mb-3 small">Contact Information</h6>
+                                <Row className="g-2">
+                                    <Col xs={12} md={6}>
+                                        <Form.Group className="mb-2 mb-md-3">
                                             <Form.Label className="small fw-semibold">
                                                 Email <span className="text-danger">*</span>
                                             </Form.Label>
@@ -449,8 +454,8 @@ const ProfileEdit = () => {
                                             </Form.Control.Feedback>
                                         </Form.Group>
                                     </Col>
-                                    <Col md={6}>
-                                        <Form.Group className="mb-3">
+                                    <Col xs={12} md={6}>
+                                        <Form.Group className="mb-2 mb-md-3">
                                             <Form.Label className="small fw-semibold">Phone</Form.Label>
                                             <Form.Control
                                                 type="tel"
@@ -473,8 +478,8 @@ const ProfileEdit = () => {
                         {/* Address Tab */}
                         {activeTab === 'address' && (
                             <div>
-                                <h6 className="mb-3">Address</h6>
-                                <Form.Group className="mb-3">
+                                <h6 className="mb-3 small">Address</h6>
+                                <Form.Group className="mb-2 mb-md-3">
                                     <Form.Label className="small fw-semibold">Address</Form.Label>
                                     <Form.Control
                                         as="textarea"
@@ -486,9 +491,9 @@ const ProfileEdit = () => {
                                     />
                                 </Form.Group>
 
-                                <Row>
-                                    <Col md={4}>
-                                        <Form.Group className="mb-3">
+                                <Row className="g-2">
+                                    <Col xs={12} md={4}>
+                                        <Form.Group className="mb-2 mb-md-3">
                                             <Form.Label className="small fw-semibold">City</Form.Label>
                                             <Form.Control
                                                 type="text"
@@ -499,8 +504,8 @@ const ProfileEdit = () => {
                                             />
                                         </Form.Group>
                                     </Col>
-                                    <Col md={4}>
-                                        <Form.Group className="mb-3">
+                                    <Col xs={12} md={4}>
+                                        <Form.Group className="mb-2 mb-md-3">
                                             <Form.Label className="small fw-semibold">State</Form.Label>
                                             <Form.Control
                                                 type="text"
@@ -511,8 +516,8 @@ const ProfileEdit = () => {
                                             />
                                         </Form.Group>
                                     </Col>
-                                    <Col md={4}>
-                                        <Form.Group className="mb-3">
+                                    <Col xs={12} md={4}>
+                                        <Form.Group className="mb-2 mb-md-3">
                                             <Form.Label className="small fw-semibold">Pincode</Form.Label>
                                             <Form.Control
                                                 type="text"
@@ -530,10 +535,10 @@ const ProfileEdit = () => {
                         {/* Employment Details Tab */}
                         {activeTab === 'employment' && (
                             <div>
-                                <h6 className="mb-3">Employment Details</h6>
-                                <Row>
-                                    <Col md={6}>
-                                        <Form.Group className="mb-3">
+                                <h6 className="mb-3 small">Employment Details</h6>
+                                <Row className="g-2">
+                                    <Col xs={12} md={6}>
+                                        <Form.Group className="mb-2 mb-md-3">
                                             <Form.Label className="small fw-semibold">Designation</Form.Label>
                                             <Form.Control
                                                 type="text"
@@ -544,8 +549,8 @@ const ProfileEdit = () => {
                                             />
                                         </Form.Group>
                                     </Col>
-                                    <Col md={6}>
-                                        <Form.Group className="mb-3">
+                                    <Col xs={12} md={6}>
+                                        <Form.Group className="mb-2 mb-md-3">
                                             <Form.Label className="small fw-semibold">Department</Form.Label>
                                             <Form.Control
                                                 type="text"
@@ -558,9 +563,9 @@ const ProfileEdit = () => {
                                     </Col>
                                 </Row>
 
-                                <Row>
-                                    <Col md={6}>
-                                        <Form.Group className="mb-3">
+                                <Row className="g-2">
+                                    <Col xs={12} md={6}>
+                                        <Form.Group className="mb-2 mb-md-3">
                                             <Form.Label className="small fw-semibold">Employment Type</Form.Label>
                                             <Form.Select
                                                 name="employment_type"
@@ -574,8 +579,8 @@ const ProfileEdit = () => {
                                             </Form.Select>
                                         </Form.Group>
                                     </Col>
-                                    <Col md={6}>
-                                        <Form.Group className="mb-3">
+                                    <Col xs={12} md={6}>
+                                        <Form.Group className="mb-2 mb-md-3">
                                             <Form.Label className="small fw-semibold">Shift Timing</Form.Label>
                                             <Form.Control
                                                 type="text"
@@ -589,7 +594,7 @@ const ProfileEdit = () => {
                                     </Col>
                                 </Row>
 
-                                <Form.Group className="mb-3">
+                                <Form.Group className="mb-2 mb-md-3">
                                     <Form.Label className="small fw-semibold">Reporting Manager</Form.Label>
                                     <Form.Control
                                         type="text"
@@ -605,10 +610,10 @@ const ProfileEdit = () => {
                         {/* Bank Details Tab */}
                         {activeTab === 'bank' && (
                             <div>
-                                <h6 className="mb-3">Bank Details</h6>
-                                <Row>
-                                    <Col md={6}>
-                                        <Form.Group className="mb-3">
+                                <h6 className="mb-3 small">Bank Details</h6>
+                                <Row className="g-2">
+                                    <Col xs={12} md={6}>
+                                        <Form.Group className="mb-2 mb-md-3">
                                             <Form.Label className="small fw-semibold">Account Holder Name</Form.Label>
                                             <Form.Control
                                                 type="text"
@@ -619,8 +624,8 @@ const ProfileEdit = () => {
                                             />
                                         </Form.Group>
                                     </Col>
-                                    <Col md={6}>
-                                        <Form.Group className="mb-3">
+                                    <Col xs={12} md={6}>
+                                        <Form.Group className="mb-2 mb-md-3">
                                             <Form.Label className="small fw-semibold">Account Number</Form.Label>
                                             <Form.Control
                                                 type="text"
@@ -633,9 +638,9 @@ const ProfileEdit = () => {
                                     </Col>
                                 </Row>
 
-                                <Row>
-                                    <Col md={4}>
-                                        <Form.Group className="mb-3">
+                                <Row className="g-2">
+                                    <Col xs={12} md={4}>
+                                        <Form.Group className="mb-2 mb-md-3">
                                             <Form.Label className="small fw-semibold">IFSC Code</Form.Label>
                                             <Form.Control
                                                 type="text"
@@ -651,8 +656,8 @@ const ProfileEdit = () => {
                                             </Form.Control.Feedback>
                                         </Form.Group>
                                     </Col>
-                                    <Col md={4}>
-                                        <Form.Group className="mb-3">
+                                    <Col xs={12} md={4}>
+                                        <Form.Group className="mb-2 mb-md-3">
                                             <Form.Label className="small fw-semibold">Branch Name</Form.Label>
                                             <Form.Control
                                                 type="text"
@@ -663,8 +668,8 @@ const ProfileEdit = () => {
                                             />
                                         </Form.Group>
                                     </Col>
-                                    <Col md={4}>
-                                        <Form.Group className="mb-3">
+                                    <Col xs={12} md={4}>
+                                        <Form.Group className="mb-2 mb-md-3">
                                             <Form.Label className="small fw-semibold">PAN Number</Form.Label>
                                             <Form.Control
                                                 type="text"
@@ -682,7 +687,7 @@ const ProfileEdit = () => {
                                     </Col>
                                 </Row>
 
-                                <Form.Group className="mb-3">
+                                <Form.Group className="mb-2 mb-md-3">
                                     <Form.Label className="small fw-semibold">Aadhar Number</Form.Label>
                                     <Form.Control
                                         type="text"
@@ -703,8 +708,8 @@ const ProfileEdit = () => {
                         {/* Emergency Contact Tab */}
                         {activeTab === 'emergency' && (
                             <div>
-                                <h6 className="mb-3">Emergency Contact</h6>
-                                <Form.Group className="mb-3">
+                                <h6 className="mb-3 small">Emergency Contact</h6>
+                                <Form.Group className="mb-2 mb-md-3">
                                     <Form.Label className="small fw-semibold">Emergency Contact Number</Form.Label>
                                     <Form.Control
                                         type="tel"
@@ -723,12 +728,13 @@ const ProfileEdit = () => {
                         )}
 
                         {/* Form Actions */}
-                        <div className="d-flex justify-content-end gap-2 mt-4">
+                        <div className="d-flex flex-column flex-sm-row justify-content-end gap-2 mt-4">
                             <Button
                                 type="button"
                                 variant="outline-secondary"
                                 size="sm"
                                 onClick={handleCancel}
+                                className="order-2 order-sm-1"
                             >
                                 <FaTimes className="me-2" size={12} />
                                 Cancel
@@ -738,11 +744,12 @@ const ProfileEdit = () => {
                                 variant="primary"
                                 size="sm"
                                 disabled={saving}
+                                className="d-inline-flex align-items-center justify-content-center order-1 order-sm-2"
                             >
                                 {saving ? (
                                     <>
                                         <Spinner size="sm" animation="border" className="me-2" />
-                                        Saving...
+                                        <span className="d-none d-sm-inline">Saving...</span>
                                     </>
                                 ) : (
                                     <>
@@ -756,8 +763,10 @@ const ProfileEdit = () => {
                         {/* Validation Summary */}
                         {Object.keys(validationErrors).length > 0 && (
                             <Alert variant="warning" className="mt-3 py-2 small">
-                                <FaInfoCircle className="me-2" size={12} />
-                                Please fix the validation errors before saving
+                                <div className="d-flex align-items-center">
+                                    <FaInfoCircle className="me-2 flex-shrink-0" size={12} />
+                                    <span>Please fix the validation errors before saving</span>
+                                </div>
                             </Alert>
                         )}
                     </Form>

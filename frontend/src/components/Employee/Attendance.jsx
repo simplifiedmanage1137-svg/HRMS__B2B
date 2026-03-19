@@ -746,54 +746,54 @@ const Attendance = () => {
 
   const getAttendanceStatusBadge = (record) => {
     if (record.isWeeklyOff) {
-      return <Badge bg="secondary"><FaMoon className="me-1" size={10} /> W-OFF</Badge>;
+      return <Badge bg="secondary" className="px-2 py-1"><FaMoon className="me-1" size={10} /> W-OFF</Badge>;
     }
 
     if (!record.clock_in) {
-      return <Badge bg="secondary"><FaClock className="me-1" size={10} /> Not Clocked</Badge>;
+      return <Badge bg="secondary" className="px-2 py-1"><FaClock className="me-1" size={10} /> Not Clocked</Badge>;
     }
 
     if (record.clock_in && !record.clock_out) {
       if (record.late_minutes > 0) {
         return (
-          <Badge bg="warning" className="text-dark">
+          <Badge bg="warning" className="text-dark px-2 py-1">
             <FaClock className="me-1" size={10} />
-            Working (Late {formatLateTime(record.late_minutes)})
+            Working (Late)
           </Badge>
         );
       }
-      return <Badge bg="info"><FaClock className="me-1" size={10} /> Working</Badge>;
+      return <Badge bg="info" className="px-2 py-1"><FaClock className="me-1" size={10} /> Working</Badge>;
     }
 
     switch (record.status) {
       case 'present':
         if (record.late_minutes > 0) {
           return (
-            <Badge bg="warning" className="text-dark">
+            <Badge bg="warning" className="text-dark px-2 py-1">
               <FaCheckCircle className="me-1" size={10} />
-              Present (Late {formatLateTime(record.late_minutes)})
+              Present (Late)
             </Badge>
           );
         }
-        return <Badge bg="success"><FaCheckCircle className="me-1" size={10} /> Present</Badge>;
+        return <Badge bg="success" className="px-2 py-1"><FaCheckCircle className="me-1" size={10} /> Present</Badge>;
       case 'half_day':
         if (record.late_minutes > 0) {
           return (
-            <Badge bg="warning" className="text-dark">
+            <Badge bg="warning" className="text-dark px-2 py-1">
               <FaCloudSun className="me-1" size={10} />
-              Half Day (Late {formatLateTime(record.late_minutes)})
+              Half Day (Late)
             </Badge>
           );
         }
-        return <Badge bg="warning" className="text-dark"><FaCloudSun className="me-1" size={10} /> Half Day</Badge>;
+        return <Badge bg="warning" className="text-dark px-2 py-1"><FaCloudSun className="me-1" size={10} /> Half Day</Badge>;
       case 'on_leave':
-        return <Badge bg="info"><FaCloudSun className="me-1" size={10} /> Leave</Badge>;
+        return <Badge bg="info" className="px-2 py-1"><FaCloudSun className="me-1" size={10} /> Leave</Badge>;
       case 'absent':
-        return <Badge bg="danger"><FaExclamationTriangle className="me-1" size={10} /> Absent</Badge>;
+        return <Badge bg="danger" className="px-2 py-1"><FaExclamationTriangle className="me-1" size={10} /> Absent</Badge>;
       case 'working':
-        return <Badge bg="info"><FaClock className="me-1" size={10} /> Working</Badge>;
+        return <Badge bg="info" className="px-2 py-1"><FaClock className="me-1" size={10} /> Working</Badge>;
       default:
-        return <Badge bg="secondary">Not Clocked</Badge>;
+        return <Badge bg="secondary" className="px-2 py-1">Not Clocked</Badge>;
     }
   };
 
@@ -901,38 +901,36 @@ const Attendance = () => {
   };
 
   return (
-    <div className="attendance-page p-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
-      <h5 className="mb-4">
+    <div className="p-2 p-md-3 p-lg-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
+      <h5 className="mb-4 d-flex align-items-center">
         <FaClock className="me-2 text-primary" />
         Attendance Management
       </h5>
 
-      {/* Current Status Card */}
+      {/* Current Status Card - Responsive */}
       <Card className="mb-4 border-0 shadow-sm">
-        <Card.Body className="p-3">
+        <Card.Body className="p-2 p-md-3">
           <Row className="align-items-center g-3">
-            <Col md={3}>
-              <div className="d-flex align-items-center">
+            <Col xs={12} md={3}>
+              <div className="d-flex justify-content-center justify-content-md-start">
                 {getLocationBadge()}
               </div>
               {geofenceInfo && (
-                <small className="text-muted d-block mt-1">
+                <small className="text-muted d-block text-center text-md-start mt-1">
                   <FaMapMarkerAlt className="me-1" size={10} />
                   Accuracy: ±{Math.round(location?.accuracy || 0)}m
                 </small>
               )}
             </Col>
 
-            <Col md={3}>
-              <div className="d-flex align-items-center justify-content-center">
-                <div className="text-center">
-                  <small className="text-muted d-block">Current Time</small>
-                  <strong>{currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</strong>
-                </div>
+            <Col xs={6} md={3}>
+              <div className="text-center">
+                <small className="text-muted d-block">Current Time</small>
+                <strong>{currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</strong>
               </div>
             </Col>
 
-            <Col md={3}>
+            <Col xs={6} md={3}>
               <Row className="g-2">
                 <Col xs={6} className="text-center">
                   <small className="text-muted d-block">Clock In</small>
@@ -959,8 +957,8 @@ const Attendance = () => {
               </Row>
             </Col>
 
-            <Col md={3}>
-              <div className="d-flex justify-content-end">
+            <Col xs={12} md={3}>
+              <div className="d-flex justify-content-center justify-content-md-end">
                 {renderClockButton()}
               </div>
             </Col>
@@ -986,17 +984,53 @@ const Attendance = () => {
         </Card.Body>
       </Card>
 
+      {/* Monthly Stats Summary */}
+      <Row className="mb-3 g-2">
+        <Col xs={6} md={3}>
+          <Card className="border-0 shadow-sm bg-light">
+            <Card.Body className="p-2 text-center">
+              <small className="text-muted d-block">Present Days</small>
+              <h6 className="mb-0 fw-bold">{monthlyStats.presentDays}</h6>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col xs={6} md={3}>
+          <Card className="border-0 shadow-sm bg-light">
+            <Card.Body className="p-2 text-center">
+              <small className="text-muted d-block">Absent Days</small>
+              <h6 className="mb-0 fw-bold">{monthlyStats.absentDays}</h6>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col xs={6} md={3}>
+          <Card className="border-0 shadow-sm bg-light">
+            <Card.Body className="p-2 text-center">
+              <small className="text-muted d-block">Total Hours</small>
+              <h6 className="mb-0 fw-bold">{monthlyStats.totalHours}h</h6>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col xs={6} md={3}>
+          <Card className="border-0 shadow-sm bg-light">
+            <Card.Body className="p-2 text-center">
+              <small className="text-muted d-block">Avg Hours/Day</small>
+              <h6 className="mb-0 fw-bold">{monthlyStats.averageHours}h</h6>
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
+
       {/* Attendance Reports */}
       <Row>
         <Col lg={12}>
           <Card className="border-0 shadow-sm">
-            <Card.Header className="bg-white py-3">
-              <div className="d-flex justify-content-between align-items-center">
-                <h6 className="mb-0">
+            <Card.Header className="bg-white py-2 py-md-3">
+              <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
+                <h6 className="mb-0 small d-flex align-items-center">
                   <FaHistory className="me-2 text-primary" />
                   Attendance Report - Last 30 Days
                 </h6>
-                <div className="d-flex align-items-center gap-2">
+                <div className="d-flex flex-wrap gap-2">
                   {attendance?.clock_in ? (
                     attendance?.clock_out ? (
                       <Badge bg="success" className="px-3 py-2" style={{ fontSize: '0.85rem' }}>
@@ -1030,23 +1064,46 @@ const Attendance = () => {
                 </div>
               </div>
             </Card.Header>
-            <Card.Body>
-              <Tabs
-                activeKey={activeTab}
-                onSelect={(k) => setActiveTab(k)}
-                className="mb-3"
-              >
-                <Tab eventKey="daily" title="Daily View">
+            <Card.Body className="p-2 p-md-3">
+              {/* Fixed Tabs - Both tabs always visible */}
+              <div className="mb-3 border-bottom">
+                <Button
+                  variant={activeTab === 'daily' ? 'primary' : 'light'}
+                  size="sm"
+                  onClick={() => setActiveTab('daily')}
+                  className="me-2"
+                  style={{ 
+                    borderBottom: activeTab === 'daily' ? '3px solid #0d6efd' : 'none',
+                    borderRadius: '4px 4px 0 0'
+                  }}
+                >
+                  Daily View
+                </Button>
+                <Button
+                  variant={activeTab === 'chart' ? 'primary' : 'light'}
+                  size="sm"
+                  onClick={() => setActiveTab('chart')}
+                  style={{ 
+                    borderBottom: activeTab === 'chart' ? '3px solid #0d6efd' : 'none',
+                    borderRadius: '4px 4px 0 0'
+                  }}
+                >
+                  Chart View
+                </Button>
+              </div>
+
+              {activeTab === 'daily' ? (
+                <>
                   <div className="table-responsive" style={{ maxHeight: '500px', overflowY: 'auto' }}>
-                    <Table hover size="sm" className="mb-0">
+                    <Table hover size="sm" className="mb-0" style={{ tableLayout: 'fixed' }}>
                       <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
                         <tr>
-                          <th className="small">Date</th>
-                          <th className="small">Day</th>
-                          <th className="small">Clock In</th>
-                          <th className="small">Clock Out</th>
-                          <th className="small">Hours</th>
-                          <th className="small">Status</th>
+                          <th style={{ width: '15%' }} className="small">Date</th>
+                          <th style={{ width: '10%' }} className="small d-none d-sm-table-cell">Day</th>
+                          <th style={{ width: '20%' }} className="small">Clock In</th>
+                          <th style={{ width: '20%' }} className="small">Clock Out</th>
+                          <th style={{ width: '15%' }} className="small">Hours</th>
+                          <th style={{ width: '20%' }} className="small">Status</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1058,53 +1115,61 @@ const Attendance = () => {
                               ${record.isToday ? 'table-primary fw-bold' : ''}
                             `}
                           >
-                            <td className="small fw-semibold">
-                              {formatShortDate(record.date)}
-                              {record.isToday && <Badge bg="primary" className="ms-1" pill>Today</Badge>}
-                            </td>
                             <td className="small">
-                              {record.dayName}
-                              {record.isWeeklyOff && <Badge bg="secondary" className="ms-1" pill>OFF</Badge>}
+                              <div>
+                                <span className="fw-semibold">{formatShortDate(record.date)}</span>
+                                {record.isToday && <Badge bg="primary" className="ms-1" pill>Today</Badge>}
+                              </div>
+                            </td>
+                            <td className="small d-none d-sm-table-cell">
+                              <div>
+                                {record.dayName}
+                                {record.isWeeklyOff && <Badge bg="secondary" className="ms-1" pill>OFF</Badge>}
+                              </div>
                             </td>
                             <td className="small">
                               {record.isWeeklyOff ? (
-                                <span className="text-muted">-</span>
+                                <span className="text-muted">---</span>
                               ) : record.clock_in ? (
-                                <>
-                                  {formatTime(record.clock_in)}
+                                <div>
+                                  <span className="text-nowrap">{formatTime(record.clock_in)}</span>
                                   {record.late_minutes > 0 && (
                                     <small className="text-danger d-block" style={{ fontSize: '9px' }}>
-                                      ⏰ Late {formatLateTime(record.late_minutes)}
+                                      Late {formatLateTime(record.late_minutes)}
                                     </small>
                                   )}
-                                </>
+                                </div>
                               ) : (
-                                <span className="text-muted">--:--</span>
+                                <span className="text-muted">---</span>
                               )}
                             </td>
                             <td className="small">
                               {record.isWeeklyOff ? (
-                                <span className="text-muted">-</span>
+                                <span className="text-muted">---</span>
                               ) : record.clock_out ? (
-                                formatTime(record.clock_out)
+                                <span className="text-nowrap">{formatTime(record.clock_out)}</span>
                               ) : record.clock_in ? (
                                 <Badge bg="info" pill size="sm">Working</Badge>
                               ) : (
-                                <span className="text-muted">--:--</span>
+                                <span className="text-muted">---</span>
                               )}
                             </td>
                             <td className="small fw-bold">
                               {record.isWeeklyOff ? (
                                 <span className="text-muted">-</span>
                               ) : record.total_hours ? (
-                                record.total_hours + 'h'
+                                <span className="text-nowrap">{record.total_hours}h</span>
                               ) : record.clock_in ? (
                                 <Badge bg="info" pill size="sm">Active</Badge>
                               ) : (
                                 '-'
                               )}
                             </td>
-                            <td className="small">{getAttendanceStatusBadge(record)}</td>
+                            <td className="small">
+                              <div className="text-truncate" style={{ maxWidth: '100px' }}>
+                                {getAttendanceStatusBadge(record)}
+                              </div>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -1114,10 +1179,10 @@ const Attendance = () => {
                     <FaInfoCircle className="me-1" size={10} />
                     Showing last 30 days from {attendanceHistory.length > 0 ? formatShortDate(attendanceHistory[attendanceHistory.length - 1]?.date) : 'N/A'} to {attendanceHistory.length > 0 ? formatShortDate(attendanceHistory[0]?.date) : 'N/A'}
                   </div>
-                </Tab>
-
-                <Tab eventKey="chart" title="Chart View">
-                  <div style={{ height: '400px' }}>
+                </>
+              ) : (
+                <>
+                  <div style={{ height: '300px' }}>
                     <Line
                       data={chartData}
                       options={{
@@ -1159,27 +1224,27 @@ const Attendance = () => {
                     <span className="me-3"><span style={{ color: 'rgb(255, 193, 7)' }}>●</span> Half Day (5-8 hrs)</span>
                     <span><span style={{ color: 'rgb(220, 53, 69)' }}>●</span> Absent ({'<'}5 hrs)</span>
                   </div>
-                </Tab>
-              </Tabs>
+                </>
+              )}
             </Card.Body>
           </Card>
         </Col>
       </Row>
 
       {/* Exit Warning Modal */}
-      <Modal show={showExitWarning} onHide={() => setShowExitWarning(false)} centered>
+      <Modal show={showExitWarning} onHide={() => setShowExitWarning(false)} centered dialogClassName="mx-2 mx-md-auto">
         <Modal.Header closeButton className="bg-warning">
-          <Modal.Title>⚠️ Active Session Detected</Modal.Title>
+          <Modal.Title className="h6">⚠️ Active Session Detected</Modal.Title>
         </Modal.Header>
-        <Modal.Body>
-          <p>You have an active session. Would you like to clock out before leaving?</p>
+        <Modal.Body className="p-3">
+          <p className="small">You have an active session. Would you like to clock out before leaving?</p>
           <p className="text-muted small">If you don't clock out, your attendance will not be recorded properly.</p>
         </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowExitWarning(false)}>
+        <Modal.Footer className="py-2">
+          <Button variant="secondary" size="sm" onClick={() => setShowExitWarning(false)}>
             Cancel
           </Button>
-          <Button variant="warning" onClick={handleManualClockOut}>
+          <Button variant="warning" size="sm" onClick={handleManualClockOut}>
             <FaSignOutAlt className="me-2" />
             Clock Out Now
           </Button>

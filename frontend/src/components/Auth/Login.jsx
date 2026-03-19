@@ -67,23 +67,23 @@ const Login = () => {
   };
 
   return (
-    <div className="min-vh-100 d-flex align-items-center justify-content-center bg-light">
-      <Container style={{ maxWidth: '450px' }}>
-        <Row className="justify-content-center">
+    <div className="min-vh-100 d-flex align-items-center justify-content-center bg-light p-2 p-sm-3 p-md-4">
+      <Container style={{ maxWidth: '450px' }} className="px-0 px-sm-2">
+        <Row className="justify-content-center g-0">
           <Col xs={12}>
             <Card className="border-0 shadow-lg overflow-hidden">
               {/* Card Header with Gradient */}
-              <Card.Header className="text-center py-4 border-0" style={{
+              <Card.Header className="text-center py-3 py-sm-4 border-0" style={{
                 background: 'linear-gradient(135deg, #4158D0 0%, #C850C0 100%)',
               }}>
-                <h1 className="h3 mb-0 text-white fw-semibold">Welcome Back</h1>
-                <p className="mb-0 mt-2 text-white-50 small">
+                <h1 className="h4 h3-sm mb-0 text-white fw-semibold">Welcome Back</h1>
+                <p className="mb-0 mt-2 text-white-50 small px-2 px-sm-0">
                   Employee Management System
                 </p>
               </Card.Header>
 
               {/* Card Body */}
-              <Card.Body className="p-4">
+              <Card.Body className="p-3 p-sm-4">
                 {/* Error Alert */}
                 {error && (
                   <Alert 
@@ -92,8 +92,8 @@ const Login = () => {
                     dismissible
                     onClose={() => setError('')}
                   >
-                    <FaExclamationTriangle className="me-2" size={12} />
-                    {error}
+                    <FaExclamationTriangle className="me-2 flex-shrink-0" size={12} />
+                    <span className="text-wrap">{error}</span>
                   </Alert>
                 )}
 
@@ -101,7 +101,7 @@ const Login = () => {
                 <Form onSubmit={handleSubmit}>
                   {/* Email Field */}
                   <Form.Group className="mb-4">
-                    <Form.Label className="small fw-semibold text-muted mb-2">
+                    <Form.Label className="small fw-semibold text-muted mb-2 d-flex align-items-center">
                       <FaEnvelope className="me-2" size={12} />
                       Email Address
                     </Form.Label>
@@ -130,7 +130,7 @@ const Login = () => {
 
                   {/* Password Field */}
                   <Form.Group className="mb-4">
-                    <Form.Label className="small fw-semibold text-muted mb-2">
+                    <Form.Label className="small fw-semibold text-muted mb-2 d-flex align-items-center">
                       <FaLock className="me-2" size={12} />
                       Password
                     </Form.Label>
@@ -191,21 +191,25 @@ const Login = () => {
                           aria-hidden="true"
                           className="me-2"
                         />
-                        Signing in...
+                        <span className="d-none d-sm-inline">Signing in...</span>
+                        <span className="d-inline d-sm-none">Signing in...</span>
                       </>
                     ) : (
                       <>
-                        Sign In
+                        <span className="d-none d-sm-inline">Sign In</span>
+                        <span className="d-inline d-sm-none">Sign In</span>
                         <FaArrowRight className="ms-2" size={14} />
                       </>
                     )}
                   </Button>
                 </Form>
+
+               
               </Card.Body>
             </Card>
 
             {/* Footer Note */}
-            <p className="text-center mt-4 small text-muted">
+            <p className="text-center mt-4 small text-muted px-2 px-sm-0">
               © {new Date().getFullYear()} Employee Management System. All rights reserved.
             </p>
           </Col>

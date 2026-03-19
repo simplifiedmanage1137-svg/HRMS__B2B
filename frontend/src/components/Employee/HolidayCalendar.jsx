@@ -87,9 +87,10 @@ const HolidayCalendar = ({
     };
 
     return (
-      <Badge bg={colors[region] || 'secondary'} className="px-2 py-1">
+      <Badge bg={colors[region] || 'secondary'} className="px-2 py-1 d-inline-flex align-items-center">
         {icons[region]}
-        {region}
+        <span className="d-none d-sm-inline ms-1">{region}</span>
+        <span className="d-inline d-sm-none ms-1">{region.substring(0, 1)}</span>
       </Badge>
     );
   };
@@ -184,33 +185,35 @@ const HolidayCalendar = ({
       {showMessage && (
         <Alert 
           variant={message.type} 
-          className="mb-2 py-1 small mx-3 mt-2" 
+          className="mb-2 py-1 small mx-2 mx-md-3 mt-2" 
           onClose={() => setShowMessage(false)} 
           dismissible
         >
-          {message.type === 'success' && <FaInfoCircle className="me-2" size={12} />}
-          {message.type === 'danger' && <FaTimes className="me-2" size={12} />}
-          {message.text}
+          <div className="d-flex align-items-center">
+            {message.type === 'success' && <FaInfoCircle className="me-2 flex-shrink-0" size={12} />}
+            {message.type === 'danger' && <FaTimes className="me-2 flex-shrink-0" size={12} />}
+            <span>{message.text}</span>
+          </div>
         </Alert>
       )}
       
-      <Card.Header className="bg-gradient text-white py-2 d-flex justify-content-between align-items-center" 
+      <Card.Header className="bg-gradient text-white py-2 d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2" 
         style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-        <h6 className="mb-0 small fw-semibold">
+        <h6 className="mb-0 small fw-semibold d-flex align-items-center">
           <FaSun className="me-2" size={14} />
           Company Holidays {selectedYear}
         </h6>
-        <Badge bg="light" text="dark" className="px-2 py-1 small">
+        <Badge bg="light" text="dark" className="px-2 py-1 small ms-0 ms-sm-auto">
           Total: {filteredHolidays.length} Holidays
         </Badge>
       </Card.Header>
       
-      <Card.Body className="p-3">
+      <Card.Body className="p-2 p-md-3">
         {/* Filters */}
         {showFilters && (
           <>
             <Row className="mb-3 g-2">
-              <Col md={4}>
+              <Col xs={12} md={4}>
                 <Form.Group>
                   <Form.Label className="small text-muted">Year</Form.Label>
                   <Form.Select
@@ -225,7 +228,7 @@ const HolidayCalendar = ({
                   </Form.Select>
                 </Form.Group>
               </Col>
-              <Col md={4}>
+              <Col xs={12} md={4}>
                 <Form.Group>
                   <Form.Label className="small text-muted">Region</Form.Label>
                   <Form.Select
@@ -240,7 +243,7 @@ const HolidayCalendar = ({
                   </Form.Select>
                 </Form.Group>
               </Col>
-              <Col md={4}>
+              <Col xs={12} md={4}>
                 <Form.Group>
                   <Form.Label className="small text-muted">Search</Form.Label>
                   <InputGroup size="sm">
@@ -271,15 +274,15 @@ const HolidayCalendar = ({
 
             {/* Active Filters */}
             {(searchTerm || selectedRegion !== 'All') && (
-              <div className="d-flex align-items-center mb-2">
-                <small className="text-muted me-2">Active filters:</small>
+              <div className="d-flex flex-wrap align-items-center mb-2 gap-2">
+                <small className="text-muted">Active filters:</small>
                 {selectedRegion !== 'All' && (
-                  <Badge bg="info" className="me-2 px-2 py-1">
+                  <Badge bg="info" className="px-2 py-1">
                     Region: {selectedRegion}
                   </Badge>
                 )}
                 {searchTerm && (
-                  <Badge bg="info" className="me-2 px-2 py-1">
+                  <Badge bg="info" className="px-2 py-1">
                     Search: "{searchTerm}"
                   </Badge>
                 )}
@@ -301,7 +304,7 @@ const HolidayCalendar = ({
                 <tr>
                   <th className="small fw-semibold text-dark text-center" style={{ width: '50px' }}>#</th>
                   <th className="small fw-semibold text-dark">Date</th>
-                  <th className="small fw-semibold text-dark">Day</th>
+                  <th className="small fw-semibold text-dark d-none d-sm-table-cell">Day</th>
                   <th className="small fw-semibold text-dark">Holiday</th>
                   <th className="small fw-semibold text-dark">Region</th>
                   <th className="small fw-semibold text-dark text-center">Status</th>
@@ -322,20 +325,20 @@ const HolidayCalendar = ({
                       >
                         <td className="small text-center">{index + 1}</td>
                         <td className="small">
-                          {formatDate(holiday.date)}
-                          <br />
-                          <small className="text-muted">{formatShortDate(holiday.date)}</small>
+                          <span className="d-block d-sm-none">{formatShortDate(holiday.date)}</span>
+                          <span className="d-none d-sm-block">{formatDate(holiday.date)}</span>
+                          <small className="text-muted d-block d-sm-none">{formatDate(holiday.date)}</small>
                         </td>
-                        <td className="small">{dayOfWeek}</td>
-                        <td className="small fw-semibold">{holiday.name}</td>
+                        <td className="small d-none d-sm-table-cell">{dayOfWeek}</td>
+                        <td className="small fw-semibold text-wrap" style={{ wordBreak: 'break-word' }}>{holiday.name}</td>
                         <td>{getRegionBadge(holiday.region)}</td>
                         <td className="text-center">
                           {upcoming ? (
-                            <Badge bg="success" pill className="px-2 py-1">
+                            <Badge bg="success" pill className="px-2 py-1 text-nowrap">
                               Upcoming
                             </Badge>
                           ) : (
-                            <Badge bg="secondary" pill className="px-2 py-1">
+                            <Badge bg="secondary" pill className="px-2 py-1 text-nowrap">
                               Past
                             </Badge>
                           )}
@@ -369,37 +372,37 @@ const HolidayCalendar = ({
         {/* Summary */}
         {filteredHolidays.length > 0 && (
           <div className="mt-2 p-2 bg-light rounded small">
-            <Row>
-              <Col md={3}>
+            <Row className="g-2">
+              <Col xs={6} sm={3}>
                 <span className="text-muted">Total:</span>
                 <strong className="ms-2">{filteredHolidays.length}</strong>
               </Col>
-              <Col md={3}>
+              <Col xs={6} sm={3}>
                 <span className="text-muted">India:</span>
                 <strong className="ms-2">
                   {filteredHolidays.filter(h => h.region === 'India').length}
                 </strong>
               </Col>
-              <Col md={3}>
+              <Col xs={6} sm={3}>
                 <span className="text-muted">USA:</span>
                 <strong className="ms-2">
                   {filteredHolidays.filter(h => h.region === 'USA').length}
                 </strong>
               </Col>
-              <Col md={3}>
+              <Col xs={6} sm={3}>
                 <span className="text-muted">Global:</span>
                 <strong className="ms-2">
                   {filteredHolidays.filter(h => h.region === 'Global').length}
                 </strong>
               </Col>
             </Row>
-            <Row className="mt-1">
-              <Col md={6}>
+            <Row className="mt-1 g-2">
+              <Col xs={6}>
                 <small className="text-muted">
                   Upcoming: {filteredHolidays.filter(h => isUpcoming(h.date)).length}
                 </small>
               </Col>
-              <Col md={6}>
+              <Col xs={6}>
                 <small className="text-muted">
                   Past: {filteredHolidays.filter(h => !isUpcoming(h.date)).length}
                 </small>
@@ -409,12 +412,13 @@ const HolidayCalendar = ({
         )}
 
         {/* Download Buttons */}
-        <div className="mt-3 d-flex justify-content-end gap-2">
+        <div className="mt-3 d-flex flex-column flex-sm-row justify-content-end gap-2">
           <Button 
             variant="outline-primary" 
             size="sm" 
             onClick={handleDownload}
             disabled={filteredHolidays.length === 0}
+            className="d-inline-flex align-items-center justify-content-center"
           >
             <FaDownload className="me-1" size={10} />
             Download CSV
@@ -424,6 +428,7 @@ const HolidayCalendar = ({
             size="sm" 
             onClick={handlePrint}
             disabled={filteredHolidays.length === 0}
+            className="d-inline-flex align-items-center justify-content-center"
           >
             <FaPrint className="me-1" size={10} />
             Print

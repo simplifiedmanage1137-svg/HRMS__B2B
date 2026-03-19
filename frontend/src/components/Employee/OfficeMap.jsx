@@ -107,18 +107,18 @@ const OfficeMap = ({
 
   return (
     <Card className="mb-3 border-0 shadow-sm">
-      <Card.Header className="bg-gradient text-white py-2 d-flex justify-content-between align-items-center"
+      <Card.Header className="bg-gradient text-white py-2 d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2"
         style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-        <h6 className="mb-0 small fw-semibold">
+        <h6 className="mb-0 small fw-semibold d-flex align-items-center">
           <FaMapMarkerAlt className="me-2" size={14} />
           Office Location Map
         </h6>
-        <Badge bg="light" text="dark" className="px-2 py-1 small">
+        <Badge bg="light" text="dark" className="px-2 py-1 small ms-0 ms-sm-auto">
           {officeCoords.radius}m Geofence
         </Badge>
       </Card.Header>
       
-      <Card.Body className="p-3">
+      <Card.Body className="p-2 p-md-3">
         {/* Map Container */}
         <div className="position-relative mb-3">
           {!mapLoaded && !mapError && (
@@ -153,7 +153,7 @@ const OfficeMap = ({
         </div>
 
         {/* Map Legend */}
-        <div className="d-flex flex-wrap gap-3 small mb-3">
+        <div className="d-flex flex-wrap gap-2 gap-md-3 small mb-3">
           <div className="d-flex align-items-center">
             <div style={{ 
               width: '16px', 
@@ -162,9 +162,10 @@ const OfficeMap = ({
               borderRadius: '50%',
               marginRight: '8px',
               border: '2px solid white',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+              flexShrink: 0
             }} />
-            <span className="text-muted">Office (Red)</span>
+            <span className="text-muted">Office</span>
           </div>
           
           <div className="d-flex align-items-center">
@@ -173,7 +174,8 @@ const OfficeMap = ({
               height: '16px', 
               border: '2px solid #28a745',
               borderRadius: '50%',
-              marginRight: '8px'
+              marginRight: '8px',
+              flexShrink: 0
             }} />
             <span className="text-muted">{officeCoords.radius}m Geofence</span>
           </div>
@@ -187,7 +189,8 @@ const OfficeMap = ({
                 borderRadius: '50%',
                 marginRight: '8px',
                 border: '2px solid white',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                flexShrink: 0
               }} />
               <span className="text-muted">
                 You ({isInside ? 'Inside' : 'Outside'})
@@ -197,13 +200,13 @@ const OfficeMap = ({
         </div>
 
         {/* Office Details */}
-        <div className="bg-light p-3 rounded mb-3">
+        <div className="bg-light p-2 p-md-3 rounded mb-3">
           <div className="d-flex align-items-start">
-            <FaBuilding className="me-2 text-primary mt-1" size={14} />
-            <div>
+            <FaBuilding className="me-2 text-primary mt-1 flex-shrink-0" size={14} />
+            <div className="text-wrap" style={{ wordBreak: 'break-word' }}>
               <span className="fw-semibold d-block">{officeCoords.name}</span>
-              <span className="text-muted small d-block">{officeCoords.address}</span>
-              <span className="text-muted small d-block mt-1">
+              <span className="text-muted small d-block text-wrap">{officeCoords.address}</span>
+              <span className="text-muted small d-block mt-1 text-wrap" style={{ fontSize: '0.7rem' }}>
                 📍 {officeCoords.latitude.toFixed(6)}, {officeCoords.longitude.toFixed(6)}
               </span>
             </div>
@@ -212,20 +215,20 @@ const OfficeMap = ({
 
         {/* Distance Information */}
         {showDistance && userLocation && distance !== null && (
-          <div className="bg-light p-3 rounded">
-            <div className="d-flex justify-content-between align-items-center">
+          <div className="bg-light p-2 p-md-3 rounded">
+            <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
               <div className="d-flex align-items-center">
-                <FaLocationArrow className="text-primary me-2" size={12} />
+                <FaLocationArrow className="text-primary me-2 flex-shrink-0" size={12} />
                 <span className="text-muted small">Distance from office:</span>
               </div>
-              <Badge bg={isInside ? 'success' : 'warning'} className="px-3 py-2">
+              <Badge bg={isInside ? 'success' : 'warning'} className="px-3 py-2 ms-0 ms-sm-auto text-nowrap">
                 {formatDistance(distance)}
               </Badge>
             </div>
             
-            <div className="d-flex justify-content-between align-items-center mt-2">
+            <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mt-2 gap-2">
               <span className="text-muted small">Status:</span>
-              <Badge bg={isInside ? 'success' : 'warning'} className="px-3 py-2">
+              <Badge bg={isInside ? 'success' : 'warning'} className="px-3 py-2 ms-0 ms-sm-auto d-inline-flex align-items-center text-nowrap">
                 {isInside ? (
                   <><FaCheckCircle className="me-1" size={10} /> Inside Geofence</>
                 ) : (
@@ -236,13 +239,13 @@ const OfficeMap = ({
 
             {!isInside && distance && (
               <div className="mt-2 text-warning small">
-                <FaExclamationTriangle className="me-1" size={10} />
-                You need to be within {officeCoords.radius}m to clock in.
-                {distance && (
-                  <span className="d-block mt-1">
+                <FaExclamationTriangle className="me-1 flex-shrink-0" size={10} />
+                <span className="d-inline-block">
+                  Need to be within {officeCoords.radius}m to clock in.
+                  <span className="d-block d-sm-inline d-md-block d-lg-inline mt-1 mt-sm-0 mt-md-1 mt-lg-0">
                     You are {(distance - officeCoords.radius).toFixed(1)}m too far.
                   </span>
-                )}
+                </span>
               </div>
             )}
           </div>
@@ -251,8 +254,10 @@ const OfficeMap = ({
         {/* API Key Warning (only in development) */}
         {process.env.NODE_ENV === 'development' && apiKey === 'YOUR_GOOGLE_MAPS_API_KEY' && (
           <Alert variant="warning" className="mt-3 py-2 small">
-            <FaInfoCircle className="me-2" size={12} />
-            Please set your Google Maps API key in environment variables
+            <div className="d-flex align-items-center">
+              <FaInfoCircle className="me-2 flex-shrink-0" size={12} />
+              <span className="text-wrap">Please set your Google Maps API key in environment variables</span>
+            </div>
           </Alert>
         )}
       </Card.Body>

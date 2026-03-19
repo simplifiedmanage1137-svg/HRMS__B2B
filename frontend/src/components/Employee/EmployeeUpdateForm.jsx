@@ -166,6 +166,7 @@ const EmployeeUpdateForm = () => {
             onChange={handleChange}
             placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
             required={field.required}
+            size="sm"
           />
         );
       
@@ -176,6 +177,7 @@ const EmployeeUpdateForm = () => {
             value={value}
             onChange={handleChange}
             required={field.required}
+            size="sm"
           >
             <option value="">Select {field.label}</option>
             {field.options?.map(opt => (
@@ -193,6 +195,7 @@ const EmployeeUpdateForm = () => {
             onChange={handleChange}
             placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
             required={field.required}
+            size="sm"
           />
         );
     }
@@ -200,46 +203,58 @@ const EmployeeUpdateForm = () => {
 
   if (loading) {
     return (
-      <div className="d-flex justify-content-center align-items-center vh-100">
-        <Spinner animation="border" variant="primary" />
+      <div className="d-flex justify-content-center align-items-center min-vh-100">
+        <div className="text-center">
+          <Spinner animation="border" variant="primary" style={{ width: '3rem', height: '3rem' }} />
+          <p className="mt-3 text-muted small">Loading your data...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
+    <div className="p-2 p-md-3 p-lg-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
       <Card className="border-0 shadow-sm">
-        <Card.Header className="bg-primary text-white py-3 d-flex justify-content-between align-items-center">
+        <Card.Header className="bg-primary text-white py-2 py-md-3 d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
           <div>
-            <h5 className="mb-0">Update Your Information</h5>
-            <small>Request #{requestId}</small>
+            <h5 className="mb-0 small">Update Your Information</h5>
+            <small className="d-block">Request #{requestId}</small>
           </div>
           <Button 
             variant="light" 
             size="sm"
             onClick={() => navigate('/employee/update-requests')}
+            className="d-inline-flex align-items-center ms-0 ms-md-auto"
           >
             <FaArrowLeft className="me-2" size={12} />
             Back to Requests
           </Button>
         </Card.Header>
-        <Card.Body className="p-4">
-          {message && <Alert variant="success">{message}</Alert>}
-          {error && <Alert variant="danger">{error}</Alert>}
+        <Card.Body className="p-2 p-md-3 p-lg-4">
+          {message && (
+            <Alert variant="success" className="py-2 small mb-3">
+              {message}
+            </Alert>
+          )}
+          {error && (
+            <Alert variant="danger" className="py-2 small mb-3">
+              {error}
+            </Alert>
+          )}
           
           {requestDetails?.requested_fields?.length > 0 ? (
             <Form onSubmit={handleSubmit}>
               {requestDetails.requested_fields.map(category => (
                 <Card key={category} className="mb-4 border-0 bg-light">
                   <Card.Header className="bg-white py-2">
-                    <h6 className="mb-0">
+                    <h6 className="mb-0 small">
                       {fieldIcons[category]?.icon} {fieldIcons[category]?.label || category}
                     </h6>
                   </Card.Header>
-                  <Card.Body>
-                    <Row>
+                  <Card.Body className="p-2 p-md-3">
+                    <Row className="g-2">
                       {fieldGroups[category]?.map(field => (
-                        <Col key={field.name} md={6} className="mb-3">
+                        <Col key={field.name} xs={12} md={6} className="mb-2">
                           <Form.Group>
                             <Form.Label className="small fw-semibold">
                               {field.label}
@@ -254,22 +269,26 @@ const EmployeeUpdateForm = () => {
                 </Card>
               ))}
 
-              <div className="d-flex justify-content-end gap-2 mt-4">
+              <div className="d-flex flex-column flex-sm-row justify-content-end gap-2 mt-4">
                 <Button 
                   variant="secondary" 
+                  size="sm"
                   onClick={() => navigate('/employee/update-requests')}
+                  className="order-2 order-sm-1"
                 >
                   Cancel
                 </Button>
                 <Button 
                   type="submit" 
                   variant="primary" 
+                  size="sm"
                   disabled={submitting}
+                  className="d-inline-flex align-items-center order-1 order-sm-2"
                 >
                   {submitting ? (
                     <>
                       <Spinner size="sm" animation="border" className="me-2" />
-                      Submitting...
+                      <span className="d-none d-sm-inline">Submitting...</span>
                     </>
                   ) : (
                     <>
@@ -281,7 +300,7 @@ const EmployeeUpdateForm = () => {
               </div>
             </Form>
           ) : (
-            <Alert variant="warning">
+            <Alert variant="warning" className="py-2 small">
               No fields specified for update. Please contact admin.
             </Alert>
           )}

@@ -1,6 +1,6 @@
 // src/components/Employee/GeofenceMap.jsx
 import React, { useState, useEffect } from 'react';
-import { Card, Badge, Spinner, Alert } from 'react-bootstrap';
+import { Card, Badge, Spinner, Alert, Row, Col } from 'react-bootstrap';
 import { 
   FaMapMarkerAlt, 
   FaBuilding, 
@@ -105,7 +105,7 @@ const GeofenceMap = ({
   if (!userLocation) {
     return (
       <Card className="mb-3 border-0 shadow-sm bg-light">
-        <Card.Body className="p-3">
+        <Card.Body className="p-2 p-md-3">
           <div className="d-flex align-items-center justify-content-center" style={{ height: '150px' }}>
             <div className="text-center">
               <Spinner animation="border" variant="primary" size="sm" />
@@ -120,9 +120,9 @@ const GeofenceMap = ({
   if (error) {
     return (
       <Card className="mb-3 border-0 shadow-sm">
-        <Card.Body className="p-3">
+        <Card.Body className="p-2 p-md-3">
           <Alert variant="danger" className="mb-0 py-2 small">
-            <FaExclamationTriangle className="me-2" />
+            <FaExclamationTriangle className="me-2 flex-shrink-0" />
             {error}
           </Alert>
         </Card.Body>
@@ -132,20 +132,20 @@ const GeofenceMap = ({
 
   return (
     <Card className="mb-3 border-0 shadow-sm">
-      <Card.Body className="p-3">
+      <Card.Body className="p-2 p-md-3">
         {/* Header */}
-        <div className="d-flex justify-content-between align-items-center mb-3">
+        <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-3 gap-2">
           <h6 className="mb-0 d-flex align-items-center">
             <FaMapMarkerAlt className="me-2 text-primary" size={14} />
             Geofence Status
           </h6>
           {loading ? (
-            <Spinner size="sm" animation="border" variant="primary" />
+            <Spinner size="sm" animation="border" variant="primary" className="ms-0 ms-sm-auto" />
           ) : (
             <Badge 
               bg={isInside ? 'success' : 'warning'} 
               pill
-              className="px-3 py-2"
+              className="px-3 py-2 ms-0 ms-sm-auto d-inline-flex align-items-center"
             >
               {isInside ? (
                 <><FaCheckCircle className="me-1" size={10} /> Inside Geofence</>
@@ -236,7 +236,7 @@ const GeofenceMap = ({
         {/* Legend */}
         <div className="d-flex flex-wrap gap-3 small mb-3">
           <div className="d-flex align-items-center">
-            <FaCircle className="text-danger me-2" size={8} />
+            <FaCircle className="text-danger me-2 flex-shrink-0" size={8} />
             <span className="text-muted">Office Center</span>
           </div>
           <div className="d-flex align-items-center">
@@ -245,7 +245,8 @@ const GeofenceMap = ({
               height: '10px', 
               border: '2px solid #28a745',
               borderRadius: '50%',
-              marginRight: '8px'
+              marginRight: '8px',
+              flexShrink: 0
             }} />
             <span className="text-muted">50m Geofence</span>
           </div>
@@ -257,7 +258,8 @@ const GeofenceMap = ({
               borderRadius: '50%',
               border: '2px solid white',
               boxShadow: '0 0 0 1px rgba(0,0,0,0.1)',
-              marginRight: '6px'
+              marginRight: '6px',
+              flexShrink: 0
             }} />
             <span className="text-muted">Your Location</span>
           </div>
@@ -265,39 +267,45 @@ const GeofenceMap = ({
 
         {/* Distance and Status Details */}
         {distance !== null && (
-          <div className="bg-light p-3 rounded">
-            <div className="d-flex justify-content-between align-items-center mb-2">
-              <span className="text-muted small">Distance from office:</span>
-              <Badge bg={isInside ? 'success' : 'warning'} className="px-3 py-2">
-                {formatDistance(distance)}
-              </Badge>
-            </div>
-            
-            <div className="d-flex justify-content-between align-items-center mb-2">
-              <span className="text-muted small">Geofence radius:</span>
-              <Badge bg="info" className="px-3 py-2">
-                {officeCoords.radius} meters
-              </Badge>
-            </div>
+          <div className="bg-light p-2 p-md-3 rounded">
+            <Row className="g-2">
+              <Col xs={12} sm={6} md={12} lg={6}>
+                <div className="d-flex justify-content-between align-items-center mb-2">
+                  <span className="text-muted small">Distance from office:</span>
+                  <Badge bg={isInside ? 'success' : 'warning'} className="px-3 py-2 ms-2 text-nowrap">
+                    {formatDistance(distance)}
+                  </Badge>
+                </div>
+                
+                <div className="d-flex justify-content-between align-items-center mb-2">
+                  <span className="text-muted small">Geofence radius:</span>
+                  <Badge bg="info" className="px-3 py-2 ms-2 text-nowrap">
+                    {officeCoords.radius} meters
+                  </Badge>
+                </div>
+              </Col>
+              
+              <Col xs={12} sm={6} md={12} lg={6}>
+                <div className="d-flex justify-content-between align-items-center mb-2">
+                  <span className="text-muted small">Status:</span>
+                  <Badge bg={isInside ? 'success' : 'warning'} className="px-3 py-2 ms-2 text-nowrap">
+                    {isInside ? '✓ Eligible' : '✗ Not eligible'}
+                  </Badge>
+                </div>
 
-            <div className="d-flex justify-content-between align-items-center">
-              <span className="text-muted small">Status:</span>
-              <Badge bg={isInside ? 'success' : 'warning'} className="px-3 py-2">
-                {isInside ? '✓ Eligible to clock in' : '✗ Not eligible to clock in'}
-              </Badge>
-            </div>
-
-            {!isInside && distance && (
-              <div className="mt-2 text-warning small">
-                <FaExclamationTriangle className="me-1" size={10} />
-                You need to be within {officeCoords.radius}m to clock in.
-                {distance && (
-                  <span className="d-block mt-1">
-                    You are {(distance - officeCoords.radius).toFixed(1)}m too far.
-                  </span>
+                {!isInside && distance && (
+                  <div className="mt-2 text-warning small">
+                    <FaExclamationTriangle className="me-1 flex-shrink-0" size={10} />
+                    <span className="d-inline-block">
+                      Need to be within {officeCoords.radius}m.
+                      <span className="d-block d-sm-inline d-md-block d-lg-inline mt-1 mt-sm-0 mt-md-1 mt-lg-0">
+                        You are {(distance - officeCoords.radius).toFixed(1)}m too far.
+                      </span>
+                    </span>
+                  </div>
                 )}
-              </div>
-            )}
+              </Col>
+            </Row>
           </div>
         )}
 
@@ -305,11 +313,11 @@ const GeofenceMap = ({
         {showDetails && (
           <div className="mt-3 pt-2 border-top small">
             <div className="d-flex align-items-start">
-              <FaBuilding className="me-2 text-primary mt-1" size={12} />
-              <div>
+              <FaBuilding className="me-2 text-primary mt-1 flex-shrink-0" size={12} />
+              <div className="text-wrap" style={{ wordBreak: 'break-word' }}>
                 <span className="fw-semibold d-block">{officeCoords.name}</span>
-                <span className="text-muted d-block">{officeCoords.address}</span>
-                <span className="text-muted d-block mt-1">
+                <span className="text-muted d-block text-wrap">{officeCoords.address}</span>
+                <span className="text-muted d-block mt-1 text-wrap" style={{ fontSize: '0.75rem' }}>
                   📍 {officeCoords.latitude.toFixed(6)}, {officeCoords.longitude.toFixed(6)}
                 </span>
               </div>
@@ -320,12 +328,14 @@ const GeofenceMap = ({
         {/* User Location Details */}
         {userLocation && showDetails && (
           <div className="mt-2 small text-muted">
-            <div className="d-flex align-items-center">
-              <FaLocationArrow className="me-2" size={10} />
-              <span>
+            <div className="d-flex align-items-start">
+              <FaLocationArrow className="me-2 mt-1 flex-shrink-0" size={10} />
+              <span className="text-wrap" style={{ wordBreak: 'break-word' }}>
                 Your location: {userLocation.latitude.toFixed(6)}, {userLocation.longitude.toFixed(6)}
                 {userLocation.accuracy && (
-                  <span className="ms-2">(±{userLocation.accuracy.toFixed(1)}m accuracy)</span>
+                  <span className="d-block d-sm-inline d-md-block d-lg-inline ms-0 ms-sm-2 ms-md-0 ms-lg-2">
+                    (±{userLocation.accuracy.toFixed(1)}m accuracy)
+                  </span>
                 )}
               </span>
             </div>

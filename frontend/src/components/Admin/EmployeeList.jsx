@@ -284,7 +284,7 @@ const EmployeeList = () => {
 
   if (loading) {
     return (
-      <div className="d-flex justify-content-center align-items-center vh-100">
+      <div className="d-flex justify-content-center align-items-center min-vh-100">
         <div className="text-center">
           <Spinner animation="border" variant="primary" style={{ width: '3rem', height: '3rem' }} />
           <p className="mt-3 text-muted small">Loading employees...</p>
@@ -294,13 +294,12 @@ const EmployeeList = () => {
   }
 
   return (
-    <div className="p-3">
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h4 className="mb-0">
-          Employee Management
-        </h4>
+    <div className="p-2 p-md-3 p-lg-4">
+      {/* Header - Responsive */}
+      <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-4 gap-3">
+        <h4 className="mb-0">Employee Management</h4>
         {user?.role === 'admin' && (
-          <Button variant="dark" size="sm" onClick={() => navigate('/admin/add-employee')}>
+          <Button variant="dark" size="sm" onClick={() => navigate('/admin/add-employee')} className="ms-0 ms-sm-auto">
             <FaPlus className="me-2" size={12} /> Add Employee
           </Button>
         )}
@@ -313,11 +312,9 @@ const EmployeeList = () => {
       )}
 
       <Card className="border-0 shadow-sm">
-        <Card.Header className="bg-light py-2 d-flex justify-content-between align-items-center">
-          <h5 className="mb-0 fw-semibold">
-            Employee List
-          </h5>
-          <Badge bg="secondary" pill>
+        <Card.Header className="bg-light py-2 d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
+          <h5 className="mb-0 fw-semibold">Employee List</h5>
+          <Badge bg="secondary" pill className="ms-0 ms-sm-auto">
             Total: {employees.length} Employees
           </Badge>
         </Card.Header>
@@ -327,13 +324,13 @@ const EmployeeList = () => {
             <Table hover striped className="mb-0 small">
               <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
                 <tr>
-                  <th className="text-nowrap text-dark fw-normal">Sr No</th>
+                  <th className="text-nowrap text-dark fw-normal text-center">Sr No</th>
                   <th className="text-nowrap text-dark fw-normal">Employee ID</th>
                   <th className="text-nowrap text-dark fw-normal">Name</th>
-                  <th className="text-nowrap text-dark fw-normal">Department</th>
-                  <th className="text-nowrap text-dark fw-normal">Designation</th>
-                  <th className="text-nowrap text-dark fw-normal">Employment Type</th>
-                  <th className="text-nowrap text-dark fw-normal">Joining Date</th>
+                  <th className="text-nowrap text-dark fw-normal d-none d-md-table-cell">Department</th>
+                  <th className="text-nowrap text-dark fw-normal d-none d-lg-table-cell">Designation</th>
+                  <th className="text-nowrap text-dark fw-normal d-none d-sm-table-cell">Employment Type</th>
+                  <th className="text-nowrap text-dark fw-normal d-none d-xl-table-cell">Joining Date</th>
                   <th className="text-nowrap text-dark fw-normal">Actions</th>
                 </tr>
               </thead>
@@ -341,31 +338,31 @@ const EmployeeList = () => {
                 {employees.length > 0 ? (
                   employees.map((emp, index) => (
                     <tr key={emp.id}>
-                      <td className='text-center'>{index + 1}</td>
+                      <td className="text-center">{index + 1}</td>
                       <td>
                         <Badge bg="light" text="dark" className="small">
                           {emp.employee_id}
                         </Badge>
                       </td>
-                      <td className="text-truncate" style={{ maxWidth: '150px' }} title={`${emp.first_name} ${emp.middle_name || ''} ${emp.last_name}`}>
+                      <td className="text-truncate" style={{ maxWidth: '100px' }} title={`${emp.first_name} ${emp.middle_name || ''} ${emp.last_name}`}>
                         {emp.first_name} {emp.middle_name} {emp.last_name}
                       </td>
-                      <td className="text-truncate" style={{ maxWidth: '120px' }} title={emp.department}>
+                      <td className="text-truncate d-none d-md-table-cell" style={{ maxWidth: '100px' }} title={emp.department}>
                         {emp.department}
                       </td>
-                      <td className="text-truncate" style={{ maxWidth: '120px' }} title={emp.designation}>
+                      <td className="text-truncate d-none d-lg-table-cell" style={{ maxWidth: '100px' }} title={emp.designation}>
                         {emp.designation}
                       </td>
-                      <td>
+                      <td className="d-none d-sm-table-cell">
                         <Badge bg={emp.employment_type === 'Full Time' ? 'success' : 'info'} className="px-2 py-1">
-                          {emp.employment_type}
+                          {emp.employment_type === 'Full Time' ? 'Full Time' : emp.employment_type}
                         </Badge>
                       </td>
-                      <td className="text-truncate" style={{ maxWidth: '100px' }} title={formatDate(emp.joining_date)}>
+                      <td className="text-truncate d-none d-xl-table-cell" style={{ maxWidth: '100px' }} title={formatDate(emp.joining_date)}>
                         {formatDate(emp.joining_date)}
                       </td>
                       <td>
-                        <div className="d-flex gap-2">
+                        <div className="d-flex gap-2 gap-md-3 align-items-center">
                           {/* View Profile Icon */}
                           <FaEye
                             size={14}
@@ -431,22 +428,28 @@ const EmployeeList = () => {
         </Card.Body>
       </Card>
 
-      {/* Employee Profile View Modal */}
+      {/* Employee Profile View Modal - Responsive */}
       <EmployeeProfileView
         show={showProfileModal}
         onHide={() => setShowProfileModal(false)}
         employeeId={selectedEmployeeId}
       />
 
-      {/* Documents View Modal */}
-      <Modal show={showDocumentModal} onHide={() => setShowDocumentModal(false)} size="lg" centered>
+      {/* Documents View Modal - Responsive */}
+      <Modal 
+        show={showDocumentModal} 
+        onHide={() => setShowDocumentModal(false)} 
+        size="lg" 
+        centered
+        dialogClassName="mx-2 mx-md-auto"
+      >
         <Modal.Header closeButton className="bg-info text-white py-2">
-          <Modal.Title as="h6" className="mb-0 small fw-semibold">
+          <Modal.Title as="h6" className="mb-0 small fw-semibold d-flex align-items-center">
             <FaFileAlt className="me-2" size={14} />
-            Employee Documents: {selectedEmployeeForDocs?.first_name} {selectedEmployeeForDocs?.last_name}
+            <span className="text-truncate">Documents: {selectedEmployeeForDocs?.first_name} {selectedEmployeeForDocs?.last_name}</span>
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body className="p-3">
+        <Modal.Body className="p-2 p-md-3">
           {docLoading ? (
             <div className="text-center py-4">
               <Spinner animation="border" variant="info" size="sm" />
@@ -458,7 +461,7 @@ const EmployeeList = () => {
                 <thead className="bg-light">
                   <tr>
                     <th className="small text-dark">Document Type</th>
-                    <th className="small text-dark">File Name</th>
+                    <th className="small text-dark d-none d-sm-table-cell">File Name</th>
                     <th className="small text-dark text-center">Actions</th>
                   </tr>
                 </thead>
@@ -468,32 +471,39 @@ const EmployeeList = () => {
                       <td>
                         <div className="d-flex align-items-center">
                           {doc.icon}
-                          <span className="ms-2 small fw-semibold">{doc.displayName}</span>
+                          <span className="ms-2 small fw-semibold text-truncate" style={{ maxWidth: '120px' }}>
+                            {doc.displayName}
+                          </span>
                         </div>
                       </td>
-                      <td>
-                        <small className="text-muted">{doc.filename}</small>
+                      <td className="d-none d-sm-table-cell">
+                        <small className="text-muted text-truncate d-block" style={{ maxWidth: '150px' }} title={doc.filename}>
+                          {doc.filename}
+                        </small>
                       </td>
                       <td className="text-center">
-                        <Button
-                          variant="outline-info"
-                          size="sm"
-                          onClick={() => handleViewDocument(doc)}
-                          className="me-2"
-                          title="View Document"
-                        >
-                          <FaEye size={12} className="me-1" />
-                          View
-                        </Button>
-                        <Button
-                          variant="outline-success"
-                          size="sm"
-                          onClick={() => handleDownloadDocument(doc)}
-                          title="Download Document"
-                        >
-                          <FaDownload size={12} className="me-1" />
-                          Download
-                        </Button>
+                        <div className="d-flex flex-column flex-sm-row gap-1 gap-sm-2 justify-content-center">
+                          <Button
+                            variant="outline-info"
+                            size="sm"
+                            onClick={() => handleViewDocument(doc)}
+                            className="px-2 px-sm-3"
+                            title="View Document"
+                          >
+                            <FaEye size={12} className="me-1" />
+                            <span className="d-none d-sm-inline">View</span>
+                          </Button>
+                          <Button
+                            variant="outline-success"
+                            size="sm"
+                            onClick={() => handleDownloadDocument(doc)}
+                            className="px-2 px-sm-3"
+                            title="Download Document"
+                          >
+                            <FaDownload size={12} className="me-1" />
+                            <span className="d-none d-sm-inline">Download</span>
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -514,15 +524,21 @@ const EmployeeList = () => {
         </Modal.Footer>
       </Modal>
 
-      {/* Delete Confirmation Modal */}
-      <Modal show={showDeleteModal} onHide={handleCancelDelete} centered backdrop="static">
+      {/* Delete Confirmation Modal - Responsive */}
+      <Modal 
+        show={showDeleteModal} 
+        onHide={handleCancelDelete} 
+        centered 
+        backdrop="static"
+        dialogClassName="mx-2 mx-md-auto"
+      >
         <Modal.Header closeButton className="bg-danger text-white py-2">
-          <Modal.Title as="h6" className="mb-0 small fw-semibold">
+          <Modal.Title as="h6" className="mb-0 small fw-semibold d-flex align-items-center">
             <FaTrash className="me-2" size={12} />
             Confirm Delete
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body className="p-3">
+        <Modal.Body className="p-2 p-md-3">
           <div className="text-center mb-3">
             <FaTrash size={40} className="text-danger mb-2" />
             <p className="mb-2">Are you sure you want to delete this employee?</p>
@@ -531,14 +547,14 @@ const EmployeeList = () => {
           {selectedEmployee && (
             <div className="alert alert-warning py-2 small">
               <strong>Employee Details:</strong><br />
-              Name: {selectedEmployee.first_name} {selectedEmployee.last_name}<br />
-              ID: {selectedEmployee.employee_id}<br />
-              Department: {selectedEmployee.department}
+              <span className="d-block text-truncate">Name: {selectedEmployee.first_name} {selectedEmployee.last_name}</span>
+              <span className="d-block">ID: {selectedEmployee.employee_id}</span>
+              <span className="d-block text-truncate">Department: {selectedEmployee.department}</span>
             </div>
           )}
 
           <p className="text-danger mb-0 small fw-bold">
-            <small>⚠️ This action cannot be undone. All data associated with this employee will be permanently removed.</small>
+            <small>⚠️ This action cannot be undone. All data will be permanently removed.</small>
           </p>
         </Modal.Body>
         <Modal.Footer className="py-2">
@@ -559,12 +575,13 @@ const EmployeeList = () => {
             {deleting ? (
               <>
                 <Spinner size="sm" animation="border" className="me-2" />
-                Deleting...
+                <span className="d-none d-sm-inline">Deleting...</span>
               </>
             ) : (
               <>
                 <FaTrash className="me-2" size={10} />
-                Yes, Delete Employee
+                <span className="d-none d-sm-inline">Yes, Delete</span>
+                <span className="d-inline d-sm-none">Delete</span>
               </>
             )}
           </Button>

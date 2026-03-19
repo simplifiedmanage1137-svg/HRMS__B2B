@@ -110,11 +110,12 @@ const AdminUpdateApprovals = () => {
   }
 
   return (
-    <div className="admin-update-approvals p-4">
-      <div className="d-flex justify-content-between align-items-center mb-4">
+    <div className="p-2 p-md-3 p-lg-4">
+      {/* Header - Responsive */}
+      <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-4 gap-3">
         <h4 className="mb-0">Pending Update Approvals</h4>
         <button 
-          className="btn btn-sm btn-outline-primary"
+          className="btn btn-sm btn-outline-primary ms-0 ms-sm-auto"
           onClick={fetchCompletedRequests}
           disabled={loading}
         >
@@ -138,51 +139,49 @@ const AdminUpdateApprovals = () => {
       {selectedRequest ? (
         // Show comparison view
         <div className="card mb-4 shadow-sm">
-          <div className="card-header bg-white d-flex justify-content-between align-items-center py-3">
+          <div className="card-header bg-white d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center py-3 gap-2">
             <div>
-              <h5 className="mb-0">
-                Update Request Review
-              </h5>
+              <h5 className="mb-0">Update Request Review</h5>
               <small className="text-muted">
                 Request ID: {selectedRequest._id}
               </small>
             </div>
             <button
-              className="btn btn-outline-secondary btn-sm"
+              className="btn btn-outline-secondary btn-sm ms-0 ms-sm-auto"
               onClick={() => setSelectedRequest(null)}
             >
               ← Back to List
             </button>
           </div>
-          <div className="card-body">
-            {/* Employee Info */}
-            <div className="bg-light p-3 rounded mb-4">
-              <div className="row">
+          <div className="card-body p-2 p-md-3">
+            {/* Employee Info - Responsive */}
+            <div className="bg-light p-2 p-md-3 rounded mb-4">
+              <div className="row g-2">
                 <div className="col-md-6">
                   <h6 className="fw-bold mb-2">Employee Details</h6>
-                  <p className="mb-1">
+                  <p className="mb-1 small">
                     <strong>Name:</strong> {selectedRequest.employeeDetails?.firstName}{' '}
                     {selectedRequest.employeeDetails?.lastName}
                   </p>
-                  <p className="mb-1">
+                  <p className="mb-1 small">
                     <strong>Employee ID:</strong> {selectedRequest.employeeDetails?.employeeId}
                   </p>
-                  <p className="mb-1">
+                  <p className="mb-1 small">
                     <strong>Designation:</strong> {selectedRequest.employeeDetails?.designation}
                   </p>
-                  <p className="mb-1">
+                  <p className="mb-1 small">
                     <strong>Department:</strong> {selectedRequest.employeeDetails?.department}
                   </p>
                 </div>
                 <div className="col-md-6">
                   <h6 className="fw-bold mb-2">Request Info</h6>
-                  <p className="mb-1">
+                  <p className="mb-1 small">
                     <strong>Submitted:</strong> {formatDate(selectedRequest.updatedAt).date} at {formatDate(selectedRequest.updatedAt).time}
                   </p>
-                  <p className="mb-1">
+                  <p className="mb-1 small">
                     <strong>Requested Fields:</strong> {selectedRequest.requestedFields?.join(', ')}
                   </p>
-                  <p className="mb-1">
+                  <p className="mb-1 small">
                     <strong>Status:</strong>{' '}
                     <span className="badge bg-warning text-dark">Pending Review</span>
                   </p>
@@ -190,15 +189,15 @@ const AdminUpdateApprovals = () => {
               </div>
             </div>
 
-            {/* Changes Comparison */}
+            {/* Changes Comparison - Responsive */}
             <h6 className="fw-bold mb-3">Changes Requested</h6>
             <div className="table-responsive">
-              <table className="table table-bordered">
+              <table className="table table-bordered small">
                 <thead className="table-light">
                   <tr>
-                    <th style={{ width: '25%' }}>Field</th>
-                    <th style={{ width: '35%' }}>Current Value</th>
-                    <th style={{ width: '35%' }}>Requested Value</th>
+                    <th style={{ width: '25%' }} className="text-nowrap">Field</th>
+                    <th style={{ width: '35%' }} className="text-nowrap">Current Value</th>
+                    <th style={{ width: '35%' }} className="text-nowrap">Requested Value</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -211,11 +210,11 @@ const AdminUpdateApprovals = () => {
                     
                     return (
                       <tr key={field}>
-                        <td className="fw-semibold">{field.replace(/_/g, ' ').toUpperCase()}</td>
-                        <td className="text-danger bg-light">
+                        <td className="fw-semibold text-wrap">{field.replace(/_/g, ' ').toUpperCase()}</td>
+                        <td className="text-danger bg-light text-wrap">
                           {oldValue || <em className="text-muted">Not set</em>}
                         </td>
-                        <td className="text-success bg-light">
+                        <td className="text-success bg-light text-wrap">
                           {newValue || <em className="text-muted">Will be cleared</em>}
                         </td>
                       </tr>
@@ -225,39 +224,41 @@ const AdminUpdateApprovals = () => {
               </table>
             </div>
 
-            {/* Action Buttons */}
-            <div className="d-flex justify-content-end gap-2 mt-4">
+            {/* Action Buttons - Responsive */}
+            <div className="d-flex flex-column flex-sm-row justify-content-end gap-2 mt-4">
               <button
-                className="btn btn-outline-danger px-4"
+                className="btn btn-outline-danger px-4 w-100 w-sm-auto"
                 onClick={() => handleReject(selectedRequest._id)}
                 disabled={loading}
               >
                 {loading ? (
                   <>
                     <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                    Rejecting...
+                    <span className="d-none d-sm-inline">Rejecting...</span>
                   </>
                 ) : (
                   <>
                     <FaTimes className="me-2" />
-                    Reject
+                    <span className="d-none d-sm-inline">Reject</span>
+                    <span className="d-inline d-sm-none">Reject</span>
                   </>
                 )}
               </button>
               <button
-                className="btn btn-success px-4"
+                className="btn btn-success px-4 w-100 w-sm-auto"
                 onClick={() => handleApprove(selectedRequest._id)}
                 disabled={loading}
               >
                 {loading ? (
                   <>
                     <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                    Approving...
+                    <span className="d-none d-sm-inline">Approving...</span>
                   </>
                 ) : (
                   <>
                     <FaCheck className="me-2" />
-                    Approve
+                    <span className="d-none d-sm-inline">Approve</span>
+                    <span className="d-inline d-sm-none">Approve</span>
                   </>
                 )}
               </button>
@@ -283,10 +284,10 @@ const AdminUpdateApprovals = () => {
                 <table className="table table-hover mb-0">
                   <thead className="table-light">
                     <tr>
-                      <th>Employee</th>
-                      <th>Requested Fields</th>
-                      <th>Submitted On</th>
-                      <th>Actions</th>
+                      <th className="text-nowrap">Employee</th>
+                      <th className="text-nowrap d-none d-sm-table-cell">Requested Fields</th>
+                      <th className="text-nowrap d-none d-md-table-cell">Submitted On</th>
+                      <th className="text-nowrap">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -295,34 +296,35 @@ const AdminUpdateApprovals = () => {
                       return (
                         <tr key={request._id}>
                           <td>
-                            <div className="fw-semibold">
+                            <div className="fw-semibold text-truncate" style={{ maxWidth: '120px' }} title={`${request.employeeDetails?.firstName} ${request.employeeDetails?.lastName}`}>
                               {request.employeeDetails?.firstName}{' '}
                               {request.employeeDetails?.lastName}
                             </div>
-                            <small className="text-muted">
+                            <small className="text-muted d-block text-truncate" style={{ maxWidth: '120px' }} title={request.employeeDetails?.designation}>
                               {request.employeeDetails?.designation}
                             </small>
                           </td>
-                          <td>
-                            <div className="d-flex flex-wrap gap-1">
+                          <td className="d-none d-sm-table-cell">
+                            <div className="d-flex flex-wrap gap-1" style={{ maxWidth: '200px' }}>
                               {request.requestedFields?.map((field, idx) => (
-                                <span key={idx} className="badge bg-info text-dark">
+                                <span key={idx} className="badge bg-info text-dark text-truncate">
                                   {field.replace(/_/g, ' ')}
                                 </span>
                               ))}
                             </div>
                           </td>
-                          <td>
-                            <div>{date}</div>
-                            <small className="text-muted">{time}</small>
+                          <td className="d-none d-md-table-cell">
+                            <div className="text-nowrap">{date}</div>
+                            <small className="text-muted text-nowrap">{time}</small>
                           </td>
                           <td>
                             <button
-                              className="btn btn-sm btn-outline-primary"
+                              className="btn btn-sm btn-outline-primary text-nowrap"
                               onClick={() => viewChanges(request)}
                             >
                               <FaEye className="me-1" />
-                              Review Changes
+                              <span className="d-none d-sm-inline">Review Changes</span>
+                              <span className="d-inline d-sm-none">Review</span>
                             </button>
                           </td>
                         </tr>

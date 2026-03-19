@@ -51,19 +51,52 @@ const LeaveReports = () => {
       const balancesPromises = employees.map(async (emp) => {
         try {
           const balanceRes = await axios.get(API_ENDPOINTS.LEAVE_BALANCE(emp.employee_id));
+          
+          // Parse the response data
+          const rawBalance = balanceRes.data;
+          
+          // Calculate derived values
+          const totalAccrued = parseFloat(rawBalance.total_accrued) || 0;
+          const used = parseFloat(rawBalance.used) || 0;
+          const pendingApproval = parseFloat(rawBalance.pending) || 0;
+          
+          // PENDING = TOTAL ACCRUED - USED (leaves that are either available or pending approval)
+          const calculatedPending = totalAccrued - used;
+          
+          // AVAILABLE = TOTAL ACCRUED - USED - PENDING_APPROVAL
+          const available = totalAccrued - used - pendingApproval;
+          
+          console.log(`📊 Employee ${emp.employee_id}:`, {
+            totalAccrued,
+            used,
+            pendingApproval,
+            calculatedPending,
+            available,
+            formula: `${totalAccrued} - ${used} = ${calculatedPending}`
+          });
+          
           return {
             ...emp,
-            leaveBalance: balanceRes.data
+            leaveBalance: {
+              total_accrued: totalAccrued.toFixed(1),
+              used: used.toFixed(1),
+              pending_approval: pendingApproval.toFixed(1), // Original pending approval
+              pending: calculatedPending.toFixed(1), // Calculated pending (Total - Used)
+              available: available.toFixed(1),
+              // For backward compatibility
+              original_pending: rawBalance.pending || '0'
+            }
           };
         } catch (error) {
           console.error(`Error fetching balance for ${emp.employee_id}:`, error);
           return {
             ...emp,
             leaveBalance: {
-              available: '0',
               total_accrued: '0',
               used: '0',
-              pending: '0'
+              pending_approval: '0',
+              pending: '0',
+              available: '0'
             }
           };
         }
@@ -116,16 +149,19 @@ const LeaveReports = () => {
 
     // Apply sorting
     filtered.sort((a, b) => {
+      const aBalance = a.leaveBalance || { pending: 0, used: 0, total_accrued: 0 };
+      const bBalance = b.leaveBalance || { pending: 0, used: 0, total_accrued: 0 };
+      
       if (sortBy === 'name') {
         const nameA = `${a.first_name || ''} ${a.last_name || ''}`.toLowerCase();
         const nameB = `${b.first_name || ''} ${b.last_name || ''}`.toLowerCase();
         return nameA.localeCompare(nameB);
       } else if (sortBy === 'balance-asc') {
-        return (parseFloat(a.leaveBalance?.available) || 0) - (parseFloat(b.leaveBalance?.available) || 0);
+        return (parseFloat(aBalance.pending) || 0) - (parseFloat(bBalance.pending) || 0);
       } else if (sortBy === 'balance-desc') {
-        return (parseFloat(b.leaveBalance?.available) || 0) - (parseFloat(a.leaveBalance?.available) || 0);
+        return (parseFloat(bBalance.pending) || 0) - (parseFloat(aBalance.pending) || 0);
       } else if (sortBy === 'used') {
-        return (parseFloat(b.leaveBalance?.used) || 0) - (parseFloat(a.leaveBalance?.used) || 0);
+        return (parseFloat(bBalance.used) || 0) - (parseFloat(aBalance.used) || 0);
       }
       return 0;
     });
@@ -143,17 +179,27 @@ const LeaveReports = () => {
 
   const handleExportExcel = () => {
     try {
-      const data = filteredEmployees.map((emp, index) => ({
-        'Sr No': index + 1,
-        'Employee ID': emp.employee_id,
-        'Name': `${emp.first_name || ''} ${emp.last_name || ''}`.trim(),
-        'Department': emp.department || 'N/A',
-        'Designation': emp.designation || 'N/A',
-        'Total Accrued': emp.leaveBalance?.total_accrued || '0',
-        'Used': emp.leaveBalance?.used || '0',
-        'Pending': emp.leaveBalance?.pending || '0',
-        'Available': emp.leaveBalance?.available || '0'
-      }));
+      const data = filteredEmployees.map((emp, index) => {
+        const balance = emp.leaveBalance || {};
+        const totalAccrued = parseFloat(balance.total_accrued) || 0;
+        const used = parseFloat(balance.used) || 0;
+        const pending = parseFloat(balance.pending) || 0; // Calculated pending (Total - Used)
+        const pendingApproval = parseFloat(balance.pending_approval) || 0;
+        const available = parseFloat(balance.available) || 0;
+        
+        return {
+          'Sr No': index + 1,
+          'Employee ID': emp.employee_id,
+          'Name': `${emp.first_name || ''} ${emp.last_name || ''}`.trim(),
+          'Department': emp.department || 'N/A',
+          'Designation': emp.designation || 'N/A',
+          'Total Accrued': totalAccrued.toFixed(1),
+          'Used (Approved)': used.toFixed(1),
+          'Pending (Total - Used)': pending.toFixed(1),
+          'Pending Approval': pendingApproval.toFixed(1),
+          'Available': available.toFixed(1)
+        };
+      });
 
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
@@ -184,6 +230,14 @@ const LeaveReports = () => {
     return 'success';
   };
 
+  const getPendingColor = (pending) => {
+    const pend = parseFloat(pending);
+    if (pend > 5) return 'success';
+    if (pend > 2) return 'warning';
+    if (pend > 0) return 'info';
+    return 'secondary';
+  };
+
   if (loading) {
     return (
       <div className="d-flex justify-content-center align-items-center vh-100">
@@ -199,13 +253,21 @@ const LeaveReports = () => {
   const totalLeaves = filteredEmployees.reduce((sum, emp) =>
     sum + (parseFloat(emp.leaveBalance?.available) || 0), 0
   );
+  
+  const totalPending = filteredEmployees.reduce((sum, emp) => 
+    sum + (parseFloat(emp.leaveBalance?.pending) || 0), 0
+  );
+  
   const avgLeaves = filteredEmployees.length > 0 ? (totalLeaves / filteredEmployees.length).toFixed(1) : 0;
+  
   const zeroBalance = filteredEmployees.filter(emp => parseFloat(emp.leaveBalance?.available) <= 0).length;
   const lowBalance = filteredEmployees.filter(emp => {
     const bal = parseFloat(emp.leaveBalance?.available);
     return bal > 0 && bal < 3;
   }).length;
   const healthyBalance = filteredEmployees.filter(emp => parseFloat(emp.leaveBalance?.available) >= 3).length;
+  
+  const employeesWithPending = filteredEmployees.filter(emp => parseFloat(emp.leaveBalance?.pending) > 0).length;
 
   return (
     <div className="p-4">
@@ -279,8 +341,8 @@ const LeaveReports = () => {
                 className="bg-light border-0"
               >
                 <option value="name">Name</option>
-                <option value="balance-desc">Highest Balance</option>
-                <option value="balance-asc">Lowest Balance</option>
+                <option value="balance-desc">Highest Pending</option>
+                <option value="balance-asc">Lowest Pending</option>
                 <option value="used">Most Used</option>
               </Form.Select>
             </Col>
@@ -326,14 +388,14 @@ const LeaveReports = () => {
           {/* Table with Vertical Scroll - maxHeight 200px */}
           <div
             className="table-responsive"
-            style={{ maxHeight: "200px", overflowY: "auto" }}
+            style={{ maxHeight: "400px", overflowY: "auto" }}
           >
             <Table hover className="mb-0" style={{ tableLayout: 'fixed' }}>
 
               {/* Header - with fixed column widths and nowrap text */}
               <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
                 <tr>
-                  <th className="small text-dark fw-normal text-nowrap" style={{ width: '60px' }}>
+                  <th className="small text-dark fw-normal text-center" style={{ width: '60px' }}>
                     Sr No
                   </th>
                   <th className="small text-dark fw-normal text-nowrap" style={{ width: '180px' }}>
@@ -342,7 +404,7 @@ const LeaveReports = () => {
                   <th className="small text-dark fw-normal text-nowrap" style={{ width: '120px' }}>
                     Department
                   </th>
-                  <th className="small text-dark fw-normal text-nowrap" style={{ width: '200px' }}>
+                  <th className="small text-dark fw-normal text-nowrap" style={{ width: '150px' }}>
                     Designation
                   </th>
                   <th className="small text-dark fw-normal text-nowrap" style={{ width: '100px' }}>
@@ -351,7 +413,7 @@ const LeaveReports = () => {
                   <th className="small text-dark fw-normal text-nowrap" style={{ width: '70px' }}>
                     Used
                   </th>
-                  <th className="small text-dark fw-normal text-nowrap" style={{ width: '70px' }}>
+                  <th className="small text-dark fw-normal text-nowrap" style={{ width: '80px' }}>
                     Pending
                   </th>
                   <th className="small text-dark fw-normal text-nowrap" style={{ width: '80px' }}>
@@ -367,12 +429,17 @@ const LeaveReports = () => {
               <tbody>
                 {filteredEmployees.length > 0 ? (
                   filteredEmployees.map((emp, index) => {
-                    const available = parseFloat(emp.leaveBalance?.available) || 0;
+                    const balance = emp.leaveBalance || {};
+                    const totalAccrued = parseFloat(balance.total_accrued) || 0;
+                    const used = parseFloat(balance.used) || 0;
+                    const pending = parseFloat(balance.pending) || 0; // This is Total - Used
+                    const available = parseFloat(balance.available) || 0;
+                    const pendingApproval = parseFloat(balance.pending_approval) || 0;
 
                     return (
                       <tr key={emp.id}>
                         {/* Sr No - Left aligned */}
-                        <td className="text-start small">
+                        <td className="text-center small">
                           {index + 1}
                         </td>
 
@@ -404,31 +471,50 @@ const LeaveReports = () => {
                         {/* Designation - Left aligned with extra width */}
                         <td className="text-start small">
                           <span className="text-truncate d-inline-block" 
-                                style={{ maxWidth: '190px' }}
+                                style={{ maxWidth: '140px' }}
                                 title={emp.designation}>
                             {emp.designation}
                           </span>
                         </td>
 
-                        {/* Total - Left aligned */}
-                        <td className="text-start small">
-                          {emp.leaveBalance?.total_accrued || "0"}
+                        {/* Total Accrued - Left aligned */}
+                        <td className="text-start small fw-bold">
+                          {totalAccrued.toFixed(1)}
                         </td>
 
                         {/* Used - Left aligned */}
                         <td className="text-start text-danger small">
-                          {emp.leaveBalance?.used || "0"}
+                          {used.toFixed(1)}
+                          {used > 0 && <small className="text-muted ms-1">✔</small>}
                         </td>
 
-                        {/* Pending - Left aligned */}
-                        <td className="text-start text-warning small">
-                          {emp.leaveBalance?.pending || "0"}
+                        {/* PENDING - Total - Used (Left aligned) */}
+                        <td className="text-start small">
+                          {pending > 0 ? (
+                            <Badge bg="warning" pill>
+                              {pending.toFixed(1)}
+                              {pendingApproval > 0 && (
+                                <small className="ms-1 text-white-50" title="Includes pending approval">
+                                  *
+                                </small>
+                              )}
+                            </Badge>
+                          ) : (
+                            <Badge bg="secondary" pill>
+                              0
+                            </Badge>
+                          )}
+                          {pendingApproval > 0 && pendingApproval != pending && (
+                            <small className="text-muted ms-1" title={`${pendingApproval} pending approval`}>
+                              ({pendingApproval.toFixed(1)} pending)
+                            </small>
+                          )}
                         </td>
 
                         {/* Available - Left aligned */}
                         <td className="text-start small">
                           <Badge bg={getBalanceColor(available)} pill>
-                            {emp.leaveBalance?.available || "0"}
+                            {available.toFixed(1)}
                           </Badge>
                         </td>
 
@@ -478,26 +564,46 @@ const LeaveReports = () => {
           {filteredEmployees.length > 0 && (
             <div className="p-3 bg-light border-top">
               <Row className="text-center">
-                <Col md={3}>
+                <Col md={2}>
                   <span className="text-muted small">Total Employees:</span>
                   <strong className="ms-2 small">{filteredEmployees.length}</strong>
                 </Col>
 
-                <Col md={3}>
-                  <span className="text-muted small">Avg. Balance:</span>
-                  <strong className="ms-2 small">{avgLeaves}</strong>
-                </Col>
-
-                <Col md={3}>
-                  <span className="text-muted small">
-                    Low Balance (&lt;3):
-                  </span>
-                  <strong className="ms-2 small text-warning">
-                    {lowBalance}
+                <Col md={2}>
+                  <span className="text-muted small">Total Accrued:</span>
+                  <strong className="ms-2 small">
+                    {filteredEmployees.reduce((sum, emp) => 
+                      sum + (parseFloat(emp.leaveBalance?.total_accrued) || 0), 0
+                    ).toFixed(1)}
                   </strong>
                 </Col>
 
-                <Col md={3}>
+                <Col md={2}>
+                  <span className="text-muted small">Total Used:</span>
+                  <strong className="ms-2 small text-danger">
+                    {filteredEmployees.reduce((sum, emp) => 
+                      sum + (parseFloat(emp.leaveBalance?.used) || 0), 0
+                    ).toFixed(1)}
+                  </strong>
+                </Col>
+
+                <Col md={2}>
+                  <span className="text-muted small">Total Pending:</span>
+                  <strong className="ms-2 small text-warning">
+                    {filteredEmployees.reduce((sum, emp) => 
+                      sum + (parseFloat(emp.leaveBalance?.pending) || 0), 0
+                    ).toFixed(1)}
+                  </strong>
+                </Col>
+
+                <Col md={2}>
+                  <span className="text-muted small">Avg. Pending:</span>
+                  <strong className="ms-2 small">
+                    {(totalPending / filteredEmployees.length).toFixed(1)}
+                  </strong>
+                </Col>
+
+                <Col md={2}>
                   <span className="text-muted small">Zero Balance:</span>
                   <strong className="ms-2 small text-danger">
                     {zeroBalance}
@@ -537,8 +643,9 @@ const LeaveReports = () => {
                     <Card.Body className="p-3">
                       <h6 className="text-primary mb-3 small fw-semibold">Leave Balance</h6>
                       <p className="mb-2"><strong>Total Accrued:</strong> {selectedEmployee.leaveBalance?.total_accrued}</p>
-                      <p className="mb-2"><strong>Used:</strong> <span className="text-danger">{selectedEmployee.leaveBalance?.used}</span></p>
-                      <p className="mb-2"><strong>Pending:</strong> <span className="text-warning">{selectedEmployee.leaveBalance?.pending}</span></p>
+                      <p className="mb-2"><strong>Used (Approved):</strong> <span className="text-danger">{selectedEmployee.leaveBalance?.used}</span></p>
+                      <p className="mb-2"><strong>Pending (Total - Used):</strong> <span className="text-warning">{selectedEmployee.leaveBalance?.pending}</span></p>
+                      <p className="mb-2"><strong>Pending Approval:</strong> {selectedEmployee.leaveBalance?.pending_approval || '0'}</p>
                       <p className="mb-0">
                         <strong>Available:</strong>{' '}
                         <Badge bg={getBalanceColor(selectedEmployee.leaveBalance?.available)} pill>

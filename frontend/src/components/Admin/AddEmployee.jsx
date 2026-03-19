@@ -644,9 +644,10 @@ const generateEmployeeId = async () => {
   };
 
   return (
-    <div className="p-4">
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h5 className="mb-0">
+    <div className="p-2 p-md-3 p-lg-4">
+      {/* Header - Responsive */}
+      <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-4 gap-3">
+        <h5 className="mb-0 d-flex align-items-center">
           <FaUserPlus className="me-2 text-primary" size={20} />
           Add New Employee
         </h5>
@@ -654,43 +655,54 @@ const generateEmployeeId = async () => {
           variant="secondary"
           size="sm"
           onClick={() => navigate('/admin/employees')}
+          className="ms-0 ms-sm-auto"
         >
           <FaTimes className="me-2" size={12} />
           Cancel
         </Button>
       </div>
 
-      {/* Progress Indicators */}
+      {/* Progress Indicators - Responsive */}
       <div className="mb-4">
-        <Row className="g-2">
-          <Col md={2}>
-            <div className={`p-2 rounded text-center small ${completedTabs.personal ? 'bg-success text-white' : 'bg-light'}`}>
-              {completedTabs.personal ? <FaCheckCircle className="me-1" /> : '1.'} Personal
+        <Row className="g-1 g-md-2">
+          <Col xs={6} sm={4} md={2} className="mb-2">
+            <div className={`p-1 p-md-2 rounded text-center small ${completedTabs.personal ? 'bg-success text-white' : 'bg-light'}`}>
+              {completedTabs.personal ? <FaCheckCircle className="me-1 d-none d-sm-inline" /> : null}
+              <span className="d-inline d-sm-none">1.</span>
+              <span className="d-none d-sm-inline">Personal</span>
             </div>
           </Col>
-          <Col md={2}>
-            <div className={`p-2 rounded text-center small ${completedTabs.bank ? 'bg-success text-white' : 'bg-light'}`}>
-              {completedTabs.bank ? <FaCheckCircle className="me-1" /> : '2.'} Bank
+          <Col xs={6} sm={4} md={2} className="mb-2">
+            <div className={`p-1 p-md-2 rounded text-center small ${completedTabs.bank ? 'bg-success text-white' : 'bg-light'}`}>
+              {completedTabs.bank ? <FaCheckCircle className="me-1 d-none d-sm-inline" /> : null}
+              <span className="d-inline d-sm-none">2.</span>
+              <span className="d-none d-sm-inline">Bank</span>
             </div>
           </Col>
-          <Col md={2}>
-            <div className={`p-2 rounded text-center small ${completedTabs.salary ? 'bg-success text-white' : 'bg-light'}`}>
-              {completedTabs.salary ? <FaCheckCircle className="me-1" /> : '3.'} Salary
+          <Col xs={6} sm={4} md={2} className="mb-2">
+            <div className={`p-1 p-md-2 rounded text-center small ${completedTabs.salary ? 'bg-success text-white' : 'bg-light'}`}>
+              {completedTabs.salary ? <FaCheckCircle className="me-1 d-none d-sm-inline" /> : null}
+              <span className="d-inline d-sm-none">3.</span>
+              <span className="d-none d-sm-inline">Salary</span>
             </div>
           </Col>
-          <Col md={2}>
-            <div className={`p-2 rounded text-center small ${completedTabs.policy ? 'bg-success text-white' : 'bg-light'}`}>
-              {completedTabs.policy ? <FaCheckCircle className="me-1" /> : '4.'} Policy
+          <Col xs={6} sm={4} md={2} className="mb-2">
+            <div className={`p-1 p-md-2 rounded text-center small ${completedTabs.policy ? 'bg-success text-white' : 'bg-light'}`}>
+              {completedTabs.policy ? <FaCheckCircle className="me-1 d-none d-sm-inline" /> : null}
+              <span className="d-inline d-sm-none">4.</span>
+              <span className="d-none d-sm-inline">Policy</span>
             </div>
           </Col>
-          <Col md={2}>
-            <div className="p-2 rounded text-center small bg-light">
-              5. Documents
+          <Col xs={6} sm={4} md={2} className="mb-2">
+            <div className="p-1 p-md-2 rounded text-center small bg-light">
+              <span className="d-inline d-sm-none">5.</span>
+              <span className="d-none d-sm-inline">Documents</span>
             </div>
           </Col>
-          <Col md={2}>
-            <div className={`p-2 rounded text-center small ${isAllTabsCompleted() ? 'bg-primary text-white' : 'bg-secondary text-white'}`}>
-              Final Submit
+          <Col xs={6} sm={4} md={2} className="mb-2">
+            <div className={`p-1 p-md-2 rounded text-center small ${isAllTabsCompleted() ? 'bg-primary text-white' : 'bg-secondary text-white'}`}>
+              <span className="d-inline d-sm-none">✓</span>
+              <span className="d-none d-sm-inline">Final Submit</span>
             </div>
           </Col>
         </Row>
@@ -700,7 +712,7 @@ const generateEmployeeId = async () => {
       {debugInfo && (
         <Alert variant="info" className="mb-3">
           <details>
-            <summary>Debug: Data being sent (Click to expand)</summary>
+            <summary className="small">Debug: Data being sent (Click to expand)</summary>
             <pre className="mt-2 small" style={{ maxHeight: '200px', overflow: 'auto' }}>
               {JSON.stringify(debugInfo, null, 2)}
             </pre>
@@ -722,40 +734,40 @@ const generateEmployeeId = async () => {
 
       <Card className="border-0 shadow-sm">
         <Card.Header className="bg-light py-2">
-          <Nav variant="tabs" activeKey={activeTab} onSelect={(k) => handleTabChange(k)}>
+          <Nav variant="tabs" activeKey={activeTab} onSelect={(k) => handleTabChange(k)} className="flex-nowrap overflow-auto">
             <Nav.Item>
-              <Nav.Link eventKey="personal" className="text-dark small">
-                Personal Information {completedTabs.personal && <FaCheckCircle className="ms-1 text-success" size={10} />}
+              <Nav.Link eventKey="personal" className="text-dark small px-2 px-md-3">
+                Personal {completedTabs.personal && <FaCheckCircle className="ms-1 text-success d-none d-sm-inline" size={10} />}
               </Nav.Link>
             </Nav.Item>
             <Nav.Item>
-              <Nav.Link eventKey="bank" className="text-dark small">
-                Bank Details {completedTabs.bank && <FaCheckCircle className="ms-1 text-success" size={10} />}
+              <Nav.Link eventKey="bank" className="text-dark small px-2 px-md-3">
+                Bank {completedTabs.bank && <FaCheckCircle className="ms-1 text-success d-none d-sm-inline" size={10} />}
               </Nav.Link>
             </Nav.Item>
             <Nav.Item>
-              <Nav.Link eventKey="salary" className="text-dark small">
-                Salary Information {completedTabs.salary && <FaCheckCircle className="ms-1 text-success" size={10} />}
+              <Nav.Link eventKey="salary" className="text-dark small px-2 px-md-3">
+                Salary {completedTabs.salary && <FaCheckCircle className="ms-1 text-success d-none d-sm-inline" size={10} />}
               </Nav.Link>
             </Nav.Item>
             <Nav.Item>
-              <Nav.Link eventKey="policy" className="text-dark small">
-                Contract Policy {completedTabs.policy && <FaCheckCircle className="ms-1 text-success" size={10} />}
+              <Nav.Link eventKey="policy" className="text-dark small px-2 px-md-3">
+                Policy {completedTabs.policy && <FaCheckCircle className="ms-1 text-success d-none d-sm-inline" size={10} />}
               </Nav.Link>
             </Nav.Item>
             <Nav.Item>
-              <Nav.Link eventKey="documents" className="text-dark small">
-                Documents
+              <Nav.Link eventKey="documents" className="text-dark small px-2 px-md-3">
+                Docs
               </Nav.Link>
             </Nav.Item>
           </Nav>
         </Card.Header>
-        <Card.Body className="p-3">
+        <Card.Body className="p-2 p-md-3">
           <Form>
             {activeTab === 'personal' && (
               <>
                 <Row className="mb-3">
-                  <Col md={6}>
+                  <Col xs={12}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         Email Address <span className="text-danger">*</span>
@@ -772,8 +784,8 @@ const generateEmployeeId = async () => {
                   </Col>
                 </Row>
 
-                <Row className="mb-3">
-                  <Col md={4}>
+                <Row className="mb-3 g-2">
+                  <Col xs={12} md={4}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         First Name <span className="text-danger">*</span>
@@ -787,7 +799,7 @@ const generateEmployeeId = async () => {
                       />
                     </Form.Group>
                   </Col>
-                  <Col md={4}>
+                  <Col xs={12} md={4}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         Middle Name
@@ -801,7 +813,7 @@ const generateEmployeeId = async () => {
                       />
                     </Form.Group>
                   </Col>
-                  <Col md={4}>
+                  <Col xs={12} md={4}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         Last Name <span className="text-danger">*</span>
@@ -817,8 +829,8 @@ const generateEmployeeId = async () => {
                   </Col>
                 </Row>
 
-                <Row className="mb-3">
-                  <Col md={4}>
+                <Row className="mb-3 g-2">
+                  <Col xs={12} md={4}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         Date of Joining <span className="text-danger">*</span>
@@ -832,7 +844,7 @@ const generateEmployeeId = async () => {
                       />
                     </Form.Group>
                   </Col>
-                  <Col md={4}>
+                  <Col xs={12} md={4}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         Designation <span className="text-danger">*</span>
@@ -846,7 +858,7 @@ const generateEmployeeId = async () => {
                       />
                     </Form.Group>
                   </Col>
-                  <Col md={4}>
+                  <Col xs={12} md={4}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         Department <span className="text-danger">*</span>
@@ -866,8 +878,8 @@ const generateEmployeeId = async () => {
                   </Col>
                 </Row>
 
-                <Row className="mb-3">
-                  <Col md={4}>
+                <Row className="mb-3 g-2">
+                  <Col xs={12} md={4}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         Reporting Manager
@@ -881,7 +893,7 @@ const generateEmployeeId = async () => {
                       />
                     </Form.Group>
                   </Col>
-                  <Col md={4}>
+                  <Col xs={12} md={4}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         Employment Type
@@ -898,7 +910,7 @@ const generateEmployeeId = async () => {
                       </Form.Select>
                     </Form.Group>
                   </Col>
-                  <Col md={4}>
+                  <Col xs={12} md={4}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         Shift Timing
@@ -915,8 +927,8 @@ const generateEmployeeId = async () => {
                   </Col>
                 </Row>
 
-                <Row className="mb-3">
-                  <Col md={4}>
+                <Row className="mb-3 g-2">
+                  <Col xs={12} md={4}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         PAN Number <span className="text-danger">*</span>
@@ -933,7 +945,7 @@ const generateEmployeeId = async () => {
                       />
                     </Form.Group>
                   </Col>
-                  <Col md={4}>
+                  <Col xs={12} md={4}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         Aadhar Number <span className="text-danger">*</span>
@@ -949,7 +961,7 @@ const generateEmployeeId = async () => {
                       />
                     </Form.Group>
                   </Col>
-                  <Col md={4}>
+                  <Col xs={12} md={4}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         Date of Birth <span className="text-danger">*</span>
@@ -965,8 +977,8 @@ const generateEmployeeId = async () => {
                   </Col>
                 </Row>
 
-                <Row className="mb-3">
-                  <Col md={4}>
+                <Row className="mb-3 g-2">
+                  <Col xs={12} md={4}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         Blood Group
@@ -984,7 +996,7 @@ const generateEmployeeId = async () => {
                       </Form.Select>
                     </Form.Group>
                   </Col>
-                  <Col md={4}>
+                  <Col xs={12} md={4}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         Emergency Contact <span className="text-danger">*</span>
@@ -1021,8 +1033,8 @@ const generateEmployeeId = async () => {
 
             {activeTab === 'bank' && (
               <>
-                <Row className="mb-3">
-                  <Col md={6}>
+                <Row className="mb-3 g-2">
+                  <Col xs={12} md={6}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         Bank Account Name <span className="text-danger">*</span>
@@ -1037,7 +1049,7 @@ const generateEmployeeId = async () => {
                       />
                     </Form.Group>
                   </Col>
-                  <Col md={6}>
+                  <Col xs={12} md={6}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         Account Number <span className="text-danger">*</span>
@@ -1054,8 +1066,8 @@ const generateEmployeeId = async () => {
                   </Col>
                 </Row>
 
-                <Row className="mb-3">
-                  <Col md={4}>
+                <Row className="mb-3 g-2">
+                  <Col xs={12} md={4}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         IFSC Code <span className="text-danger">*</span>
@@ -1072,7 +1084,7 @@ const generateEmployeeId = async () => {
                       />
                     </Form.Group>
                   </Col>
-                  <Col md={4}>
+                  <Col xs={12} md={4}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         Branch Name <span className="text-danger">*</span>
@@ -1093,8 +1105,8 @@ const generateEmployeeId = async () => {
 
             {activeTab === 'salary' && (
               <>
-                <Row className="mb-3">
-                  <Col md={6}>
+                <Row className="mb-3 g-2">
+                  <Col xs={12} md={6}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         Gross Salary (₹) <span className="text-danger">*</span>
@@ -1111,7 +1123,7 @@ const generateEmployeeId = async () => {
                       />
                     </Form.Group>
                   </Col>
-                  <Col md={6}>
+                  <Col xs={12} md={6}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
                         In-hand Salary (₹)
@@ -1125,8 +1137,8 @@ const generateEmployeeId = async () => {
                         size="sm"
                         className="bg-light fw-bold text-success"
                       />
-                      <Form.Text className="text-muted">
-                        Auto-calculated (Gross - ₹200 deduction)
+                      <Form.Text className="text-muted small d-block">
+                        Auto-calculated (Gross - ₹200)
                       </Form.Text>
                     </Form.Group>
                   </Col>
@@ -1144,18 +1156,18 @@ const generateEmployeeId = async () => {
             {activeTab === 'policy' && (
               <>
                 <Card className="mb-4 border-0 bg-light">
-                  <Card.Body className="p-3">
+                  <Card.Body className="p-2 p-md-3">
                     <div className="d-flex align-items-center mb-3">
                       <FaFileSignature className="text-primary me-2" size={20} />
                       <h6 className="small fw-semibold mb-0">Employment Contract Policy</h6>
                     </div>
 
                     <div
-                      className="bg-white p-3 rounded border mb-3"
+                      className="bg-white p-2 p-md-3 rounded border mb-3"
                       style={{
-                        maxHeight: '300px',
+                        maxHeight: '250px',
                         overflowY: 'auto',
-                        fontSize: '0.85rem',
+                        fontSize: '0.8rem',
                         whiteSpace: 'pre-line',
                         fontFamily: 'monospace'
                       }}
@@ -1168,9 +1180,9 @@ const generateEmployeeId = async () => {
                         type="checkbox"
                         id="acceptPolicy"
                         label={
-                          <span className="small">
-                            <FaCheckSquare className="me-2 text-primary" size={14} />
-                            I have read and agree to the terms and conditions of the Employment Contract Policy
+                          <span className="small d-flex align-items-center flex-wrap">
+                            <FaCheckSquare className="me-2 text-primary flex-shrink-0" size={14} />
+                            <span>I have read and agree to the terms and conditions</span>
                           </span>
                         }
                         checked={acceptPolicy}
@@ -1185,8 +1197,8 @@ const generateEmployeeId = async () => {
             {activeTab === 'documents' && (
               <div>
                 <Card className="mb-4 border-0 bg-light">
-                  <Card.Body className="p-3">
-                    <div className="d-flex justify-content-between align-items-center mb-3">
+                  <Card.Body className="p-2 p-md-3">
+                    <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-3 gap-2">
                       <h6 className="small fw-semibold mb-0">Upload Documents</h6>
                       <Button
                         variant="outline-primary"
@@ -1200,14 +1212,14 @@ const generateEmployeeId = async () => {
 
                     {selectedFiles.map((_, index) => (
                       <Row key={index} className="g-2 mb-2 align-items-center">
-                        <Col md={4}>
+                        <Col xs={12} sm={4}>
                           <Form.Select
                             size="sm"
                             value={selectedDocTypes[index] || ''}
                             onChange={(e) => handleDocumentTypeChange(index, e.target.value)}
                             disabled={uploading}
                           >
-                            <option value="">Select Document Type</option>
+                            <option value="">Select Type</option>
                             {documentTypes.map(doc => (
                               <option key={doc.value} value={doc.value}>
                                 {doc.label}
@@ -1215,7 +1227,7 @@ const generateEmployeeId = async () => {
                             ))}
                           </Form.Select>
                         </Col>
-                        <Col md={6}>
+                        <Col xs={8} sm={6}>
                           <Form.Control
                             type="file"
                             onChange={(e) => handleFileSelect(index, e.target.files[0])}
@@ -1224,12 +1236,13 @@ const generateEmployeeId = async () => {
                             disabled={uploading}
                           />
                         </Col>
-                        <Col md={2}>
+                        <Col xs={4} sm={2}>
                           <Button
                             variant="outline-danger"
                             size="sm"
                             onClick={() => removeUploadRow(index)}
                             disabled={uploading || selectedFiles.length === 1}
+                            className="w-100"
                           >
                             Remove
                           </Button>
@@ -1253,15 +1266,15 @@ const generateEmployeeId = async () => {
                 </Card>
 
                 <div className="mt-3 small text-muted bg-light p-2 rounded">
-                  <FaFileAlt className="me-2 text-primary" size={12} />
+                  <FaFileAlt className="me-2 text-primary flex-shrink-0" size={12} />
                   <small>
-                    <strong>Note:</strong> You can upload multiple documents. Supported formats: PDF, DOC, DOCX, JPG, JPEG, PNG
+                    <strong>Note:</strong> Supported formats: PDF, DOC, DOCX, JPG, JPEG, PNG
                   </small>
                 </div>
               </div>
             )}
 
-            {/* Navigation Buttons */}
+            {/* Navigation Buttons - Responsive */}
             <div className="d-flex justify-content-between mt-4">
               <div>
                 {activeTab !== 'personal' && (
@@ -1270,8 +1283,8 @@ const generateEmployeeId = async () => {
                     size="sm"
                     onClick={handlePrevious}
                   >
-                    <FaArrowLeft className="me-2" size={10} />
-                    Previous
+                    <FaArrowLeft className="me-1" size={10} />
+                    <span className="d-none d-sm-inline">Previous</span>
                   </Button>
                 )}
               </div>
@@ -1283,8 +1296,9 @@ const generateEmployeeId = async () => {
                     size="sm"
                     onClick={handleNext}
                   >
-                    Save & Next
-                    <FaArrowRight className="ms-2" size={10} />
+                    <span className="d-none d-sm-inline">Save & Next</span>
+                    <span className="d-inline d-sm-none">Next</span>
+                    <FaArrowRight className="ms-1" size={10} />
                   </Button>
                 ) : (
                   <Button
@@ -1295,13 +1309,14 @@ const generateEmployeeId = async () => {
                   >
                     {saving ? (
                       <>
-                        <Spinner size="sm" animation="border" className="me-2" />
-                        Submitting...
+                        <Spinner size="sm" animation="border" className="me-1" />
+                        <span className="d-none d-sm-inline">Submitting...</span>
                       </>
                     ) : (
                       <>
-                        <FaSave className="me-2" size={12} />
-                        Final Submit & Generate ID
+                        <FaSave className="me-1" size={12} />
+                        <span className="d-none d-sm-inline">Final Submit</span>
+                        <span className="d-inline d-sm-none">Submit</span>
                       </>
                     )}
                   </Button>
@@ -1314,11 +1329,12 @@ const generateEmployeeId = async () => {
               <div className="mt-3">
                 <ProgressBar
                   now={uploadProgress}
-                  label={`Uploading documents... ${uploadProgress}%`}
+                  label={`${uploadProgress}%`}
                   striped
                   animated
                   size="sm"
                 />
+                <small className="text-muted mt-1 d-block">Uploading documents...</small>
               </div>
             )}
           </Form>

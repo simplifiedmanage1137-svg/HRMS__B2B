@@ -125,7 +125,7 @@ const confirmAcceptRequest = async () => {
 
   if (loading) {
     return (
-      <div className="d-flex justify-content-center align-items-center vh-100">
+      <div className="d-flex justify-content-center align-items-center min-vh-100">
         <div className="text-center">
           <Spinner animation="border" variant="primary" style={{ width: '3rem', height: '3rem' }} />
           <p className="mt-3 text-muted small">Loading update requests...</p>
@@ -135,14 +135,14 @@ const confirmAcceptRequest = async () => {
   }
 
   return (
-    <div className="p-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
-      {/* Header */}
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h4 className="mb-0">
+    <div className="p-2 p-md-3 p-lg-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
+      {/* Header - Responsive */}
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+        <h5 className="mb-0 d-flex align-items-center">
           <FaBell className="me-2 text-primary" />
           Information Update Requests
-        </h4>
-        <Badge bg="info" pill className="px-3 py-2">
+        </h5>
+        <Badge bg="info" pill className="px-3 py-2 ms-0 ms-md-auto">
           {requests.length} Pending
         </Badge>
       </div>
@@ -153,26 +153,28 @@ const confirmAcceptRequest = async () => {
           variant={message.type} 
           onClose={() => setMessage({ type: '', text: '' })} 
           dismissible
-          className="mb-4"
+          className="mb-4 py-2"
         >
-          {message.type === 'success' && <FaCheckCircle className="me-2" size={14} />}
-          {message.type === 'danger' && <FaTimesCircle className="me-2" size={14} />}
-          {message.text}
+          <div className="d-flex align-items-center">
+            {message.type === 'success' && <FaCheckCircle className="me-2 flex-shrink-0" size={14} />}
+            {message.type === 'danger' && <FaTimesCircle className="me-2 flex-shrink-0" size={14} />}
+            <span className="small">{message.text}</span>
+          </div>
         </Alert>
       )}
 
       {/* Requests List */}
       {requests.length > 0 ? (
-        <Row>
+        <Row className="g-3">
           {requests.map((request) => (
-            <Col key={request.id} md={6} className="mb-3">
+            <Col key={request.id} xs={12} md={6} className="mb-3">
               <Card className="border-0 shadow-sm h-100">
-                <Card.Header className="bg-light py-2 d-flex justify-content-between align-items-center">
-                  <h6 className="mb-0">Update Request #{request.id}</h6>
-                  <Badge bg="warning">Pending</Badge>
+                <Card.Header className="bg-light py-2 d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
+                  <h6 className="mb-0 small">Update Request #{request.id}</h6>
+                  <Badge bg="warning" className="ms-0 ms-sm-auto">Pending</Badge>
                 </Card.Header>
-                <Card.Body className="p-3">
-                  <div className="mb-2">
+                <Card.Body className="p-2 p-md-3">
+                  <div className="mb-2 small">
                     <strong>Requested Information:</strong>
                   </div>
                   <div className="d-flex flex-wrap gap-2 mb-3">
@@ -181,10 +183,10 @@ const confirmAcceptRequest = async () => {
                         key={field}
                         bg="light"
                         text="dark"
-                        className="px-3 py-2 d-flex align-items-center border"
+                        className="px-2 px-md-3 py-1 py-md-2 d-flex align-items-center border"
                       >
-                        {getFieldIcon(field)}
-                        <span className="ms-2">
+                        <span className="flex-shrink-0">{getFieldIcon(field)}</span>
+                        <span className="ms-1 ms-md-2 small">
                           {field.charAt(0).toUpperCase() + field.slice(1)}
                         </span>
                       </Badge>
@@ -192,7 +194,7 @@ const confirmAcceptRequest = async () => {
                   </div>
                   {request.notes && (
                     <div className="bg-light p-2 rounded small mb-3">
-                      <strong>Note from Admin:</strong> {request.notes}
+                      <strong>Note from Admin:</strong> <span className="text-wrap">{request.notes}</span>
                     </div>
                   )}
                   <div className="d-flex justify-content-end">
@@ -200,14 +202,15 @@ const confirmAcceptRequest = async () => {
                       variant="primary"
                       size="sm"
                       onClick={() => handleAcceptRequest(request)}
+                      className="d-inline-flex align-items-center"
                     >
                       <FaCheckCircle className="me-2" size={12} />
                       Review & Update
                     </Button>
                   </div>
                 </Card.Body>
-                <Card.Footer className="bg-white border-0 pt-0 pb-2 px-3">
-                  <small className="text-muted">
+                <Card.Footer className="bg-white border-0 pt-0 pb-2 px-2 px-md-3">
+                  <small className="text-muted d-block text-truncate">
                     Received on: {new Date(request.created_at).toLocaleDateString('en-US', {
                       year: 'numeric',
                       month: 'short',
@@ -223,9 +226,9 @@ const confirmAcceptRequest = async () => {
         </Row>
       ) : (
         <Card className="border-0 shadow-sm text-center py-5">
-          <Card.Body>
+          <Card.Body className="p-2 p-md-3">
             <FaBell size={40} className="text-muted mb-3 opacity-50" />
-            <h5 className="text-muted">No Pending Requests</h5>
+            <h5 className="text-muted small">No Pending Requests</h5>
             <p className="text-muted small mb-3">
               You don't have any information update requests at the moment.
             </p>
@@ -240,15 +243,20 @@ const confirmAcceptRequest = async () => {
         </Card>
       )}
 
-      {/* Accept Confirmation Modal */}
-      <Modal show={showModal} onHide={() => setShowModal(false)} centered>
+      {/* Accept Confirmation Modal - Responsive */}
+      <Modal 
+        show={showModal} 
+        onHide={() => setShowModal(false)} 
+        centered
+        dialogClassName="mx-2 mx-md-auto"
+      >
         <Modal.Header closeButton className="bg-primary text-white py-2">
-          <Modal.Title as="h6" className="mb-0 small fw-semibold">
-            <FaCheckCircle className="me-2" size={14} />
+          <Modal.Title as="h6" className="mb-0 small fw-semibold d-flex align-items-center">
+            <FaCheckCircle className="me-2 flex-shrink-0" size={14} />
             Accept Update Request
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body className="p-3">
+        <Modal.Body className="p-2 p-md-3">
           <p className="small mb-2">Are you sure you want to accept this update request?</p>
           <p className="text-muted small mb-0">
             Once accepted, you will be able to update your information. The changes will need admin approval before they are applied.
@@ -257,7 +265,7 @@ const confirmAcceptRequest = async () => {
           {selectedRequest && (
             <div className="mt-3 p-2 bg-light rounded small">
               <strong>Request details:</strong>
-              <div className="mt-1">
+              <div className="mt-1 d-flex flex-wrap gap-1">
                 {selectedRequest.requested_fields?.map(field => (
                   <Badge key={field} bg="info" className="me-1 mb-1">
                     {field}
@@ -276,16 +284,18 @@ const confirmAcceptRequest = async () => {
             size="sm"
             onClick={confirmAcceptRequest}
             disabled={accepting}
+            className="d-inline-flex align-items-center"
           >
             {accepting ? (
               <>
                 <Spinner size="sm" animation="border" className="me-2" />
-                Accepting...
+                <span className="d-none d-sm-inline">Accepting...</span>
               </>
             ) : (
               <>
                 <FaCheckCircle className="me-2" size={12} />
-                Accept Request
+                <span className="d-none d-sm-inline">Accept Request</span>
+                <span className="d-inline d-sm-none">Accept</span>
               </>
             )}
           </Button>

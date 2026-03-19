@@ -293,7 +293,7 @@ const Navbar = () => {
   return (
     <nav className="navbar-top" style={{
       backgroundColor: 'white',
-      padding: '10px 20px',
+      padding: '10px 16px',
       boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
       display: 'flex',
       justifyContent: 'space-between',
@@ -305,44 +305,53 @@ const Navbar = () => {
       height: '60px'
     }}>
       <div className="d-flex align-items-center">
-       
-        
+        {/* Logo/Brand space - kept empty as original */}
       </div>
       
-      <div style={{ display: 'flex', alignItems: 'center' }}>
-        {/* Time and Date Display */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          marginRight: '20px',
+      <div className="d-flex align-items-center gap-2 gap-sm-3">
+        {/* Time and Date Display - Hidden on very small screens */}
+        <div className="d-none d-sm-flex align-items-center" style={{
           backgroundColor: '#f8f9fa',
           borderRadius: '20px',
           padding: '5px 12px'
         }}>
           <FaClock style={{ color: '#d53f8c', marginRight: '6px' }} size={14} />
-          <span style={{ fontWeight: 'bold', marginRight: '8px', fontSize: '14px' }}>{formattedTime}</span>
+          <span className="fw-bold me-2" style={{ fontSize: '14px' }}>{formattedTime}</span>
           <span style={{ color: '#999', margin: '0 4px' }}>|</span>
           <FaCalendarAlt style={{ color: '#d53f8c', marginLeft: '4px', marginRight: '6px' }} size={14} />
-          <span style={{ color: '#666', fontSize: '14px' }}>{formattedDate}</span>
+          <span style={{ color: '#666', fontSize: '14px' }} className="d-none d-lg-inline">{formattedDate}</span>
+          <span style={{ color: '#666', fontSize: '14px' }} className="d-inline d-lg-none">
+            {currentTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </span>
+        </div>
+
+        {/* Mobile Time - Shown only on extra small screens */}
+        <div className="d-flex d-sm-none align-items-center" style={{
+          backgroundColor: '#f8f9fa',
+          borderRadius: '20px',
+          padding: '5px 10px'
+        }}>
+          <FaClock style={{ color: '#d53f8c', marginRight: '6px' }} size={12} />
+          <span className="fw-bold" style={{ fontSize: '12px' }}>
+            {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+          </span>
         </div>
 
         {/* Notification Bell */}
-        <div style={{ position: 'relative', marginRight: '15px' }} ref={bellRef}>
+        <div className="position-relative" ref={bellRef}>
           <FaBell 
             size={20} 
-            style={{ cursor: 'pointer', color: '#d53f8c' }}
+            className="cursor-pointer" 
+            style={{ color: '#d53f8c' }}
             onClick={toggleNotifications}
           />
           {unreadCount > 0 && (
             <Badge 
               bg="danger" 
+              className="position-absolute top-0 start-100 translate-middle rounded-pill"
               style={{
-                position: 'absolute',
-                top: '-5px',
-                right: '-5px',
                 fontSize: '10px',
-                padding: '2px 5px',
-                borderRadius: '10px'
+                padding: '2px 5px'
               }}
             >
               {unreadCount}
@@ -350,13 +359,13 @@ const Navbar = () => {
           )}
         </div>
 
-        {/* Profile Dropdown - Fixed with role-based menu items */}
+        {/* Profile Dropdown */}
         <Dropdown align="end">
-          <Dropdown.Toggle variant="link" style={{ padding: 0, border: 'none', color: '#d53f8c' }}>
+          <Dropdown.Toggle variant="link" className="p-0 border-0" style={{ color: '#d53f8c' }}>
             <FaUserCircle size={28} color="#d53f8c" />
           </Dropdown.Toggle>
 
-          <Dropdown.Menu>
+          <Dropdown.Menu className="dropdown-menu-end">
             {/* My Profile - Sirf EMPLOYEE ke liye show hoga */}
             {user?.role === 'employee' && (
               <Dropdown.Item as={Link} to="/profile">
@@ -368,6 +377,7 @@ const Navbar = () => {
             <Dropdown.Item 
               as={Link} 
               to={user?.role === 'admin' ? '/admin/update-requests' : '/employee/update-requests'}
+              className="d-flex align-items-center"
             >
               <FaEdit className="me-2" /> Update Requests
               {pendingCount > 0 && (
@@ -389,28 +399,26 @@ const Navbar = () => {
       {showNotifications && (
         <div 
           ref={notificationRef}
+          className="position-absolute bg-white shadow-lg rounded"
           style={{
-            position: 'absolute',
-            right: '20px',
+            right: '16px',
             top: '70px',
-            width: '400px',
-            backgroundColor: 'white',
-            boxShadow: '0 5px 15px rgba(0,0,0,0.2)',
-            borderRadius: '8px',
+            width: window.innerWidth < 576 ? 'calc(100vw - 32px)' : '400px',
+            maxWidth: '400px',
             padding: '15px',
             zIndex: 1001,
             maxHeight: '500px',
             overflowY: 'auto'
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-            <h6 style={{ margin: 0 }}>Notifications</h6>
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <h6 className="mb-0">Notifications</h6>
             {unreadCount > 0 && (
               <Button 
                 variant="link" 
                 size="sm" 
                 onClick={markAllAsRead}
-                style={{ padding: 0, textDecoration: 'none' }}
+                className="p-0 text-decoration-none"
               >
                 Mark all as read
               </Button>
@@ -427,11 +435,11 @@ const Navbar = () => {
           {/* Pending Update Requests Section */}
           {pendingCount > 0 && (
             <div className="mb-3 p-2 bg-warning bg-opacity-10 rounded">
-              <div className="d-flex align-items-center">
-                <FaEdit className="text-warning me-2" size={16} />
-                <div className="flex-grow-1">
-                  <small className="fw-bold d-block">Pending Update Requests</small>
-                  <small className="text-muted">
+              <div className="d-flex align-items-start gap-2">
+                <FaEdit className="text-warning mt-1 flex-shrink-0" size={16} />
+                <div className="flex-grow-1" style={{ minWidth: 0 }}>
+                  <small className="fw-bold d-block text-truncate">Pending Update Requests</small>
+                  <small className="text-muted d-block text-truncate">
                     {pendingCount} update request(s) pending
                   </small>
                 </div>
@@ -439,6 +447,7 @@ const Navbar = () => {
                   variant="outline-warning"
                   size="sm"
                   onClick={handleViewUpdateRequests}
+                  className="flex-shrink-0"
                 >
                   View
                 </Button>
@@ -451,7 +460,7 @@ const Navbar = () => {
             <div className="mb-3">
               <small className="text-muted fw-semibold d-block mb-2">🎉 Today's Events</small>
               {eventNotifications.filter(e => !e.read).map(event => (
-                <div key={event.id} style={{ position: 'relative', marginBottom: '5px' }}>
+                <div key={event.id} className="position-relative mb-2">
                   <EventNotification 
                     event={event} 
                     onClose={() => handleEventClose(event.id)}
@@ -460,14 +469,8 @@ const Navbar = () => {
                     variant="link"
                     size="sm"
                     onClick={(e) => deleteEventNotification(event.id, e)}
-                    style={{
-                      position: 'absolute',
-                      top: '5px',
-                      right: '5px',
-                      padding: '2px 5px',
-                      color: '#999',
-                      fontSize: '12px'
-                    }}
+                    className="position-absolute top-0 end-0 p-1"
+                    style={{ color: '#999', fontSize: '12px' }}
                     title="Remove notification"
                   >
                     <FaTimes />
@@ -484,29 +487,22 @@ const Navbar = () => {
               {notifications.map(notif => (
                 <div 
                   key={notif.id} 
-                  style={{
-                    borderBottom: '1px solid #eee',
-                    padding: '10px',
-                    borderRadius: '4px',
-                    backgroundColor: !notif.is_read ? '#f0f7ff' : 'transparent',
-                    marginBottom: '5px',
-                    position: 'relative',
-                    cursor: !notif.is_read ? 'pointer' : 'default'
-                  }}
+                  className={`border-bottom py-2 px-2 rounded position-relative mb-1 ${!notif.is_read ? 'bg-primary bg-opacity-10' : ''}`}
+                  style={{ cursor: !notif.is_read ? 'pointer' : 'default' }}
                   onClick={() => !notif.is_read && markAsRead(notif.id)}
                 >
-                  <div className="d-flex align-items-start">
-                    <div className="me-2 mt-1">
+                  <div className="d-flex align-items-start gap-2">
+                    <div className="mt-1 flex-shrink-0">
                       {getNotificationIcon(notif.type)}
                     </div>
-                    <div className="flex-grow-1" style={{ marginRight: '25px' }}>
-                      <p style={{ margin: '0 0 5px 0', fontSize: '13px' }}>{notif.message}</p>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <small style={{ color: '#999' }}>
+                    <div className="flex-grow-1" style={{ minWidth: 0, marginRight: '25px' }}>
+                      <p className="small mb-1 text-wrap">{notif.message}</p>
+                      <div className="d-flex justify-content-between align-items-center flex-wrap gap-1">
+                        <small className="text-muted">
                           {formatNotificationTime(notif.created_at)}
                         </small>
                         {!notif.is_read && (
-                          <Badge bg={getNotificationBadge(notif.type)} pill style={{ fontSize: '10px' }}>
+                          <Badge bg={getNotificationBadge(notif.type)} pill className="small">
                             New
                           </Badge>
                         )}
@@ -518,14 +514,8 @@ const Navbar = () => {
                       variant="link"
                       size="sm"
                       onClick={(e) => deleteNotification(notif.id, e)}
-                      style={{
-                        position: 'absolute',
-                        top: '5px',
-                        right: '5px',
-                        padding: '2px 5px',
-                        color: '#999',
-                        fontSize: '12px'
-                      }}
+                      className="position-absolute top-0 end-0 p-1"
+                      style={{ color: '#999', fontSize: '12px' }}
                       title="Delete notification"
                     >
                       <FaTimes />
@@ -537,8 +527,8 @@ const Navbar = () => {
           ) : (
             eventNotifications.filter(e => !e.read).length === 0 && 
             pendingCount === 0 && (
-              <div style={{ textAlign: 'center', padding: '20px' }}>
-                <p style={{ color: '#999', margin: 0 }}>No notifications</p>
+              <div className="text-center py-4">
+                <p className="text-muted mb-0">No notifications</p>
               </div>
             )
           )}

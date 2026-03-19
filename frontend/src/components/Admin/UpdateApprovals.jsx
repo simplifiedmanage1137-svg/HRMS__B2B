@@ -178,11 +178,11 @@ const handleReject = async () => {
     
     switch(status) {
       case 'approved':
-        return <Badge bg="success" pill><FaCheckCircle className="me-1" size={10} /> Approved</Badge>;
+        return <Badge bg="success" pill className="d-inline-flex align-items-center"><FaCheckCircle className="me-1" size={10} /> Approved</Badge>;
       case 'rejected':
-        return <Badge bg="danger" pill><FaTimesCircle className="me-1" size={10} /> Rejected</Badge>;
+        return <Badge bg="danger" pill className="d-inline-flex align-items-center"><FaTimesCircle className="me-1" size={10} /> Rejected</Badge>;
       case 'pending':
-        return <Badge bg="warning" pill><FaClock className="me-1" size={10} /> Pending</Badge>;
+        return <Badge bg="warning" pill className="d-inline-flex align-items-center"><FaClock className="me-1" size={10} /> Pending</Badge>;
       default:
         return <Badge bg="secondary">{status}</Badge>;
     }
@@ -192,7 +192,7 @@ const handleReject = async () => {
 
   if (loading) {
     return (
-      <div className="d-flex justify-content-center align-items-center vh-100">
+      <div className="d-flex justify-content-center align-items-center min-vh-100">
         <div className="text-center">
           <Spinner animation="border" variant="primary" style={{ width: '3rem', height: '3rem' }} />
           <p className="mt-3 text-muted small">Loading approval requests...</p>
@@ -202,14 +202,14 @@ const handleReject = async () => {
   }
 
   return (
-    <div className="p-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
-      {/* Header */}
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h4 className="mb-0">
+    <div className="p-2 p-md-3 p-lg-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
+      {/* Header - Responsive */}
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+        <h5 className="mb-0 d-flex align-items-center">
           <FaEye className="me-2 text-primary" />
           Update Approvals
-        </h4>
-        <div className="d-flex gap-2">
+        </h5>
+        <div className="d-flex flex-wrap gap-2 ms-0 ms-md-auto">
           <Badge bg="info" pill className="px-3 py-2">
             Total: {completedRequests.length} Requests
           </Badge>
@@ -218,6 +218,7 @@ const handleReject = async () => {
             size="sm"
             onClick={fetchCompletedRequests}
             disabled={loading}
+            className="d-inline-flex align-items-center"
           >
             <FaExclamationTriangle className="me-2" size={12} />
             Refresh
@@ -231,22 +232,25 @@ const handleReject = async () => {
           variant={message.type} 
           onClose={() => setMessage({ type: '', text: '' })} 
           dismissible
-          className="mb-4 shadow-sm"
+          className="mb-4 shadow-sm py-2"
         >
-          {message.type === 'success' && <FaCheckCircle className="me-2" size={14} />}
-          {message.type === 'danger' && <FaExclamationTriangle className="me-2" size={14} />}
-          {message.text}
+          <div className="d-flex align-items-center">
+            {message.type === 'success' && <FaCheckCircle className="me-2 flex-shrink-0" size={14} />}
+            {message.type === 'danger' && <FaExclamationTriangle className="me-2 flex-shrink-0" size={14} />}
+            <span className="small">{message.text}</span>
+          </div>
         </Alert>
       )}
 
-      {/* Filter Tabs */}
+      {/* Filter Tabs - Responsive */}
       <Card className="mb-4 border-0 shadow-sm">
         <Card.Body className="p-2">
-          <div className="d-flex gap-2">
+          <div className="d-flex flex-wrap gap-2">
             <Button
               size="sm"
               variant={filter === 'all' ? 'primary' : 'outline-secondary'}
               onClick={() => setFilter('all')}
+              className="px-2 px-sm-3"
             >
               All ({completedRequests.length})
             </Button>
@@ -254,6 +258,7 @@ const handleReject = async () => {
               size="sm"
               variant={filter === 'pending' ? 'warning' : 'outline-warning'}
               onClick={() => setFilter('pending')}
+              className="px-2 px-sm-3"
             >
               Pending ({completedRequests.filter(r => r.status === 'pending').length})
             </Button>
@@ -261,6 +266,7 @@ const handleReject = async () => {
               size="sm"
               variant={filter === 'approved' ? 'success' : 'outline-success'}
               onClick={() => setFilter('approved')}
+              className="px-2 px-sm-3"
             >
               Approved ({completedRequests.filter(r => r.status === 'approved').length})
             </Button>
@@ -268,6 +274,7 @@ const handleReject = async () => {
               size="sm"
               variant={filter === 'rejected' ? 'danger' : 'outline-danger'}
               onClick={() => setFilter('rejected')}
+              className="px-2 px-sm-3"
             >
               Rejected ({completedRequests.filter(r => r.status === 'rejected').length})
             </Button>
@@ -277,9 +284,9 @@ const handleReject = async () => {
 
       {/* Main Content */}
       <Card className="border-0 shadow-sm">
-        <Card.Header className="bg-light py-3 d-flex justify-content-between align-items-center">
-          <h5 className="mb-0">Pending Approval Requests</h5>
-          <Badge bg="dark" pill>
+        <Card.Header className="bg-light py-2 py-md-3 d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
+          <h6 className="mb-0">Pending Approval Requests</h6>
+          <Badge bg="dark" pill className="ms-0 ms-sm-auto">
             {filteredRequests.length} Records
           </Badge>
         </Card.Header>
@@ -311,8 +318,8 @@ const handleReject = async () => {
                   <tr>
                     <th className="small fw-normal text-dark">#</th>
                     <th className="small fw-normal text-dark">Employee</th>
-                    <th className="small fw-normal text-dark">Requested Fields</th>
-                    <th className="small fw-normal text-dark">Submitted On</th>
+                    <th className="small fw-normal text-dark d-none d-md-table-cell">Requested Fields</th>
+                    <th className="small fw-normal text-dark d-none d-sm-table-cell">Submitted On</th>
                     <th className="small fw-normal text-dark">Status</th>
                     <th className="small fw-normal text-dark">Actions</th>
                   </tr>
@@ -323,34 +330,35 @@ const handleReject = async () => {
                       <td className="small">{index + 1}</td>
                       <td>
                         <div className="d-flex align-items-center">
-                          <FaUser className="me-2 text-primary" size={12} />
-                          <div>
-                            <div className="small fw-semibold">
+                          <FaUser className="me-2 text-primary flex-shrink-0" size={12} />
+                          <div className="text-truncate" style={{ maxWidth: '120px' }}>
+                            <div className="small fw-semibold text-truncate" title={req.employee_name || 'Unknown'}>
                               {req.employee_name || 'Unknown'}
                             </div>
-                            <small className="text-muted">{req.employee_id}</small>
+                            <small className="text-muted d-block text-truncate" title={req.employee_id}>{req.employee_id}</small>
                           </div>
                         </div>
                       </td>
-                      <td>
-                        <div className="d-flex flex-wrap gap-1">
+                      <td className="d-none d-md-table-cell">
+                        <div className="d-flex flex-wrap gap-1" style={{ maxWidth: '200px' }}>
                           {(req.requested_fields || []).map(field => (
                             <Badge 
                               key={field} 
                               bg="info" 
                               pill 
-                              className="px-2 py-1"
-                              style={{ fontSize: '11px' }}
+                              className="px-2 py-1 text-truncate"
+                              style={{ fontSize: '11px', maxWidth: '100px' }}
+                              title={field}
                             >
                               {field}
                             </Badge>
                           ))}
                         </div>
                       </td>
-                      <td>
+                      <td className="d-none d-sm-table-cell">
                         <div className="d-flex align-items-center">
-                          <FaCalendarAlt className="text-muted me-2" size={10} />
-                          <small>{formatDate(req.updated_at)}</small>
+                          <FaCalendarAlt className="text-muted me-2 flex-shrink-0" size={10} />
+                          <small className="text-nowrap">{formatDate(req.updated_at)}</small>
                         </div>
                       </td>
                       <td>{getStatusBadge(req.status)}</td>
@@ -359,10 +367,10 @@ const handleReject = async () => {
                           variant="outline-primary"
                           size="sm"
                           onClick={() => handleViewDetails(req)}
-                          className="px-3"
+                          className="px-2 px-sm-3 d-inline-flex align-items-center"
                         >
                           <FaEye className="me-1" size={12} />
-                          Review
+                          <span className="d-none d-sm-inline">Review</span>
                         </Button>
                       </td>
                     </tr>
@@ -374,47 +382,48 @@ const handleReject = async () => {
         </Card.Body>
       </Card>
 
-      {/* Review Modal */}
+      {/* Review Modal - Responsive */}
       <Modal 
         show={showModal} 
         onHide={() => setShowModal(false)} 
         size="xl"
         centered
         className="review-modal"
+        dialogClassName="mx-2 mx-md-auto"
       >
         <Modal.Header closeButton className="bg-primary text-white py-2">
-          <Modal.Title as="h6" className="mb-0 small fw-semibold">
-            <FaEye className="me-2" size={14} />
-            Review Update Request
+          <Modal.Title as="h6" className="mb-0 small fw-semibold d-flex align-items-center">
+            <FaEye className="me-2 flex-shrink-0" size={14} />
+            <span className="text-truncate">Review Update Request</span>
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body className="p-3" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+        <Modal.Body className="p-2 p-md-3" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
           {selectedRequest && (
             <>
               {/* Request Info */}
               <Card className="border-0 bg-light mb-3">
-                <Card.Body className="p-3">
-                  <Row>
-                    <Col md={6}>
-                      <h6 className="text-primary mb-2 small fw-semibold">
-                        <FaUser className="me-2" size={12} />
+                <Card.Body className="p-2 p-md-3">
+                  <Row className="g-2">
+                    <Col xs={12} md={6}>
+                      <h6 className="text-primary mb-2 small fw-semibold d-flex align-items-center">
+                        <FaUser className="me-2 flex-shrink-0" size={12} />
                         Employee Information
                       </h6>
-                      <p className="mb-1"><strong>Name:</strong> {selectedRequest.employee_name || 'N/A'}</p>
-                      <p className="mb-1"><strong>Employee ID:</strong> {selectedRequest.employee_id}</p>
-                      <p className="mb-0"><strong>Department:</strong> {selectedRequest.employee_department || 'N/A'}</p>
+                      <p className="mb-1 small"><strong>Name:</strong> {selectedRequest.employee_name || 'N/A'}</p>
+                      <p className="mb-1 small"><strong>Employee ID:</strong> {selectedRequest.employee_id}</p>
+                      <p className="mb-0 small"><strong>Department:</strong> {selectedRequest.employee_department || 'N/A'}</p>
                     </Col>
-                    <Col md={6}>
-                      <h6 className="text-primary mb-2 small fw-semibold">
-                        <FaInfoCircle className="me-2" size={12} />
+                    <Col xs={12} md={6}>
+                      <h6 className="text-primary mb-2 small fw-semibold d-flex align-items-center">
+                        <FaInfoCircle className="me-2 flex-shrink-0" size={12} />
                         Request Details
                       </h6>
-                      <p className="mb-1"><strong>Status:</strong> {getStatusBadge(selectedRequest.status)}</p>
-                      <p className="mb-1"><strong>Submitted:</strong> {formatDate(selectedRequest.updated_at)}</p>
-                      <p className="mb-0"><strong>Requested Fields:</strong></p>
+                      <p className="mb-1 small"><strong>Status:</strong> {getStatusBadge(selectedRequest.status)}</p>
+                      <p className="mb-1 small"><strong>Submitted:</strong> {formatDate(selectedRequest.updated_at)}</p>
+                      <p className="mb-0 small"><strong>Requested Fields:</strong></p>
                       <div className="d-flex flex-wrap gap-1 mt-1">
                         {(selectedRequest.requested_fields || []).map(field => (
-                          <Badge key={field} bg="info" pill className="px-2 py-1">
+                          <Badge key={field} bg="info" pill className="px-2 py-1 small">
                             {field}
                           </Badge>
                         ))}
@@ -425,20 +434,20 @@ const handleReject = async () => {
               </Card>
 
               {/* Data Comparison */}
-              <Row className="g-3">
-                <Col md={6}>
+              <Row className="g-2">
+                <Col xs={12} md={6}>
                   <Card className="border-0 shadow-sm h-100">
                     <Card.Header className="bg-light py-2">
                       <h6 className="mb-0 text-primary small fw-semibold">Current Data</h6>
                     </Card.Header>
-                    <Card.Body className="p-3">
+                    <Card.Body className="p-2 p-md-3">
                       <pre style={{ 
                         background: '#f8f9fa', 
-                        padding: '12px', 
+                        padding: '8px', 
                         borderRadius: '4px',
                         overflow: 'auto',
-                        maxHeight: '300px',
-                        fontSize: '12px',
+                        maxHeight: '250px',
+                        fontSize: '11px',
                         margin: 0
                       }}>
                         {JSON.stringify(selectedRequest.employeeDetails || {}, null, 2)}
@@ -446,19 +455,19 @@ const handleReject = async () => {
                     </Card.Body>
                   </Card>
                 </Col>
-                <Col md={6}>
+                <Col xs={12} md={6}>
                   <Card className="border-0 shadow-sm h-100">
                     <Card.Header className="bg-light py-2">
                       <h6 className="mb-0 text-success small fw-semibold">Updated Data</h6>
                     </Card.Header>
-                    <Card.Body className="p-3">
+                    <Card.Body className="p-2 p-md-3">
                       <pre style={{ 
                         background: '#f8f9fa', 
-                        padding: '12px', 
+                        padding: '8px', 
                         borderRadius: '4px',
                         overflow: 'auto',
-                        maxHeight: '300px',
-                        fontSize: '12px',
+                        maxHeight: '250px',
+                        fontSize: '11px',
                         margin: 0
                       }}>
                         {JSON.stringify(selectedRequest.employee_data || {}, null, 2)}
@@ -470,8 +479,8 @@ const handleReject = async () => {
 
               {/* Comments Section */}
               <Form.Group className="mt-3">
-                <Form.Label className="small fw-semibold">
-                  <FaInfoCircle className="me-2 text-primary" size={12} />
+                <Form.Label className="small fw-semibold d-flex align-items-center">
+                  <FaInfoCircle className="me-2 text-primary flex-shrink-0" size={12} />
                   Comments (Optional)
                 </Form.Label>
                 <Form.Control
@@ -489,11 +498,11 @@ const handleReject = async () => {
               {/* Admin Notes if any */}
               {selectedRequest.notes && (
                 <div className="mt-3 p-2 bg-warning bg-opacity-10 rounded">
-                  <small className="text-warning fw-semibold d-block mb-1">
+                  <small className="text-warning fw-semibold d-block mb-1 d-flex align-items-center">
                     <FaInfoCircle className="me-1" size={10} />
                     Admin Note:
                   </small>
-                  <small className="text-dark">{selectedRequest.notes}</small>
+                  <small className="text-dark d-block">{selectedRequest.notes}</small>
                 </div>
               )}
             </>
@@ -513,17 +522,17 @@ const handleReject = async () => {
             size="sm"
             onClick={handleReject}
             disabled={processing}
-            className="px-3"
+            className="px-2 px-sm-3 d-inline-flex align-items-center"
           >
             {processing ? (
               <>
-                <Spinner size="sm" animation="border" className="me-2" />
-                Processing...
+                <Spinner size="sm" animation="border" className="me-1" />
+                <span className="d-none d-sm-inline">Processing...</span>
               </>
             ) : (
               <>
                 <FaTimes className="me-1" size={12} />
-                Reject
+                <span className="d-none d-sm-inline">Reject</span>
               </>
             )}
           </Button>
@@ -532,17 +541,17 @@ const handleReject = async () => {
             size="sm"
             onClick={handleApprove}
             disabled={processing}
-            className="px-3"
+            className="px-2 px-sm-3 d-inline-flex align-items-center"
           >
             {processing ? (
               <>
-                <Spinner size="sm" animation="border" className="me-2" />
-                Processing...
+                <Spinner size="sm" animation="border" className="me-1" />
+                <span className="d-none d-sm-inline">Processing...</span>
               </>
             ) : (
               <>
                 <FaCheck className="me-1" size={12} />
-                Approve
+                <span className="d-none d-sm-inline">Approve</span>
               </>
             )}
           </Button>

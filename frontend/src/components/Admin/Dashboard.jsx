@@ -348,7 +348,7 @@ const AdminDashboard = () => {
 
   if (loading) {
     return (
-      <div className="d-flex justify-content-center align-items-center vh-100">
+      <div className="d-flex justify-content-center align-items-center min-vh-100">
         <div className="text-center">
           <Spinner animation="border" variant="primary" style={{ width: '3rem', height: '3rem' }} />
           <p className="mt-3 text-muted small">Loading dashboard...</p>
@@ -361,17 +361,17 @@ const AdminDashboard = () => {
   const hasCelebrations = todayEvents?.total > 0;
 
   return (
-    <div className="p-4">
-      {/* Header */}
-      <div className="d-flex justify-content-between align-items-center mb-4">
+    <div className="p-2 p-md-3 p-lg-4">
+      {/* Header - Responsive flex column on mobile */}
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
         <div>
-          <h4 className="mb-1">
+          <h4 className="mb-1 d-flex align-items-center flex-wrap">
             <FaUsers className="me-2 text-dark" />
-            Admin Dashboard
+            <span>Admin Dashboard</span>
           </h4>
-          <p className="text-muted mb-0 small d-flex align-items-center">
+          <p className="text-muted mb-0 small d-flex align-items-center flex-wrap">
             <FaClock className="me-1" size={12} />
-            Last updated: {lastUpdated.toLocaleTimeString()}
+            <span>Last updated: {lastUpdated.toLocaleTimeString()}</span>
             <Button
               variant="link"
               size="sm"
@@ -392,7 +392,7 @@ const AdminDashboard = () => {
           label="Auto-refresh"
           checked={autoRefresh}
           onChange={(e) => setAutoRefresh(e.target.checked)}
-          className="mb-0"
+          className="mb-0 ms-0 ms-md-auto"
         />
       </div>
 
@@ -421,27 +421,28 @@ const AdminDashboard = () => {
             </h6>
           </Card.Header>
           <Card.Body className="p-3">
-            <div className="d-flex flex-wrap gap-2">
+            <div className="d-flex flex-column flex-sm-row flex-wrap gap-2">
               {/* Birthdays */}
               {todayEvents.birthdays?.map(emp => (
                 <Badge
                   key={`birthday-${emp.id}`}
                   bg="light"
                   text="dark"
-                  className="p-2 d-flex align-items-center gap-2 shadow-sm"
+                  className="p-2 d-flex align-items-center gap-2 shadow-sm w-100 w-sm-auto"
                   style={{
                     borderLeft: '4px solid #ff6b6b',
                     borderRadius: '8px',
-                    minWidth: '250px'
+                    minWidth: '250px',
+                    maxWidth: '100%'
                   }}
                 >
-                  <div className="d-flex align-items-center gap-2">
-                    <FaBirthdayCake color="#ff6b6b" size={24} />
-                    <div className="text-start">
-                      <span className="small fw-bold d-block">
+                  <div className="d-flex align-items-center gap-2 w-100">
+                    <FaBirthdayCake color="#ff6b6b" size={24} className="flex-shrink-0" />
+                    <div className="text-start flex-grow-1">
+                      <span className="small fw-bold d-block text-truncate">
                         {emp.first_name} {emp.last_name}
                       </span>
-                      <small className="text-muted d-block">
+                      <small className="text-muted d-block text-truncate">
                         {emp.department} • {emp.position}
                       </small>
                       <small className="text-danger d-block">
@@ -458,20 +459,21 @@ const AdminDashboard = () => {
                   key={`anniversary-${emp.id}`}
                   bg="light"
                   text="dark"
-                  className="p-2 d-flex align-items-center gap-2 shadow-sm"
+                  className="p-2 d-flex align-items-center gap-2 shadow-sm w-100 w-sm-auto"
                   style={{
                     borderLeft: '4px solid #ffd700',
                     borderRadius: '8px',
-                    minWidth: '250px'
+                    minWidth: '250px',
+                    maxWidth: '100%'
                   }}
                 >
-                  <div className="d-flex align-items-center gap-2">
-                    <FaTrophy color="#ffd700" size={24} />
-                    <div className="text-start">
-                      <span className="small fw-bold d-block">
+                  <div className="d-flex align-items-center gap-2 w-100">
+                    <FaTrophy color="#ffd700" size={24} className="flex-shrink-0" />
+                    <div className="text-start flex-grow-1">
+                      <span className="small fw-bold d-block text-truncate">
                         {emp.first_name} {emp.last_name}
                       </span>
-                      <small className="text-muted d-block">
+                      <small className="text-muted d-block text-truncate">
                         {emp.department} • {emp.position}
                       </small>
                       <small className="text-warning d-block" style={{ color: '#b45f06' }}>
@@ -484,18 +486,18 @@ const AdminDashboard = () => {
             </div>
 
             {/* Summary */}
-            <div className="mt-3 pt-2 border-top small text-muted">
-              <span className="fw-semibold">Total Celebrations Today:</span>{' '}
+            <div className="mt-3 pt-2 border-top small text-muted d-flex flex-wrap align-items-center gap-2">
+              <span className="fw-semibold">Total Celebrations Today:</span>
               <Badge bg="success" pill className="ms-1" style={{ fontSize: '14px' }}>
                 {todayEvents.total}
               </Badge>
               {todayEvents.birthdays?.length > 0 && (
-                <Badge bg="danger" pill className="ms-2" style={{ backgroundColor: '#ff6b6b' }}>
+                <Badge bg="danger" pill className="ms-0 ms-sm-2" style={{ backgroundColor: '#ff6b6b' }}>
                   🎂 {todayEvents.birthdays.length} Birthday
                 </Badge>
               )}
               {todayEvents.anniversaries?.length > 0 && (
-                <Badge bg="warning" pill className="ms-2" style={{ backgroundColor: '#ffd700', color: '#000' }}>
+                <Badge bg="warning" pill className="ms-0 ms-sm-2" style={{ backgroundColor: '#ffd700', color: '#000' }}>
                   🏆 {todayEvents.anniversaries.length} Anniversary
                 </Badge>
               )}
@@ -504,63 +506,63 @@ const AdminDashboard = () => {
         </Card>
       )}
 
-      {/* Quick Stats Cards */}
-      <Row className="mb-4 g-3">
-        <Col md={3}>
-          <Card className="border-0 shadow-sm bg-white">
+      {/* Quick Stats Cards - Responsive grid */}
+      <Row className="mb-4 g-2 g-md-3">
+        <Col xs={12} sm={6} lg={3}>
+          <Card className="border-0 shadow-sm bg-white h-100">
             <Card.Body>
               <div className="d-flex justify-content-between align-items-center">
-                <div>
-                  <h6 className="text-secondary mb-2">Total Employees</h6>
+                <div className="overflow-hidden">
+                  <h6 className="text-secondary mb-2 small">Total Employees</h6>
                   <h4 className="mb-0 fw-bold">{totalEmployees}</h4>
-                  <small className="text-muted">Active employees</small>
+                  <small className="text-muted text-truncate d-block">Active employees</small>
                 </div>
-                <FaUsers size={30} className="text-secondary opacity-50" />
+                <FaUsers size={30} className="text-secondary opacity-50 flex-shrink-0" />
               </div>
             </Card.Body>
           </Card>
         </Col>
 
-        <Col md={3}>
-          <Card className="border-0 shadow-sm bg-white">
+        <Col xs={12} sm={6} lg={3}>
+          <Card className="border-0 shadow-sm bg-white h-100">
             <Card.Body>
               <div className="d-flex justify-content-between align-items-center">
-                <div>
-                  <h6 className="text-secondary mb-2">Present Today</h6>
+                <div className="overflow-hidden">
+                  <h6 className="text-secondary mb-2 small">Present Today</h6>
                   <h4 className="mb-0 fw-bold">{stats.present}</h4>
-                  <small className="text-muted">{stats.working} working now</small>
+                  <small className="text-muted text-truncate d-block">{stats.working} working now</small>
                 </div>
-                <FaUserCheck size={30} className="text-secondary opacity-50" />
+                <FaUserCheck size={30} className="text-secondary opacity-50 flex-shrink-0" />
               </div>
             </Card.Body>
           </Card>
         </Col>
 
-        <Col md={3}>
-          <Card className="border-0 shadow-sm bg-white">
+        <Col xs={12} sm={6} lg={3}>
+          <Card className="border-0 shadow-sm bg-white h-100">
             <Card.Body>
               <div className="d-flex justify-content-between align-items-center">
-                <div>
-                  <h6 className="text-secondary mb-2">On Leave / Half Day</h6>
+                <div className="overflow-hidden">
+                  <h6 className="text-secondary mb-2 small">On Leave / Half Day</h6>
                   <h4 className="mb-0 fw-bold">{stats.onLeave + stats.halfDay}</h4>
-                  <small className="text-muted">{stats.halfDay} half day</small>
+                  <small className="text-muted text-truncate d-block">{stats.halfDay} half day</small>
                 </div>
-                <FaUmbrellaBeach size={30} className="text-secondary opacity-50" />
+                <FaUmbrellaBeach size={30} className="text-secondary opacity-50 flex-shrink-0" />
               </div>
             </Card.Body>
           </Card>
         </Col>
 
-        <Col md={3}>
-          <Card className="border-0 shadow-sm bg-white">
+        <Col xs={12} sm={6} lg={3}>
+          <Card className="border-0 shadow-sm bg-white h-100">
             <Card.Body>
               <div className="d-flex justify-content-between align-items-center">
-                <div>
-                  <h6 className="text-secondary mb-2">Absent</h6>
+                <div className="overflow-hidden">
+                  <h6 className="text-secondary mb-2 small">Absent</h6>
                   <h4 className="mb-0 fw-bold">{stats.absent}</h4>
-                  <small className="text-muted">{stats.late} late arrivals</small>
+                  <small className="text-muted text-truncate d-block">{stats.late} late arrivals</small>
                 </div>
-                <FaUserTimes size={30} className="text-secondary opacity-50" />
+                <FaUserTimes size={30} className="text-secondary opacity-50 flex-shrink-0" />
               </div>
             </Card.Body>
           </Card>
@@ -569,12 +571,12 @@ const AdminDashboard = () => {
 
       {/* Live Attendance Feed */}
       <Card className="mb-5 border-0 shadow-sm">
-        <Card.Header className="bg-light d-flex justify-content-between align-items-center py-3">
-          <h5 className="mb-0 text-dark">
+        <Card.Header className="bg-light d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center py-3 gap-2">
+          <h5 className="mb-0 text-dark d-flex align-items-center">
             <FaClock className="me-2 text-dark" />
-            Live Attendance Feed
+            <span>Live Attendance Feed</span>
           </h5>
-          <Badge bg="dark" className="px-3 py-2">
+          <Badge bg="dark" className="px-3 py-2 ms-0 ms-sm-auto">
             {todayAttendance.length} Records
           </Badge>
         </Card.Header>
@@ -582,14 +584,14 @@ const AdminDashboard = () => {
           <div className="table-responsive" style={{ maxHeight: '200px', overflowY: 'auto' }}>
             <Table striped size="sm" className="mb-0 align-middle">
               <thead className="bg-light sticky-top text-dark fw-semibold">
-                <tr className='small'>
+                <tr className="small">
                   <th className="text-dark fw-normal text-center">Sr No</th>
                   <th className="text-dark fw-normal">Employee</th>
-                  <th className="text-dark fw-normal">Department</th>
-                  <th className="text-dark fw-normal">Shift</th>
+                  <th className="text-dark fw-normal d-none d-md-table-cell">Department</th>
+                  <th className="text-dark fw-normal d-none d-lg-table-cell">Shift</th>
                   <th className="text-dark fw-normal">Clock In</th>
-                  <th className="text-dark fw-normal">Clock Out</th>
-                  <th className="text-dark fw-normal">Hours</th>
+                  <th className="text-dark fw-normal d-none d-sm-table-cell">Clock Out</th>
+                  <th className="text-dark fw-normal d-none d-xl-table-cell">Hours</th>
                   <th className="text-dark fw-normal">Status</th>
                 </tr>
               </thead>
@@ -602,28 +604,30 @@ const AdminDashboard = () => {
                       <tr key={index} className={isWorking ? 'table-white' : ''}>
                         <td className="fw-normal text-center">{index + 1}</td>
                         <td>
-                          <div className='small'>{att.first_name} {att.last_name}</div>
-                          <small className="text-muted">{att.employee_id}</small>
-                        </td>
-                        <td className='small'>{att.department}</td>
-                        <td className='small'>
-                          <div bg="light" text="dark" className="fw-normal">
-                            {att.shift_time_used || 'Not set'}
+                          <div className="small text-truncate" style={{ maxWidth: '120px' }}>
+                            {att.first_name} {att.last_name}
                           </div>
+                          <small className="text-muted d-block">{att.employee_id}</small>
                         </td>
-                        <td className={` small ${att.clock_in ? 'text-success' : 'text-muted'}`}>
+                        <td className="small d-none d-md-table-cell text-truncate" style={{ maxWidth: '100px' }}>
+                          {att.department}
+                        </td>
+                        <td className="small d-none d-lg-table-cell text-truncate" style={{ maxWidth: '80px' }}>
+                          {att.shift_time_used || 'Not set'}
+                        </td>
+                        <td className={`small ${att.clock_in ? 'text-success' : 'text-muted'}`}>
                           {formatTime(att.clock_in)}
                           {att.late_minutes > 0 && (
-                            <Badge bg="danger" className="ms-2" pill>
+                            <Badge bg="danger" className="ms-1" pill>
                               Late
                             </Badge>
                           )}
                         </td>
-                        <td className={` small ${att.clock_out ? 'text-danger' : 'text-muted'}`}>
+                        <td className={`small d-none d-sm-table-cell ${att.clock_out ? 'text-danger' : 'text-muted'}`}>
                           {formatTime(att.clock_out)}
                         </td>
-                        <td>
-                          <span className="small">{att.total_hours || '0.0'} hrs</span>
+                        <td className="small d-none d-xl-table-cell">
+                          {att.total_hours || '0.0'} hrs
                         </td>
                         <td>{getStatusBadge(att)}</td>
                       </tr>
@@ -645,27 +649,27 @@ const AdminDashboard = () => {
 
       {/* Pending Leave Requests */}
       <Card className="mb-4 border-0 shadow-sm">
-        <Card.Header className="bg-light d-flex justify-content-between align-items-center py-3">
-          <h5 className="mb-0 text-dark">
+        <Card.Header className="bg-light d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center py-3 gap-2">
+          <h5 className="mb-0 text-dark d-flex align-items-center">
             <FaCalendarAlt className="me-2" />
-            Pending Leave Requests
+            <span>Pending Leave Requests</span>
           </h5>
-          <Badge bg="light" text="dark" className="px-3 py-2">
+          <Badge bg="light" text="dark" className="px-3 py-2 ms-0 ms-sm-auto">
             {leaveRequests.length} Pending
           </Badge>
         </Card.Header>
         <Card.Body className="p-0">
           <div className="table-responsive" style={{ maxHeight: '200px', overflowY: 'auto' }}>
             <Table striped size="sm" className="mb-0">
-              <thead className="bg-light sticky-top text-dark ">
+              <thead className="bg-light sticky-top text-dark">
                 <tr>
                   <th className="text-dark small fw-normal text-center">Sr No</th>
                   <th className="text-dark small fw-normal">Employee</th>
-                  <th className="text-dark small fw-normal">Designation</th>
-                  <th className="text-dark small fw-normal">Leave Type</th>
-                  <th className="text-dark small fw-normal">Date Range</th>
-                  <th className="text-dark small fw-normal">Days</th>
-                  <th className="text-dark small fw-normal">Reason</th>
+                  <th className="text-dark small fw-normal d-none d-md-table-cell">Designation</th>
+                  <th className="text-dark small fw-normal d-none d-sm-table-cell">Leave Type</th>
+                  <th className="text-dark small fw-normal d-none d-lg-table-cell">Date Range</th>
+                  <th className="text-dark small fw-normal d-none d-xl-table-cell">Days</th>
+                  <th className="text-dark small fw-normal d-none d-xxl-table-cell">Reason</th>
                   <th className="text-dark small fw-normal">Status</th>
                 </tr>
               </thead>
@@ -675,19 +679,25 @@ const AdminDashboard = () => {
                     <tr key={leave.id}>
                       <td className="fw-normal text-center">{index + 1}</td>
                       <td>
-                        <div>{leave.first_name} {leave.last_name}</div>
-                        <small className="text-muted">{leave.employee_id}</small>
+                        <div className="text-truncate" style={{ maxWidth: '100px' }}>
+                          {leave.first_name} {leave.last_name}
+                        </div>
+                        <small className="text-muted d-block">{leave.employee_id}</small>
                       </td>
-                      <td>{leave.designation}</td>
-                      <td>
+                      <td className="d-none d-md-table-cell text-truncate" style={{ maxWidth: '100px' }}>
+                        {leave.designation}
+                      </td>
+                      <td className="d-none d-sm-table-cell">
                         <Badge bg="secondary">{leave.leave_type}</Badge>
                       </td>
-                      <td>
-                        {new Date(leave.start_date).toLocaleDateString()}
-                        {leave.start_date !== leave.end_date && ` - ${new Date(leave.end_date).toLocaleDateString()}`}
+                      <td className="d-none d-lg-table-cell">
+                        <span className="text-nowrap">{new Date(leave.start_date).toLocaleDateString()}</span>
+                        {leave.start_date !== leave.end_date && (
+                          <span className="text-nowrap d-block">- {new Date(leave.end_date).toLocaleDateString()}</span>
+                        )}
                       </td>
-                      <td>{leave.days_count || 1}</td>
-                      <td className="text-truncate" style={{ maxWidth: '150px' }}>
+                      <td className="d-none d-xl-table-cell">{leave.days_count || 1}</td>
+                      <td className="d-none d-xxl-table-cell text-truncate" style={{ maxWidth: '150px' }}>
                         {leave.reason}
                       </td>
                       <td>
@@ -711,19 +721,19 @@ const AdminDashboard = () => {
 
       {/* Employee Leave Balances */}
       <Card className="mb-4 border-0 shadow-sm">
-        <Card.Header className="bg-white d-flex justify-content-between align-items-center py-3">
-          <h5 className="mb-0">
+        <Card.Header className="bg-white d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center py-3 gap-2">
+          <h5 className="mb-0 d-flex align-items-center">
             <FaBalanceScale className="me-2 text-dark" />
-            Employee Leave Balances
+            <span>Employee Leave Balances</span>
           </h5>
-          <Badge bg="dark" className="px-3 py-2">
+          <Badge bg="dark" className="px-3 py-2 ms-0 ms-sm-auto">
             Total: {filteredEmployees.length} Employees
           </Badge>
         </Card.Header>
         <Card.Body>
-          {/* Filters */}
+          {/* Filters - Responsive stack on mobile */}
           <Row className="mb-3 g-2">
-            <Col md={4}>
+            <Col xs={12} md={4}>
               <div className="d-flex align-items-center bg-light rounded-3 p-1">
                 <FaSearch className="ms-2 text-muted" size={14} />
                 <Form.Control
@@ -736,7 +746,7 @@ const AdminDashboard = () => {
                 />
               </div>
             </Col>
-            <Col md={3}>
+            <Col xs={6} md={3}>
               <Form.Select size="sm" value={filterDepartment} onChange={(e) => setFilterDepartment(e.target.value)}>
                 <option value="all">All Departments</option>
                 {departments.filter(d => d !== 'all').map(dept => (
@@ -744,7 +754,7 @@ const AdminDashboard = () => {
                 ))}
               </Form.Select>
             </Col>
-            <Col md={3}>
+            <Col xs={6} md={3}>
               <Form.Select size="sm" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
                 <option value="name">Sort by Name</option>
                 <option value="balance">Sort by Balance</option>
@@ -757,16 +767,16 @@ const AdminDashboard = () => {
           <div className="table-responsive" style={{ maxHeight: '200px', overflowY: 'auto' }}>
             <Table striped size="sm" className="mb-0">
               <thead className="bg-light sticky-top text-dark fw-semibold">
-                <tr className='small'>
+                <tr className="small">
                   <th className="text-dark fw-normal text-center">Sr No</th>
                   <th className="text-dark fw-normal">Employee</th>
-                  <th className="text-dark fw-normal">Department</th>
-                  <th className="text-dark fw-normal">Designation</th>
-                  <th className="text-dark fw-normal">Total Accrued</th>
-                  <th className="text-dark fw-normal">Used</th>
-                  <th className="text-dark fw-normal">Pending</th>
+                  <th className="text-dark fw-normal d-none d-md-table-cell">Department</th>
+                  <th className="text-dark fw-normal d-none d-lg-table-cell">Designation</th>
+                  <th className="text-dark fw-normal d-none d-xl-table-cell">Total Accrued</th>
+                  <th className="text-dark fw-normal d-none d-xl-table-cell">Used</th>
+                  <th className="text-dark fw-normal d-none d-xl-table-cell">Pending</th>
                   <th className="text-dark fw-normal">Available</th>
-                  <th className="text-dark fw-normal">Status</th>
+                  <th className="text-dark fw-normal d-none d-sm-table-cell">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -779,20 +789,45 @@ const AdminDashboard = () => {
                       <tr key={emp.id}>
                         <td className="small text-center">{index + 1}</td>
                         <td>
-                          <div className="small">{emp.first_name} {emp.last_name}</div>
-                          <small className="text-muted small">{emp.employee_id}</small>
+                          <div className="small text-truncate" style={{ maxWidth: '100px' }}>
+                            {emp.first_name} {emp.last_name}
+                          </div>
+                          <small className="text-muted small d-block">{emp.employee_id}</small>
                         </td>
-                        <td className='small'>{emp.department}</td>
-                        <td className='small'>{emp.designation}</td>
-                        <td className='small'>{emp.leaveBalance?.total_accrued || '0'}</td>
-                        <td className="text-danger small">{emp.leaveBalance?.used || '0'}</td>
-                        <td className="text-warning small">{emp.leaveBalance?.pending || '0'}</td>
+                        <td className="small d-none d-md-table-cell text-truncate" style={{ maxWidth: '100px' }}>
+                          {emp.department}
+                        </td>
+                        <td className="small d-none d-lg-table-cell text-truncate" style={{ maxWidth: '100px' }}>
+                          {emp.designation}
+                        </td>
+                        <td className="small d-none d-xl-table-cell">{emp.leaveBalance?.total_accrued || '0'}</td>
+                        <td className="text-danger small d-none d-xl-table-cell">{emp.leaveBalance?.used || '0'}</td>
+                        <td className="text-start small d-none d-xl-table-cell">
+                          {(() => {
+                            const total = parseFloat(emp.leaveBalance?.total_accrued) || 0;
+                            const used = parseFloat(emp.leaveBalance?.used) || 0;
+                            const pending = total - used;
+
+                            if (pending > 0) {
+                              return (
+                                <Badge bg="warning" pill>
+                                  {pending.toFixed(1)}
+                                </Badge>
+                              );
+                            }
+                            return (
+                              <Badge bg="secondary" pill>
+                                0
+                              </Badge>
+                            );
+                          })()}
+                        </td>
                         <td>
                           <Badge bg={statusColor} pill>
                             {emp.leaveBalance?.available || '0'}
                           </Badge>
                         </td>
-                        <td>
+                        <td className="d-none d-sm-table-cell">
                           {available <= 0 ? (
                             <Badge bg="danger" pill>No Leaves</Badge>
                           ) : available < 3 ? (
