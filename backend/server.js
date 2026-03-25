@@ -1,4 +1,4 @@
-// server.js
+// server.js - FIXED CORS CONFIGURATION
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
@@ -7,7 +7,7 @@ const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const multer = require('multer');
-const cron = require('node-cron'); // Add this for cron jobs
+const cron = require('node-cron');
 
 // Load environment variables
 dotenv.config();
@@ -43,7 +43,12 @@ console.log(`Port: ${PORT}`);
 console.log('='.repeat(70));
 
 // ============== CORS CONFIGURATION ==============
-// Define allowed origins
+// Read allowed origins from environment variable or use defaults
+const allowedOriginsFromEnv = process.env.ALLOWED_ORIGINS 
+    ? process.env.ALLOWED_ORIGINS.split(',')
+    : [];
+
+// Define allowed origins (including your Vercel frontend)
 const allowedOrigins = [
     'http://localhost:5173',  // Local development (Vite default)
     'http://localhost:5174',  // Vite alternate port
@@ -54,11 +59,17 @@ const allowedOrigins = [
     'http://127.0.0.1:3000',
     'http://127.0.0.1:3001',
     'https://employee-management-system-psi-teal.vercel.app', // Your Vercel frontend
-    'https://employee-management-system-brvo.onrender.com' // Your backend URL
+    'https://employee-management-system-brvo.onrender.com', // Your backend URL
+    ...allowedOriginsFromEnv
 ];
 
 // Remove duplicates
 const uniqueAllowedOrigins = [...new Set(allowedOrigins)];
+
+console.log('🔧 CORS Allowed Origins:');
+uniqueAllowedOrigins.forEach(origin => {
+    console.log(`   - ${origin}`);
+});
 
 // Configure CORS options
 const corsOptions = {
@@ -76,7 +87,7 @@ const corsOptions = {
         } else {
             console.log(`❌ CORS blocked for origin: ${origin}`);
             console.log(`   Allowed origins: ${uniqueAllowedOrigins.join(', ')}`);
-            callback(new Error('Not allowed by CORS'));
+            callback(new Error(`Not allowed by CORS: ${origin}`));
         }
     },
     credentials: true,
@@ -97,7 +108,7 @@ const corsOptions = {
 // Apply CORS middleware FIRST
 app.use(cors(corsOptions));
 
-// Optional: Additional custom CORS logging middleware
+// Additional CORS logging middleware
 app.use((req, res, next) => {
     const origin = req.headers.origin;
     console.log(`📍 ${req.method} ${req.url} - Origin: ${origin || 'no origin'}`);
@@ -116,8 +127,6 @@ const createUploadDirectories = () => {
     const uploadsDir = path.join(__dirname, 'uploads');
     const profilesDir = path.join(uploadsDir, 'profiles');
     const documentsDir = path.join(uploadsDir, 'documents');
-    
-    // Create logs directory for cron job logs
     const logsDir = path.join(__dirname, 'logs');
     
     [uploadsDir, profilesDir, documentsDir, logsDir].forEach(dir => {
@@ -151,7 +160,7 @@ const documentStorage = multer.diskStorage({
 
 const uploadDocuments = multer({ 
     storage: documentStorage,
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+    limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
         const allowedTypes = /jpeg|jpg|png|pdf|doc|docx/;
         const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -361,7 +370,6 @@ cron.schedule('0 * * * *', async () => {
         const duration = Date.now() - startTime;
         console.log(`✅ Auto-close completed in ${duration}ms: ${result.closedCount} sessions closed`);
         
-        // Log to file if in production or if there were sessions closed
         if (isProduction || result.closedCount > 0) {
             logCronActivity('AUTO_CLOSE', `${result.closedCount} sessions closed`, duration);
         }
@@ -379,8 +387,6 @@ cron.schedule('59 23 * * *', async () => {
         const result = await attendanceController.markAbsentAtDayEnd();
         const duration = Date.now() - startTime;
         console.log(`✅ Absent marking completed in ${duration}ms: ${result.message}`);
-        
-        // Log to file
         logCronActivity('END_OF_DAY', result.message, duration);
     } catch (error) {
         console.error('❌ End-of-day marking error:', error);
@@ -393,7 +399,6 @@ cron.schedule('0 2 * * 0', async () => {
     console.log('\n🧹 Running weekly database cleanup...');
     const startTime = Date.now();
     try {
-        // Clean up old inactive sessions (older than 30 days)
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
         
@@ -406,7 +411,6 @@ cron.schedule('0 2 * * 0', async () => {
         
         if (sessionError) throw sessionError;
         
-        // Clean up old regularization requests (older than 90 days)
         const ninetyDaysAgo = new Date();
         ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
         
@@ -421,8 +425,6 @@ cron.schedule('0 2 * * 0', async () => {
         
         const duration = Date.now() - startTime;
         console.log(`✅ Cleanup completed in ${duration}ms: ${sessionsCount || 0} sessions, ${requestsCount || 0} requests removed`);
-        
-        // Log to file
         logCronActivity('WEEKLY_CLEANUP', `${sessionsCount || 0} sessions, ${requestsCount || 0} requests removed`, duration);
     } catch (error) {
         console.error('❌ Weekly cleanup error:', error);
@@ -463,7 +465,6 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
     console.error('❌ Server error:', err.stack);
     
-    // Handle CORS errors
     if (err.message === 'Not allowed by CORS') {
         return res.status(403).json({
             success: false,
@@ -474,7 +475,6 @@ app.use((err, req, res, next) => {
         });
     }
     
-    // Handle multer errors
     if (err instanceof multer.MulterError) {
         return res.status(400).json({
             success: false,
@@ -483,7 +483,6 @@ app.use((err, req, res, next) => {
         });
     }
     
-    // Handle JWT errors
     if (err.name === 'JsonWebTokenError') {
         return res.status(401).json({
             success: false,
@@ -500,7 +499,6 @@ app.use((err, req, res, next) => {
         });
     }
     
-    // Log error to file if in production
     if (isProduction) {
         const logDir = path.join(__dirname, 'logs');
         if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
@@ -530,14 +528,6 @@ app.listen(PORT, '0.0.0.0', () => {
     uniqueAllowedOrigins.forEach(origin => {
         console.log(`   - ${origin}`);
     });
-    console.log(`🔧 CORS Allowed Headers:`);
-    console.log(`   - Content-Type`);
-    console.log(`   - Authorization`);
-    console.log(`   - X-Requested-With`);
-    console.log(`   - Accept`);
-    console.log(`   - Origin`);
-    console.log(`   - employee-id`);
-    console.log(`   - X-Employee-Id`);
     console.log('='.repeat(70));
     console.log(`✨ Features enabled:`);
     console.log(`   - Attendance Regularization`);
@@ -552,14 +542,11 @@ app.listen(PORT, '0.0.0.0', () => {
 const gracefulShutdown = async () => {
     console.log('\n🛑 Received shutdown signal, closing server gracefully...');
     
-    // Close any open database connections
     if (supabase && supabase.supabaseClient) {
         console.log('📡 Closing database connections...');
-        // Supabase doesn't have explicit close, but we can log
         console.log('✅ Database connections closed');
     }
     
-    // Log shutdown
     const logDir = path.join(__dirname, 'logs');
     if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
     fs.appendFileSync(
@@ -579,7 +566,6 @@ process.on('uncaughtException', (error) => {
     console.error('❌ Uncaught Exception:', error);
     console.error('Stack:', error.stack);
     
-    // Log to file if in production
     if (isProduction) {
         const logDir = path.join(__dirname, 'logs');
         if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
@@ -589,7 +575,6 @@ process.on('uncaughtException', (error) => {
         );
     }
     
-    // Don't exit in development
     if (process.env.NODE_ENV === 'production') {
         process.exit(1);
     }
@@ -599,7 +584,6 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason, promise) => {
     console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
     
-    // Log to file if in production
     if (isProduction) {
         const logDir = path.join(__dirname, 'logs');
         if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
@@ -609,7 +593,6 @@ process.on('unhandledRejection', (reason, promise) => {
         );
     }
     
-    // Don't exit in development
     if (process.env.NODE_ENV === 'production') {
         process.exit(1);
     }
