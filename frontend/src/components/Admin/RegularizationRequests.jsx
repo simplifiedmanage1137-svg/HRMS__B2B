@@ -46,7 +46,6 @@ const RegularizationRequests = () => {
 
     useEffect(() => {
         fetchRequests();
-        // Auto-refresh every 30 seconds
         const interval = setInterval(fetchRequests, 30000);
         return () => clearInterval(interval);
     }, []);
@@ -58,27 +57,36 @@ const RegularizationRequests = () => {
             return;
         }
 
+        console.log('📋 Approving request:', {
+            request_id: selectedRequest.id,
+            attendance_date: selectedRequest.attendance_date,
+            requested_clock_out: selectedRequest.requested_clock_out_time,
+            approved_time_raw: approvedTime
+        });
+
         setProcessing(true);
         try {
+            // Send the datetime-local value as is - this is already in local time
+            const requestData = {
+                approved_clock_out_time: approvedTime, // "YYYY-MM-DDThh:mm"
+                admin_notes: adminNotes
+            };
+
+            console.log('📤 Sending approval data:', requestData);
+
             const response = await axios.put(
                 API_ENDPOINTS.ATTENDANCE_APPROVE_REGULARIZATION(selectedRequest.id),
-                {
-                    approved_clock_out_time: approvedTime,
-                    admin_notes: adminNotes
-                }
+                requestData
             );
 
-            console.log('✅ Regularization approved:', response.data);
+            console.log('✅ Approval response:', response.data);
 
             setMessage({ type: 'success', text: 'Regularization request approved successfully!' });
-
-            // Close modals and clear selections
             setShowApproveModal(false);
             setSelectedRequest(null);
             setApprovedTime('');
             setAdminNotes('');
 
-            // Add notification for employee
             if (addNotification) {
                 addNotification({
                     employee_id: selectedRequest.employee_id,
@@ -88,14 +96,11 @@ const RegularizationRequests = () => {
                 });
             }
 
-            // IMPORTANT: Fetch fresh data to update the list
-            await fetchRequests();
-
-            // Clear success message after 3 seconds
+            fetchRequests();
             setTimeout(() => setMessage({ type: '', text: '' }), 3000);
-
         } catch (error) {
-            console.error('Error approving regularization:', error);
+            console.error('❌ Error approving regularization:', error);
+            console.error('Error details:', error.response?.data);
             setMessage({
                 type: 'danger',
                 text: error.response?.data?.message || 'Failed to approve request'
@@ -122,7 +127,6 @@ const RegularizationRequests = () => {
             setSelectedRequest(null);
             setRejectionReason('');
 
-            // Add notification for employee
             if (addNotification) {
                 addNotification({
                     employee_id: selectedRequest.employee_id,
@@ -133,7 +137,6 @@ const RegularizationRequests = () => {
             }
 
             fetchRequests();
-
             setTimeout(() => setMessage({ type: '', text: '' }), 3000);
         } catch (error) {
             console.error('Error rejecting regularization:', error);
@@ -146,54 +149,69 @@ const RegularizationRequests = () => {
         }
     };
 
+    // Format date and time for display (handles both formats)
     const formatDateTime = (datetime) => {
         if (!datetime) return 'N/A';
-        try {
-            const date = new Date(datetime);
-            // Check if date is valid
-            if (isNaN(date.getTime())) return 'N/A';
-            return date.toLocaleString('en-US', {
-                day: '2-digit',
-                month: 'short',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true
-            });
-        } catch (error) {
-            return 'N/A';
+
+        // If it's already in local format "YYYY-MM-DD HH:MM:SS"
+        if (typeof datetime === 'string' && datetime.includes(' ') && !datetime.includes('T')) {
+            const [datePart, timePart] = datetime.split(' ');
+            const [year, month, day] = datePart.split('-');
+            const [hour, minute] = timePart.split(':');
+            const hourNum = parseInt(hour);
+            const ampm = hourNum >= 12 ? 'PM' : 'AM';
+            const hour12 = hourNum % 12 || 12;
+            return `${day}/${month}/${year} ${hour12}:${minute} ${ampm}`;
         }
+
+        // If it's ISO format with T
+        if (typeof datetime === 'string' && datetime.includes('T')) {
+            const match = datetime.match(/T(\d{2}):(\d{2}):(\d{2})/);
+            if (match) {
+                const hour = parseInt(match[1]);
+                const minute = match[2];
+                const ampm = hour >= 12 ? 'PM' : 'AM';
+                const hour12 = hour % 12 || 12;
+                return `${hour12}:${minute} ${ampm}`;
+            }
+        }
+
+        return datetime;
     };
 
+    // Format requested clock out time for display
     const formatRequestedClockOutTime = (datetime) => {
         if (!datetime) return 'N/A';
         let value = String(datetime).trim();
 
-        // preserve raw local format
+        if (value.includes(' ') && !value.includes('T')) {
+            const timePart = value.split(' ')[1];
+            const [hour, minute] = timePart.split(':');
+            const hourNum = parseInt(hour);
+            const ampm = hourNum >= 12 ? 'PM' : 'AM';
+            const hour12 = hourNum % 12 || 12;
+            return `${hour12}:${minute} ${ampm}`;
+        }
+
         value = value.replace('T', ' ');
-
-        // If includes seconds, trim to minutes for display
-        const trimmed = value.replace(/:\d{2}$/,'');
-
+        const trimmed = value.replace(/:\d{2}$/, '');
         return trimmed;
     };
 
+    // Convert to datetime-local format for input
     const toDatetimeLocal = (datetime) => {
         if (!datetime) return '';
-        let value = String(datetime).trim().replace(' ', 'T');
 
-        // If seconds exist, remove them
-        if (value.match(/\.\d{3}Z$/)) {
-            // ISO with timezone
-            const date = new Date(value);
-            if (isNaN(date.getTime())) return '';
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const hour = String(date.getHours()).padStart(2, '0');
-            const minute = String(date.getMinutes()).padStart(2, '0');
-            return `${year}-${month}-${day}T${hour}:${minute}`;
+        let value = String(datetime).trim();
+
+        // If it's in "YYYY-MM-DD HH:MM:SS" format
+        if (value.includes(' ') && !value.includes('T')) {
+            const [datePart, timePart] = value.split(' ');
+            const [hour, minute] = timePart.split(':');
+            return `${datePart}T${hour}:${minute}`;
         }
 
+        // If it's already in T format
         if (value.includes('T')) {
             const [datePart, timePart] = value.split('T');
             const [hour, minute] = (timePart || '').split(':');
@@ -203,20 +221,15 @@ const RegularizationRequests = () => {
         return '';
     };
 
-
     const formatDate = (dateString) => {
         if (!dateString) return 'N/A';
-        try {
-            const date = new Date(dateString);
-            if (isNaN(date.getTime())) return 'N/A';
-            return date.toLocaleDateString('en-US', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric'
-            });
-        } catch (error) {
-            return 'N/A';
-        }
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return 'N/A';
+        return date.toLocaleDateString('en-US', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+        });
     };
 
     const getStatusBadge = (status) => {

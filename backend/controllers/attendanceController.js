@@ -84,23 +84,74 @@ const calculateOvertime = (totalHours, shiftHours) => {
     };
 };
 
-// Local datetime parser
+// Local datetime parser (keeps local 'datetime-local' as local time)
 const parseLocalDateTime = (datetime) => {
     if (!datetime) return null;
     if (datetime instanceof Date) return datetime;
+
     let value = String(datetime).trim();
     if (value === '') return null;
-    const localString = value.replace(' ', 'T');
-    let parsed = new Date(localString);
-    if (isNaN(parsed.getTime())) {
-        const [datePart, timePart] = localString.split('T');
-        if (datePart && timePart) {
-            const [year, month, day] = datePart.split('-').map(Number);
-            const [hour, minute, second] = timePart.split(':').map((x, idx) => Number(x) || (idx === 2 ? 0 : 0));
-            parsed = new Date(year, month - 1, day, hour || 0, minute || 0, second || 0);
-        }
+
+    if (value.includes(' ')) {
+        value = value.replace(' ', 'T');
     }
-    return parsed;
+
+    const hasTZOffset = /[Zz]|[+-]\d{2}:?\d{2}$/.test(value);
+    if (hasTZOffset) {
+        const parsed = new Date(value);
+        return isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    const [datePart, timePart] = value.split('T');
+    if (!datePart || !timePart) {
+        const parsed = new Date(value);
+        return isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hour, minute, second = '0'] = timePart.split(':');
+    if (![year, month, day].every(Number.isFinite)) {
+        return null;
+    }
+
+    const localDate = new Date(year, month - 1, day, Number(hour) || 0, Number(minute) || 0, Number(second) || 0);
+    return isNaN(localDate.getTime()) ? null : localDate;
+};
+
+// Convert IST local date string "YYYY-MM-DD HH:mm:ss" to UTC Date object
+const parseISTDateTimeToUTC = (istDateTimeStr) => {
+    if (!istDateTimeStr) return null;
+    let value = String(istDateTimeStr).trim();
+    if (!value) return null;
+
+    // normalize T to space and remove timezone markers
+    value = value.replace('T', ' ').replace(/Z$/, '').replace(/[+-]\d{2}:?\d{2}$/, '').trim();
+
+    const [datePart, timePart] = value.split(' ');
+    if (!datePart || !timePart) return null;
+
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hour, minute, second = '0'] = timePart.split(':').map(Number);
+
+    if (![year, month, day, hour, minute].every(Number.isFinite)) return null;
+
+    const istMs = Date.UTC(year, month - 1, day, hour, minute, second);
+    const utcMs = istMs - (5.5 * 60 * 60 * 1000);
+    const utcDate = new Date(utcMs);
+    return isNaN(utcDate.getTime()) ? null : utcDate;
+};
+
+// Convert UTC Date object to IST string (YYYY-MM-DD HH:MM:SS)
+const formatUTCDateToISTString = (utcDate) => {
+    if (!(utcDate instanceof Date) || isNaN(utcDate.getTime())) return null;
+    const ist = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000));
+    const y = ist.getUTCFullYear();
+    const m = String(ist.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(ist.getUTCDate()).padStart(2, '0');
+    const hh = String(ist.getUTCHours()).padStart(2, '0');
+    const mm = String(ist.getUTCMinutes()).padStart(2, '0');
+    const ss = String(ist.getUTCSeconds()).padStart(2, '0');
+    return `${y}-${m}-${d} ${hh}:${mm}:${ss}`;
 };
 
 // Check if a date is a holiday
@@ -173,10 +224,15 @@ exports.autoCloseStaleSessions = async () => {
                 let status = 'half_day';
                 if (totalMinutes >= 480) status = 'present';
                 else if (totalMinutes < 240) status = 'absent';
+
+                // Convert to IST for storage
+                const clockOutIST = autoClockOutTime.toLocaleString('en-US', { timeZone: 'Asia/Kolkata', hour12: false });
+
                 await supabase
                     .from('attendance')
                     .update({
                         clock_out: autoClockOutTime.toISOString(),
+                        clock_out_ist: clockOutIST,
                         total_hours: Math.round(totalHours * 100) / 100,
                         total_minutes: Math.round(totalMinutes),
                         status: status,
@@ -317,26 +373,56 @@ exports.clockIn = async (req, res) => {
             }
             return res.status(400).json({ success: false, message: 'You have already clocked in today' });
         }
+
+        // Create IST time string
+        const istTime = now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata', hour12: false });
+        const [datePart, timePart] = istTime.split(', ');
+        const [istMonth, istDay, istYear] = datePart.split('/');
+        const istDateStr = `${istYear}-${istMonth.padStart(2, '0')}-${istDay.padStart(2, '0')}`;
+        const clockInIST = `${istDateStr} ${timePart}`;
+
         await supabase.from('attendance').insert([{
-            employee_id, attendance_date: today, clock_in: now.toISOString(),
-            late_minutes: lateMinutesToSave, early_minutes: earlyMinutesToSave,
-            latitude, longitude, location_accuracy: accuracy, session_id: sessionId,
-            shift_time_used: shiftDisplay, is_holiday: holidayCheck.isHoliday,
+            employee_id,
+            attendance_date: today,
+            clock_in: now.toISOString(),
+            clock_in_ist: clockInIST,
+            late_minutes: lateMinutesToSave,
+            early_minutes: earlyMinutesToSave,
+            latitude,
+            longitude,
+            location_accuracy: accuracy,
+            session_id: sessionId,
+            shift_time_used: shiftDisplay,
+            is_holiday: holidayCheck.isHoliday,
             holiday_name: holidayCheck.name || null
         }]);
         await supabase.from('attendance_sessions').insert([{
-            employee_id, session_id: sessionId, clock_in_time: now.toISOString(),
-            last_heartbeat: now.toISOString(), is_active: true, latitude, longitude,
+            employee_id,
+            session_id: sessionId,
+            clock_in_time: now.toISOString(),
+            last_heartbeat: now.toISOString(),
+            is_active: true,
+            latitude,
+            longitude,
             location_accuracy: accuracy
         }]);
+
         let message = '✅ Clocked in on time';
         if (isLate) message = `⚠️ Clocked in (${lateDisplay} late)`;
         else if (isEarly) message = `⏰ Clocked in (${Math.floor(earlyMinutes)}m early)`;
+
         const response = {
-            success: true, message, clock_in: now, shift_time: shiftDisplay,
+            success: true,
+            message,
+            clock_in: now,
+            clock_in_ist: clockInIST,
+            shift_time: shiftDisplay,
             shift_start: `${shiftHour.toString().padStart(2, '0')}:${shiftMinute.toString().padStart(2, '0')}`,
-            is_late: isLate, is_early: isEarly, session_id: sessionId,
-            employee_name: `${emp.first_name} ${emp.last_name}`, attendance_date: today,
+            is_late: isLate,
+            is_early: isEarly,
+            session_id: sessionId,
+            employee_name: `${emp.first_name} ${emp.last_name}`,
+            attendance_date: today,
             is_holiday: holidayCheck.isHoliday
         };
         if (isLate) {
@@ -350,7 +436,7 @@ exports.clockIn = async (req, res) => {
     }
 };
 
-// In attendanceController.js - Updated clockOut function
+// Clock Out function
 exports.clockOut = async (req, res) => {
     try {
         console.log('='.repeat(70));
@@ -381,7 +467,6 @@ exports.clockOut = async (req, res) => {
 
         console.log(`🔍 Looking for active session: ${session_id} for employee: ${employee_id}`);
 
-        // 1. First, find the active session
         const { data: activeSessions, error: sessionError } = await supabase
             .from('attendance_sessions')
             .select('*')
@@ -400,7 +485,6 @@ exports.clockOut = async (req, res) => {
         let attendanceRecord;
 
         if (!activeSessions || activeSessions.length === 0) {
-            // Try to find by employee_id only as fallback
             console.log('⚠️ No session found with given session_id, trying fallback...');
 
             const { data: fallbackSessions, error: fallbackError } = await supabase
@@ -428,7 +512,6 @@ exports.clockOut = async (req, res) => {
             console.log('✅ Using fallback session:', fallbackSessions[0].session_id);
             session = fallbackSessions[0];
 
-            // Find attendance record for this session
             const { data: attendanceRecords, error: attendanceError } = await supabase
                 .from('attendance')
                 .select('*')
@@ -455,7 +538,6 @@ exports.clockOut = async (req, res) => {
             session = activeSessions[0];
             console.log('✅ Found active session:', session.session_id);
 
-            // Find the corresponding attendance record
             const { data: attendanceRecords, error: attendanceError } = await supabase
                 .from('attendance')
                 .select('*')
@@ -471,7 +553,6 @@ exports.clockOut = async (req, res) => {
             }
 
             if (!attendanceRecords || attendanceRecords.length === 0) {
-                // Try without session_id filter as fallback
                 console.log('⚠️ No attendance record with session_id, trying fallback...');
 
                 const { data: fallbackAttendance, error: fallbackError } = await supabase
@@ -507,21 +588,40 @@ exports.clockOut = async (req, res) => {
             attendance_date: attendanceRecord.attendance_date
         });
 
-        // Calculate exact hours with minutes precision
-        const clockIn = new Date(attendanceRecord.clock_in);
-        const diffMs = now - clockIn;
+        // Parse clock_in time from IST column or UTC
+        let clockInDateUTC;
+        if (attendanceRecord.clock_in_ist) {
+            clockInDateUTC = parseISTDateTimeToUTC(attendanceRecord.clock_in_ist);
+        } else {
+            clockInDateUTC = attendanceRecord.clock_in ? new Date(attendanceRecord.clock_in) : null;
+        }
+
+        if (!clockInDateUTC || isNaN(clockInDateUTC.getTime())) {
+            throw new Error('Invalid clock-in time format');
+        }
+
+        const nowUTC = new Date();
+        const diffMs = nowUTC - clockInDateUTC;
         const totalMinutes = diffMs / (1000 * 60);
         const totalHours = totalMinutes / 60;
         const hours = Math.floor(totalMinutes / 60);
         const minutes = Math.round(totalMinutes % 60);
         const totalHoursDisplay = `${hours}h ${minutes}m`;
 
-        console.log(`📊 Hours calculated: ${totalHours.toFixed(2)} hours (${totalMinutes.toFixed(0)} minutes)`);
-        console.log(`   Clock In: ${clockIn.toLocaleTimeString()}`);
-        console.log(`   Clock Out: ${now.toLocaleTimeString()}`);
-        console.log(`   Difference: ${hours}h ${minutes}m`);
+        // Create IST clock_out string
+        const istTime = now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata', hour12: false });
+        const [datePart, timePart] = istTime.split(', ');
+        const [istMonth, istDay, istYear] = datePart.split('/');
+        const istDateStr = `${istYear}-${istMonth.padStart(2, '0')}-${istDay.padStart(2, '0')}`;
+        const clockOutIST = `${istDateStr} ${timePart}`;
 
-        // Get employee shift timing to calculate overtime
+        const clockOutUTC = parseISTDateTimeToUTC(clockOutIST);
+        if (!clockOutUTC || isNaN(clockOutUTC.getTime())) {
+            throw new Error('Invalid generated clock-out UTC time');
+        }
+
+        console.log(`📊 Hours calculated: ${totalHours.toFixed(2)} hours (${totalMinutes.toFixed(0)} minutes)`);
+
         const { data: employee, error: empError } = await supabase
             .from('employees')
             .select('shift_timing')
@@ -530,24 +630,22 @@ exports.clockOut = async (req, res) => {
 
         if (empError) {
             console.error('❌ Employee fetch error:', empError);
-            // Continue with default shift timing
         }
 
         const shiftTiming = parseShiftTiming(employee?.shift_timing);
         const shiftHours = shiftTiming.totalHours || 9;
         const overtime = calculateOvertime(totalHours, shiftHours);
 
-        // Determine status based on total minutes
         let status = 'present';
-        if (totalMinutes < 240) { // Less than 4 hours
+        if (totalMinutes < 240) {
             status = 'absent';
-        } else if (totalMinutes < 480) { // Less than 8 hours but >= 4 hours
+        } else if (totalMinutes < 480) {
             status = 'half_day';
         }
 
-        // Prepare update data - REMOVED total_hours_display from update to avoid column error
         const updateData = {
-            clock_out: now.toISOString(),
+            clock_out: clockOutUTC.toISOString(),
+            clock_out_ist: clockOutIST,
             total_hours: Math.round(totalHours * 100) / 100,
             total_minutes: Math.round(totalMinutes),
             status: status,
@@ -558,26 +656,12 @@ exports.clockOut = async (req, res) => {
             holiday_name: holidayCheck.name || null,
             overtime_minutes: overtime.overtimeMinutes || 0,
             overtime_hours: overtime.overtimeHours || 0,
-            overtime_amount: overtime.overtimeAmount || 0
+            overtime_amount: overtime.overtimeAmount || 0,
+            total_hours_display: totalHoursDisplay
         };
-
-        // Only add total_hours_display if column exists (try to add it)
-        try {
-            // Check if column exists
-            const { data: columnCheck } = await supabase
-                .from('attendance')
-                .select('total_hours_display')
-                .limit(1);
-
-            // If no error, column exists
-            updateData.total_hours_display = totalHoursDisplay;
-        } catch (colError) {
-            console.log('⚠️ total_hours_display column does not exist, skipping...');
-        }
 
         console.log('📝 Updating attendance with:', updateData);
 
-        // Update attendance record
         const { error: updateAttendanceError } = await supabase
             .from('attendance')
             .update(updateData)
@@ -588,7 +672,6 @@ exports.clockOut = async (req, res) => {
             throw updateAttendanceError;
         }
 
-        // Deactivate session
         const { error: updateSessionError } = await supabase
             .from('attendance_sessions')
             .update({
@@ -608,6 +691,7 @@ exports.clockOut = async (req, res) => {
             success: true,
             message: `✅ Clocked out successfully. Total hours: ${totalHoursDisplay}`,
             clock_out: now,
+            clock_out_ist: clockOutIST,
             total_hours: Math.round(totalHours * 100) / 100,
             total_minutes: Math.round(totalMinutes),
             total_hours_display: totalHoursDisplay,
@@ -619,19 +703,18 @@ exports.clockOut = async (req, res) => {
     } catch (error) {
         console.error('❌ Clock-out error:', error);
         console.error('Error stack:', error.stack);
-        console.error('Error details:', error.details || error.hint || 'No details');
 
         res.status(500).json({
             success: false,
             message: 'Failed to clock out',
             error: error.message,
-            error_type: 'SERVER_ERROR',
-            details: error.details || error.hint
+            error_type: 'SERVER_ERROR'
         });
     }
 };
 
-// Get today's attendance
+// In attendanceController.js - Update getTodayAttendance function
+
 exports.getTodayAttendance = async (req, res) => {
     try {
         const { employee_id } = req.params;
@@ -666,10 +749,12 @@ exports.getTodayAttendance = async (req, res) => {
             if (formattedAttendance.late_minutes > 0) {
                 formattedAttendance.late_display = formatLateTime(formattedAttendance.late_minutes);
             }
-            if (formattedAttendance.clock_in && !formattedAttendance.clock_out) {
-                const clockIn = new Date(formattedAttendance.clock_in);
+
+            // UPDATED: Use clock_in_ist and clock_out_ist
+            if (formattedAttendance.clock_in_ist && !formattedAttendance.clock_out_ist) {
+                const clockInTime = parseLocalDateTimeIST(formattedAttendance.clock_in_ist);
                 const nowDate = new Date();
-                const diffMinutes = (nowDate - clockIn) / (1000 * 60);
+                const diffMinutes = (nowDate - clockInTime) / (1000 * 60);
                 const hours = Math.floor(diffMinutes / 60);
                 const minutes = Math.round(diffMinutes % 60);
                 formattedAttendance.total_hours_display = `${hours}h ${minutes}m`;
@@ -677,6 +762,10 @@ exports.getTodayAttendance = async (req, res) => {
                 const minutes = formattedAttendance.total_minutes;
                 formattedAttendance.total_hours_display = `${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`;
             }
+
+            // Set the display values
+            formattedAttendance.clock_in = formattedAttendance.clock_in_ist || formattedAttendance.clock_in;
+            formattedAttendance.clock_out = formattedAttendance.clock_out_ist || formattedAttendance.clock_out;
         }
         res.json({
             success: true,
@@ -691,7 +780,22 @@ exports.getTodayAttendance = async (req, res) => {
     }
 };
 
-// Get attendance report
+// Helper function to parse IST datetime string
+const parseLocalDateTimeIST = (datetimeStr) => {
+    if (!datetimeStr) return null;
+    if (datetimeStr instanceof Date) return datetimeStr;
+
+    if (typeof datetimeStr === 'string' && datetimeStr.includes(' ')) {
+        const [datePart, timePart] = datetimeStr.split(' ');
+        const [year, month, day] = datePart.split('-');
+        const [hour, minute, second] = timePart.split(':');
+        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute), parseInt(second || 0));
+    }
+
+    const parsed = new Date(datetimeStr);
+    return isNaN(parsed.getTime()) ? null : parsed;
+};
+
 exports.getAttendanceReport = async (req, res) => {
     try {
         const { start, end, employee_id } = req.query;
@@ -707,6 +811,7 @@ exports.getAttendanceReport = async (req, res) => {
         query = query.order('attendance_date', { ascending: false });
         const { data: attendance, error: attendanceError } = await query;
         if (attendanceError) throw attendanceError;
+
         const formattedAttendance = (attendance || []).map(record => {
             const employee = record.employees || {};
             let totalHoursDisplay = '0h 0m';
@@ -721,24 +826,38 @@ exports.getAttendanceReport = async (req, res) => {
                 lateDisplay = formatLateTime(parseFloat(record.late_minutes));
             }
             return {
-                id: record.id, employee_id: record.employee_id, attendance_date: record.attendance_date,
-                clock_in: record.clock_in, clock_out: record.clock_out,
-                total_hours: record.total_hours, total_minutes: record.total_minutes,
-                total_hours_display: totalHoursDisplay, status: record.status,
+                id: record.id,
+                employee_id: record.employee_id,
+                attendance_date: record.attendance_date,
+                // UPDATED: Use clock_in_ist first, fallback to clock_in
+                clock_in: record.clock_in_ist || record.clock_in,
+                // UPDATED: Use clock_out_ist first, fallback to clock_out
+                clock_out: record.clock_out_ist || record.clock_out,
+                total_hours: record.total_hours,
+                total_minutes: record.total_minutes,
+                total_hours_display: totalHoursDisplay,
+                status: record.status,
                 late_minutes: record.late_minutes ? parseFloat(record.late_minutes) : null,
-                late_display: lateDisplay, early_minutes: record.early_minutes,
-                shift_time_used: record.shift_time_used, is_holiday: record.is_holiday,
-                holiday_name: record.holiday_name, comp_off_awarded: record.comp_off_awarded,
-                comp_off_days: record.comp_off_days, is_regularized: record.is_regularized || false,
-                first_name: employee.first_name || '', last_name: employee.last_name || '',
+                late_display: lateDisplay,
+                early_minutes: record.early_minutes,
+                shift_time_used: record.shift_time_used,
+                is_holiday: record.is_holiday,
+                holiday_name: record.holiday_name,
+                comp_off_awarded: record.comp_off_awarded,
+                comp_off_days: record.comp_off_days,
+                is_regularized: record.is_regularized || false,
+                first_name: employee.first_name || '',
+                last_name: employee.last_name || '',
                 department: employee.department || ''
             };
         });
+
         let totalWorkingMinutes = 0;
         formattedAttendance.forEach(a => {
             if (a.total_minutes) totalWorkingMinutes += a.total_minutes;
             else if (a.total_hours) totalWorkingMinutes += a.total_hours * 60;
         });
+
         res.json({
             success: true,
             attendance: formattedAttendance,
@@ -771,12 +890,20 @@ exports.getMissedClockOuts = async (req, res) => {
             .order('attendance_date', { ascending: false });
         if (error) throw error;
         const formattedRecords = (missedRecords || []).map(record => {
-            const clockInTime = new Date(record.clock_in);
+            let clockInDisplay = record.clock_in_ist || record.clock_in;
+            if (clockInDisplay && typeof clockInDisplay === 'string' && clockInDisplay.includes(' ')) {
+                const timePart = clockInDisplay.split(' ')[1];
+                const [hour, minute] = timePart.split(':');
+                const hourNum = parseInt(hour);
+                const ampm = hourNum >= 12 ? 'PM' : 'AM';
+                const hour12 = hourNum % 12 || 12;
+                clockInDisplay = `${hour12}:${minute} ${ampm}`;
+            }
             return {
                 id: record.id,
                 attendance_date: record.attendance_date,
-                clock_in: record.clock_in,
-                clock_in_display: clockInTime.toLocaleString(),
+                clock_in: record.clock_in_ist || record.clock_in,
+                clock_in_display: clockInDisplay,
                 shift_timing: record.employees?.shift_timing,
                 employee_name: `${record.employees?.first_name} ${record.employees?.last_name}`,
                 is_regularized: record.is_regularized || false,
@@ -791,48 +918,103 @@ exports.getMissedClockOuts = async (req, res) => {
     }
 };
 
-// Request regularization
+// Request regularization - FIXED
 exports.requestRegularization = async (req, res) => {
     try {
         const { attendance_id, requested_clock_out_time, reason, attendance_date } = req.body;
         const { employee_id } = req.params;
+
+        console.log('='.repeat(70));
+        console.log('📝 REGULARIZATION REQUEST RECEIVED');
+        console.log('Time:', new Date().toISOString());
+        console.log('Request body:', JSON.stringify(req.body, null, 2));
+        console.log('='.repeat(70));
+
         if (!attendance_id || !requested_clock_out_time) {
-            return res.status(400).json({ success: false, message: 'Attendance ID and clock-out time are required' });
+            return res.status(400).json({
+                success: false,
+                message: 'Attendance ID and clock-out time are required'
+            });
         }
-        const { data: attendance } = await supabase
+
+        const { data: attendance, error: fetchError } = await supabase
             .from('attendance')
             .select('*')
             .eq('employee_id', employee_id)
             .eq('id', attendance_id)
             .maybeSingle();
-        if (!attendance) {
-            return res.status(404).json({ success: false, message: 'Attendance record not found' });
+
+        if (fetchError || !attendance) {
+            console.error('❌ Error fetching attendance:', fetchError);
+            return res.status(404).json({
+                success: false,
+                message: 'Attendance record not found'
+            });
         }
+
+        console.log('✅ Found attendance record:', {
+            id: attendance.id,
+            attendance_date: attendance.attendance_date,
+            clock_in: attendance.clock_in_ist || attendance.clock_in
+        });
+
         if (attendance.clock_out) {
-            return res.status(400).json({ success: false, message: 'This attendance record already has a clock-out time' });
+            return res.status(400).json({
+                success: false,
+                message: 'This attendance record already has a clock-out time'
+            });
         }
+
         if (attendance.regularization_requested) {
-            return res.status(400).json({ success: false, message: 'Regularization already requested for this record' });
+            return res.status(400).json({
+                success: false,
+                message: 'Regularization already requested for this record'
+            });
         }
-        const requestedTime = parseLocalDateTime(requested_clock_out_time);
-        if (!requestedTime || isNaN(requestedTime.getTime())) {
-            return res.status(400).json({ success: false, message: 'Invalid date format' });
+
+        // Store the requested time EXACTLY as received (IST format)
+        let requestedTimeIST = requested_clock_out_time;
+
+        // If it has T, convert to space format
+        if (requested_clock_out_time.includes('T')) {
+            requestedTimeIST = requested_clock_out_time.replace('T', ' ');
         }
+
+        // Ensure it has seconds
+        if (!requestedTimeIST.match(/\d{2}:\d{2}:\d{2}$/)) {
+            requestedTimeIST = requestedTimeIST + ':00';
+        }
+
+        console.log('📝 Storing requested time (IST):', requestedTimeIST);
+
+        const regularizationData = {
+            employee_id: employee_id,
+            attendance_id: String(attendance_id),
+            attendance_date: attendance_date || attendance.attendance_date,
+            clock_in_time: attendance.clock_in_ist || attendance.clock_in,
+            requested_clock_out_time: requestedTimeIST,
+            reason: reason || 'Missed clock-out',
+            status: 'pending',
+            created_at: new Date().toISOString()
+        };
+
         const { data: request, error: reqError } = await supabase
             .from('regularization_requests')
-            .insert([{
-                employee_id, attendance_id: String(attendance_id),
-                attendance_date: attendance_date || attendance.attendance_date,
-                clock_in_time: attendance.clock_in,
-                requested_clock_out_time: requested_clock_out_time,
-                reason: reason || 'Missed clock-out', status: 'pending',
-                created_at: new Date().toISOString()
-            }])
+            .insert([regularizationData])
             .select()
             .single();
+
         if (reqError) {
-            return res.status(500).json({ success: false, message: 'Failed to create regularization request', error: reqError.message });
+            console.error('❌ Error creating regularization request:', reqError);
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to create regularization request',
+                error: reqError.message
+            });
         }
+
+        console.log('✅ Regularization request created successfully:', request.id);
+
         await supabase
             .from('attendance')
             .update({
@@ -841,53 +1023,174 @@ exports.requestRegularization = async (req, res) => {
                 regularization_status: 'pending'
             })
             .eq('id', attendance.id);
+
         res.json({
             success: true,
             message: 'Regularization request submitted successfully! HR will review your request.',
-            request: { id: request.id, attendance_date: request.attendance_date, requested_clock_out_time: request.requested_clock_out_time, status: request.status }
+            request: {
+                id: request.id,
+                attendance_date: request.attendance_date,
+                requested_clock_out_time: request.requested_clock_out_time,
+                status: request.status
+            }
         });
+
     } catch (error) {
         console.error('❌ Error requesting regularization:', error);
-        res.status(500).json({ success: false, message: 'Failed to submit regularization request', error: error.message });
+        res.status(500).json({
+            success: false,
+            message: 'Failed to submit regularization request',
+            error: error.message
+        });
     }
 };
 
-// Approve regularization
 exports.approveRegularization = async (req, res) => {
     try {
         const { request_id } = req.params;
         const { approved_clock_out_time, admin_notes } = req.body;
-        const { data: request } = await supabase
+
+        console.log('='.repeat(70));
+        console.log('✅ APPROVING REGULARIZATION REQUEST');
+        console.log('Request ID:', request_id);
+        console.log('Approved clock out time (raw):', approved_clock_out_time);
+        console.log('='.repeat(70));
+
+        // Get the request
+        const { data: request, error: reqError } = await supabase
             .from('regularization_requests')
             .select('*')
             .eq('id', request_id)
             .single();
-        if (!request) {
-            return res.status(404).json({ success: false, message: 'Regularization request not found' });
+
+        if (reqError || !request) {
+            return res.status(404).json({
+                success: false,
+                message: 'Regularization request not found'
+            });
         }
-        let clockOutTime;
+
+        // Get the actual attendance record
+        const { data: attendanceRecord, error: attError } = await supabase
+            .from('attendance')
+            .select('*')
+            .eq('id', request.attendance_id)
+            .single();
+
+        if (attError || !attendanceRecord) {
+            console.error('❌ Attendance record not found:', attError);
+            return res.status(404).json({
+                success: false,
+                message: 'Attendance record not found for this request'
+            });
+        }
+
+        // Check if already clocked out
+        if (attendanceRecord.clock_out_ist) {
+            return res.status(400).json({
+                success: false,
+                message: 'This attendance record already has a clock-out time'
+            });
+        }
+
+        // CRITICAL: Parse the approved time and store EXACTLY as received in IST format
+        let clockOutIST;
+        let clockOutYear, clockOutMonth, clockOutDay;
+        let clockOutHour, clockOutMinute;
+
+        const attendanceDate = attendanceRecord.attendance_date;
+        const [attYear, attMonth, attDay] = attendanceDate.split('-');
+
         if (approved_clock_out_time) {
-            clockOutTime = parseLocalDateTime(approved_clock_out_time);
+            let timeStr = approved_clock_out_time;
+            let dateStr = attendanceDate;
+
+            // Handle datetime-local format "YYYY-MM-DDThh:mm"
+            if (approved_clock_out_time.includes('T')) {
+                const [datePart, timePart] = approved_clock_out_time.split('T');
+                dateStr = datePart;
+                timeStr = timePart;
+            }
+            // Handle "YYYY-MM-DD HH:MM:SS" format
+            else if (approved_clock_out_time.includes(' ') && !approved_clock_out_time.includes('T')) {
+                const [datePart, timePart] = approved_clock_out_time.split(' ');
+                dateStr = datePart;
+                timeStr = timePart;
+            }
+
+            // Extract hour and minute
+            const [hour, minute] = timeStr.split(':');
+            clockOutHour = parseInt(hour);
+            clockOutMinute = parseInt(minute);
+
+            // Extract date parts
+            if (dateStr !== attendanceDate) {
+                const [year, month, day] = dateStr.split('-');
+                clockOutYear = parseInt(year);
+                clockOutMonth = parseInt(month);
+                clockOutDay = parseInt(day);
+            } else {
+                clockOutYear = parseInt(attYear);
+                clockOutMonth = parseInt(attMonth);
+                clockOutDay = parseInt(attDay);
+            }
+
+            // Create local datetime string in format "YYYY-MM-DD HH:MM:SS" (IST)
+            clockOutIST = `${String(clockOutYear).padStart(4, '0')}-${String(clockOutMonth).padStart(2, '0')}-${String(clockOutDay).padStart(2, '0')} ${String(clockOutHour).padStart(2, '0')}:${String(clockOutMinute).padStart(2, '0')}:00`;
         } else {
-            clockOutTime = parseLocalDateTime(request.requested_clock_out_time);
+            return res.status(400).json({
+                success: false,
+                message: 'Clock-out time is required'
+            });
         }
-        if (!clockOutTime || isNaN(clockOutTime.getTime())) {
-            return res.status(400).json({ success: false, message: 'Invalid approved clock-out time format' });
+
+        console.log('📅 Storing clock_out as IST (direct, no conversion):', clockOutIST);
+
+        // Parse clock-in time from IST column
+        let clockInDate;
+        const clockInValue = attendanceRecord.clock_in_ist || attendanceRecord.clock_in;
+
+        if (clockInValue && typeof clockInValue === 'string' && clockInValue.includes(' ')) {
+            const [datePart, timePart] = clockInValue.split(' ');
+            const [year, month, day] = datePart.split('-');
+            const [hour, minute, second] = timePart.split(':');
+            clockInDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute), parseInt(second || 0));
+        } else {
+            clockInDate = new Date(clockInValue);
         }
-        const clockInTime = new Date(request.clock_in_time);
-        const diffMs = clockOutTime - clockInTime;
+
+        // Create clock-out date for calculation
+        const clockOutDate = new Date(clockOutYear, clockOutMonth - 1, clockOutDay, clockOutHour, clockOutMinute, 0);
+
+        console.log('📅 Calculation:', {
+            clock_in: clockInDate.toString(),
+            clock_out: clockOutDate.toString(),
+            diff_ms: clockOutDate - clockInDate
+        });
+
+        // Calculate hours
+        const diffMs = clockOutDate - clockInDate;
         const totalMinutes = diffMs / (1000 * 60);
         const totalHours = totalMinutes / 60;
-        const hours = Math.floor(totalMinutes / 60);
-        const minutes = Math.round(totalMinutes % 60);
+        const hours = Math.floor(Math.abs(totalMinutes) / 60);
+        const minutes = Math.round(Math.abs(totalMinutes) % 60);
         const totalHoursDisplay = `${hours}h ${minutes}m`;
+
+        console.log('📊 Calculated hours:', {
+            total_minutes: totalMinutes,
+            total_hours: totalHours,
+            display: totalHoursDisplay
+        });
+
         let status = 'half_day';
         if (totalMinutes >= 480) status = 'present';
         else if (totalMinutes < 240) status = 'absent';
-        await supabase
+
+        // IMPORTANT: Store ONLY clock_out_ist, don't update clock_out (UTC)
+        const { error: updateError } = await supabase
             .from('attendance')
             .update({
-                clock_out: clockOutTime.toISOString(),
+                clock_out_ist: clockOutIST,  // Store IST time directly
                 total_hours: Math.round(totalHours * 100) / 100,
                 total_minutes: Math.round(totalMinutes),
                 total_hours_display: totalHoursDisplay,
@@ -899,32 +1202,51 @@ exports.approveRegularization = async (req, res) => {
                 regularization_notes: admin_notes
             })
             .eq('id', request.attendance_id);
+
+        if (updateError) {
+            console.error('❌ Error updating attendance:', updateError);
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to update attendance record',
+                error: updateError.message
+            });
+        }
+
+        // Update request status
         await supabase
             .from('regularization_requests')
             .update({
                 status: 'approved',
-                approved_clock_out_time: clockOutTime.toISOString(),
+                approved_clock_out_time: clockOutIST,
                 approved_by: req.user?.id,
                 approved_at: new Date().toISOString(),
                 admin_notes: admin_notes
             })
             .eq('id', request_id);
+
+        console.log('✅ Regularization approved successfully with clock_out:', clockOutIST);
+
         res.json({
             success: true,
-            message: 'Regularization request approved successfully',
+            message: `Regularization request approved successfully. Clock out time: ${clockOutIST}`,
             attendance: {
                 id: request.attendance_id,
                 attendance_date: request.attendance_date,
-                clock_in: request.clock_in_time,
-                clock_out: clockOutTime,
+                clock_in: attendanceRecord.clock_in_ist || attendanceRecord.clock_in,
+                clock_out: clockOutIST,
                 total_hours: Math.round(totalHours * 100) / 100,
                 total_hours_display: totalHoursDisplay,
                 status
             }
         });
+
     } catch (error) {
-        console.error('Error approving regularization:', error);
-        res.status(500).json({ success: false, message: 'Failed to approve regularization', error: error.message });
+        console.error('❌ Error approving regularization:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to approve regularization',
+            error: error.message
+        });
     }
 };
 
@@ -1016,6 +1338,8 @@ exports.heartbeat = async (req, res) => {
     }
 };
 
+// In attendanceController.js - Find this function and update
+
 // Get employee attendance report
 exports.getEmployeeAttendanceReport = async (req, res) => {
     try {
@@ -1034,6 +1358,7 @@ exports.getEmployeeAttendanceReport = async (req, res) => {
             .gte('attendance_date', start)
             .lte('attendance_date', end)
             .order('attendance_date', { ascending: false });
+
         const formattedAttendance = (attendance || []).map(record => {
             const employee = record.employees || {};
             let totalHoursDisplay = '0h 0m';
@@ -1048,23 +1373,35 @@ exports.getEmployeeAttendanceReport = async (req, res) => {
                 lateDisplay = formatLateTime(parseFloat(record.late_minutes));
             }
             return {
-                id: record.id, employee_id: record.employee_id, attendance_date: record.attendance_date,
-                clock_in: record.clock_in, clock_out: record.clock_out,
-                total_hours: record.total_hours, total_minutes: record.total_minutes,
-                total_hours_display: totalHoursDisplay, status: record.status,
+                id: record.id,
+                employee_id: record.employee_id,
+                attendance_date: record.attendance_date,
+                // UPDATED: Use clock_in_ist first, fallback to clock_in
+                clock_in: record.clock_in_ist || record.clock_in,
+                // UPDATED: Use clock_out_ist first, fallback to clock_out
+                clock_out: record.clock_out_ist || record.clock_out,
+                total_hours: record.total_hours,
+                total_minutes: record.total_minutes,
+                total_hours_display: totalHoursDisplay,
+                status: record.status,
                 late_minutes: record.late_minutes ? parseFloat(record.late_minutes) : null,
-                late_display: lateDisplay, early_minutes: record.early_minutes,
-                is_holiday: record.is_holiday, comp_off_awarded: record.comp_off_awarded,
+                late_display: lateDisplay,
+                early_minutes: record.early_minutes,
+                is_holiday: record.is_holiday,
+                comp_off_awarded: record.comp_off_awarded,
                 is_regularized: record.is_regularized || false,
-                first_name: employee.first_name || '', last_name: employee.last_name || '',
+                first_name: employee.first_name || '',
+                last_name: employee.last_name || '',
                 department: employee.department || ''
             };
         });
+
         let totalWorkingMinutes = 0;
         formattedAttendance.forEach(a => {
             if (a.total_minutes) totalWorkingMinutes += a.total_minutes;
             else if (a.total_hours) totalWorkingMinutes += a.total_hours * 60;
         });
+
         res.json({
             success: true,
             attendance: formattedAttendance,
@@ -1083,8 +1420,6 @@ exports.getEmployeeAttendanceReport = async (req, res) => {
         res.status(500).json({ success: false, message: 'Failed to get attendance report', error: error.message });
     }
 };
-
-// ============== ADD MISSING FUNCTIONS ==============
 
 // Get overtime summary
 exports.getOvertimeSummary = async (req, res) => {
@@ -1179,8 +1514,16 @@ exports.markAbsentAtDayEnd = async () => {
                 await supabase.from('attendance').insert([{ employee_id: emp.employee_id, attendance_date: today, status: 'absent' }]);
                 markedCount++;
             } else if (attendance[0].clock_in && !attendance[0].clock_out) {
-                const clockIn = new Date(attendance[0].clock_in);
-                const totalMinutes = calculateTimeDifferenceInMinutes(clockIn, now);
+                let clockInDate;
+                if (attendance[0].clock_in_ist) {
+                    const [datePart, timePart] = attendance[0].clock_in_ist.split(' ');
+                    const [year, month, day] = datePart.split('-');
+                    const [hour, minute, second] = timePart.split(':');
+                    clockInDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute), parseInt(second || 0));
+                } else {
+                    clockInDate = new Date(attendance[0].clock_in);
+                }
+                const totalMinutes = calculateTimeDifferenceInMinutes(clockInDate, now);
                 const totalHours = totalMinutes / 60;
                 await supabase
                     .from('attendance')
