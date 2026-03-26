@@ -762,17 +762,14 @@ const Attendance = () => {
   const handleClockIn = async () => {
     setLoading(true);
     try {
-      // TEMPORARILY DISABLED: Geofence and location validation
-      // if (!location) throw new Error('Unable to get location');
-      // if (!geofenceInfo?.isInOffice) {
-      //   throw new Error(`Must be within ${OFFICE_COORDS.radius}m of office. Currently ${geofenceInfo.distance}m away.`);
-      // }
+      // REMOVED: Location validation completely
+      // No more checking for location or geofence
 
       const response = await axios.post(API_ENDPOINTS.ATTENDANCE_CLOCK_IN, {
         employee_id: user.employeeId,
-        latitude: location?.latitude || 0,  // Send 0 if no location
-        longitude: location?.longitude || 0,
-        accuracy: location?.accuracy || 0
+        latitude: null,  // Send null instead of location
+        longitude: null,
+        accuracy: null
       });
 
       console.log('✅ Clock-in response:', response.data);
@@ -802,6 +799,7 @@ const Attendance = () => {
     }
   };
 
+  // Replace handleClockOut function
   const handleClockOut = async () => {
     setLoading(true);
     await recoverActiveSession();
@@ -830,9 +828,9 @@ const Attendance = () => {
       const requestData = {
         employee_id: user.employeeId,
         session_id: sessionToUse.session_id,
-        latitude: location?.latitude || 0,
-        longitude: location?.longitude || 0,
-        accuracy: location?.accuracy || 0
+        latitude: null,  // Send null
+        longitude: null,
+        accuracy: null
       };
 
       const response = await axios.post(API_ENDPOINTS.ATTENDANCE_CLOCK_OUT, requestData);
@@ -903,58 +901,15 @@ const Attendance = () => {
     setShowRegularizationModal(true);
   };
 
-  // Optional: Update getLocationBadge to show location is disabled
-  const getLocationBadge = () => {
-    // TEMPORARILY DISABLED - Always show as "Location Disabled"
+// In Attendance.jsx - Update getLocationBadge
+const getLocationBadge = () => {
+    // Show simple badge indicating location is disabled
     return (
       <Badge bg="info" className="px-3 py-2">
         <FaLocationArrow className="me-2" />
-        Location Check Disabled (Dev Mode)
+        Location Tracking Disabled
       </Badge>
     );
-
-    // Original code commented out
-    /*
-    if (locationLoading) {
-      return (
-        <Badge bg="secondary" className="px-3 py-2">
-          <Spinner size="sm" animation="border" className="me-2" />
-          Getting location...
-        </Badge>
-      );
-    }
-    if (locationError) {
-      return (
-        <Badge bg="danger" className="px-3 py-2">
-          <FaExclamationTriangle className="me-2" />
-          {locationError}
-        </Badge>
-      );
-    }
-    if (geofenceInfo) {
-      if (geofenceInfo.isInOffice) {
-        return (
-          <Badge bg="success" className="px-3 py-2">
-            <FaBuilding className="me-2" />
-            At Office ({geofenceInfo.distance}m)
-          </Badge>
-        );
-      } else {
-        return (
-          <Badge bg="warning" className="px-3 py-2">
-            <FaHome className="me-2" />
-            Outside Office ({geofenceInfo.distance}m away)
-          </Badge>
-        );
-      }
-    }
-    return (
-      <Badge bg="secondary" className="px-3 py-2">
-        <FaLocationArrow className="me-2" />
-        Location unknown
-      </Badge>
-    );
-    */
   };
 
   const renderClockButton = () => {
@@ -983,8 +938,9 @@ const Attendance = () => {
         </Button>
       );
     }
+    // REMOVED: geofenceInfo?.isInOffice check
     return (
-      <Button variant="success" size="lg" className="w-100 py-3" onClick={handleClockIn} disabled={loading || !geofenceInfo?.isInOffice || locationLoading}>
+      <Button variant="success" size="lg" className="w-100 py-3" onClick={handleClockIn} disabled={loading}>
         {loading ? (
           <>
             <Spinner size="sm" animation="border" className="me-2" />
