@@ -125,6 +125,9 @@ const RegularizationRequests = ({ onRequestCountChange }) => {
   }, []);
 
   const handleApprove = async () => {
+    console.log('Selected Request:', selectedRequest);
+console.log('Request ID being sent:', selectedRequest.id);
+console.log('Request ID type:', typeof selectedRequest.id);
     if (!selectedRequest) return;
     if (!approvedTime) {
       setMessage({ type: 'warning', text: 'Please select clock-out time' });

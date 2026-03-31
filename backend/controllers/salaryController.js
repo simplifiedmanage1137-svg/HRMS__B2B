@@ -14,7 +14,6 @@ function getMonthName(monthNumber) {
  * Access: Employee can generate their own, Admin can generate for anyone
  */
 
-
 // Generate salary slip with overtime
 exports.generateSalarySlip = async (req, res) => {
     try {

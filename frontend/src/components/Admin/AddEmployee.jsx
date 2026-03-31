@@ -197,7 +197,7 @@ const AddEmployee = () => {
     if (!tempPersonalData.joining_date) return "Joining date is required";
     if (!tempPersonalData.designation) return "Designation is required";
     if (!tempPersonalData.department) return "Department is required";
-    
+
     // Optional validations - only check format if provided
     if (tempPersonalData.pan_number && tempPersonalData.pan_number.length !== 10) {
       return "PAN number must be 10 characters";
@@ -337,79 +337,79 @@ const AddEmployee = () => {
     return completedTabs.personal && completedTabs.salary && completedTabs.policy;
   };
 
-// Generate employee ID based on joining date - 2-digit sequence
-const generateEmployeeId = async () => {
-  if (!tempPersonalData.joining_date) return null;
+  // Generate employee ID based on joining date - 2-digit sequence
+  const generateEmployeeId = async () => {
+    if (!tempPersonalData.joining_date) return null;
 
-  const date = new Date(tempPersonalData.joining_date);
-  const year = date.getFullYear().toString().slice(-2);
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const date = new Date(tempPersonalData.joining_date);
+    const year = date.getFullYear().toString().slice(-2);
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
 
-  try {
-    console.log('🔍 Generating employee ID for joining date:', tempPersonalData.joining_date);
+    try {
+      console.log('🔍 Generating employee ID for joining date:', tempPersonalData.joining_date);
 
-    // Get all employees to check existing IDs
-    const response = await axios.get(API_ENDPOINTS.EMPLOYEES);
-    let employees = [];
+      // Get all employees to check existing IDs
+      const response = await axios.get(API_ENDPOINTS.EMPLOYEES);
+      let employees = [];
 
-    if (Array.isArray(response.data)) {
-      employees = response.data;
-    } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
-      employees = response.data.data;
-    } else {
-      employees = [];
-    }
-
-    console.log('📊 Total employees:', employees.length);
-
-    // Filter employees with the same year and month prefix
-    const prefix = `B2B${year}${month}`;
-    const sameMonthEmployees = employees.filter(emp => {
-      return emp.employee_id && emp.employee_id.startsWith(prefix);
-    });
-
-    console.log(`📊 Found ${sameMonthEmployees.length} employees with prefix ${prefix}`);
-
-    // Find the highest sequence number (2 digits)
-    let maxSeq = 0;
-    sameMonthEmployees.forEach(emp => {
-      const id = emp.employee_id;
-      if (id && id.length >= 9) { // B2BYYMMSS = 9 chars
-        const seqStr = id.slice(-2); // Last 2 characters
-        const seq = parseInt(seqStr, 10);
-        if (!isNaN(seq) && seq > maxSeq) {
-          maxSeq = seq;
-        }
+      if (Array.isArray(response.data)) {
+        employees = response.data;
+      } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
+        employees = response.data.data;
+      } else {
+        employees = [];
       }
-    });
 
-    console.log('📊 Current max sequence:', maxSeq);
+      console.log('📊 Total employees:', employees.length);
 
-    // Generate new sequence (start from 1 if no employees)
-    const newSeq = (maxSeq + 1).toString().padStart(2, '0');
+      // Filter employees with the same year and month prefix
+      const prefix = `B2B${year}${month}`;
+      const sameMonthEmployees = employees.filter(emp => {
+        return emp.employee_id && emp.employee_id.startsWith(prefix);
+      });
 
-    // Ensure sequence doesn't exceed 99
-    if (maxSeq >= 99) {
-      throw new Error('Maximum employees for this month reached (99)');
+      console.log(`📊 Found ${sameMonthEmployees.length} employees with prefix ${prefix}`);
+
+      // Find the highest sequence number (2 digits)
+      let maxSeq = 0;
+      sameMonthEmployees.forEach(emp => {
+        const id = emp.employee_id;
+        if (id && id.length >= 9) { // B2BYYMMSS = 9 chars
+          const seqStr = id.slice(-2); // Last 2 characters
+          const seq = parseInt(seqStr, 10);
+          if (!isNaN(seq) && seq > maxSeq) {
+            maxSeq = seq;
+          }
+        }
+      });
+
+      console.log('📊 Current max sequence:', maxSeq);
+
+      // Generate new sequence (start from 1 if no employees)
+      const newSeq = (maxSeq + 1).toString().padStart(2, '0');
+
+      // Ensure sequence doesn't exceed 99
+      if (maxSeq >= 99) {
+        throw new Error('Maximum employees for this month reached (99)');
+      }
+
+      const newEmployeeId = `${prefix}${newSeq}`;
+
+      console.log('✅ Generated new employee ID:', newEmployeeId);
+      return newEmployeeId;
+
+    } catch (error) {
+      console.error('❌ Error generating employee ID:', error);
+
+      // Fallback: Use timestamp to ensure uniqueness
+      const timestamp = Date.now().toString().slice(-4);
+      const fallbackSeq = timestamp.slice(-2);
+      const fallbackId = `B2B${year}${month}${fallbackSeq}`;
+
+      console.log('⚠️ Using fallback ID:', fallbackId);
+      return fallbackId;
     }
-
-    const newEmployeeId = `${prefix}${newSeq}`;
-
-    console.log('✅ Generated new employee ID:', newEmployeeId);
-    return newEmployeeId;
-
-  } catch (error) {
-    console.error('❌ Error generating employee ID:', error);
-
-    // Fallback: Use timestamp to ensure uniqueness
-    const timestamp = Date.now().toString().slice(-4);
-    const fallbackSeq = timestamp.slice(-2);
-    const fallbackId = `B2B${year}${month}${fallbackSeq}`;
-
-    console.log('⚠️ Using fallback ID:', fallbackId);
-    return fallbackId;
-  }
-};
+  };
 
   // Upload documents function
   const uploadDocuments = async (empId) => {
@@ -531,7 +531,7 @@ const generateEmployeeId = async () => {
       setEmployeeId(empId);
       console.log('✅ Final Employee ID:', empId);
 
-      // Prepare data for API - Only include non-empty optional fields
+
       const employeeData = {
         first_name: tempPersonalData.first_name?.trim(),
         middle_name: tempPersonalData.middle_name?.trim() || null,
@@ -546,12 +546,14 @@ const generateEmployeeId = async () => {
         shift_timing: tempPersonalData.shift_timing?.trim() || '9:00 AM - 6:00 PM',
         in_hand_salary: parseFloat(tempSalaryData.in_hand_salary) || 0,
         gross_salary: parseFloat(tempSalaryData.gross_salary) || 0,
-        // Bank details - only include if provided
+        is_active: true,  // Add this
+        can_apply_leave: true,  // Add this to avoid error
+        role: 'employee',  // Add this
+        // Optional fields
         ...(tempBankData.bank_account_name?.trim() && { bank_account_name: tempBankData.bank_account_name.trim() }),
         ...(tempBankData.account_number?.trim() && { account_number: tempBankData.account_number.trim() }),
         ...(tempBankData.ifsc_code?.trim() && { ifsc_code: tempBankData.ifsc_code.trim().toUpperCase() }),
         ...(tempBankData.branch_name?.trim() && { branch_name: tempBankData.branch_name.trim() }),
-        // Optional personal details - only include if provided
         ...(tempPersonalData.pan_number?.trim() && { pan_number: tempPersonalData.pan_number.trim().toUpperCase() }),
         ...(tempPersonalData.aadhar_number?.trim() && { aadhar_number: tempPersonalData.aadhar_number.trim() }),
         ...(tempPersonalData.dob && { dob: tempPersonalData.dob }),
@@ -778,7 +780,7 @@ const generateEmployeeId = async () => {
                 <div className="mb-3 p-2 bg-light rounded">
                   <small className="text-muted fw-semibold">Required Information</small>
                 </div>
-                
+
                 <Row className="mb-3">
                   <Col xs={12}>
                     <Form.Group>
@@ -944,7 +946,7 @@ const generateEmployeeId = async () => {
                 <div className="mt-3 mb-2 p-2 bg-light rounded">
                   <small className="text-muted fw-semibold">Optional Information</small>
                 </div>
-                
+
                 <Row className="mb-3 g-2">
                   <Col xs={12} md={4}>
                     <Form.Group>
@@ -1357,7 +1359,7 @@ const generateEmployeeId = async () => {
                   label={`${uploadProgress}%`}
                   striped
                   animated
-                  size="sm"
+                  size="sm" const employeeData
                 />
                 <small className="text-muted mt-1 d-block">Uploading documents...</small>
               </div>
