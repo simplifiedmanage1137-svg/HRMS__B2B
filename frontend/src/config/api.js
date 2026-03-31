@@ -1,7 +1,11 @@
 // src/config/api.js
 
-// For Vite (uses import.meta.env)
+// ============== LOCAL DEVELOPMENT (COMMENTED OLD) ==============
+// For local development (uncomment for development)
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+// ============== PRODUCTION (COMMENTED FOR NOW) ==============
+// const API_BASE_URL = 'https://employee-management-system-brvo.onrender.com';
 
 // Add this debug log
 console.log('🔧 API Base URL:', API_BASE_URL);
