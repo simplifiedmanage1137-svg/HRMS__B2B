@@ -21,11 +21,12 @@ import LeaveReports from './components/Admin/LeaveReports';
 import AttendanceDashboard from './components/Admin/AttendanceDashboard';
 import AttendanceReports from './components/Admin/AttendanceReports';
 import SendUpdateRequest from './components/Admin/SendUpdateRequest';
-import UpdateApprovals from './components/Admin/UpdateApprovals';  // ✅ IMPORT THIS
+import UpdateApprovals from './components/Admin/UpdateApprovals';
 import SendNotice from './components/Admin/SendNotice';
 import Announcements from './components/Admin/Announcements';
 import AdminBroadcast from './components/Admin/AdminBroadcast';
 import EmployeeProfileView from './components/Admin/EmployeeProfileView';
+import AdminRatings from './components/Admin/AdminRatings';
 
 // Employee Components
 import EmployeeDashboard from './components/Employee/Dashboard';
@@ -201,26 +202,33 @@ function AppContent() {
                 <AttendanceDashboard />
               </PrivateRoute>
             } />
-            <Route path="/employee/update-info/:requestId" element={
-              <PrivateRoute allowedRoles={['employee']}>
-                <EmployeeUpdateForm />
-              </PrivateRoute>
-            } />
-
+            
             <Route path="/admin/attendance/reports" element={
               <PrivateRoute allowedRoles={['admin']}>
                 <AttendanceReports />
               </PrivateRoute>
             } />
 
-            {/* ✅ SEND UPDATE REQUEST ROUTE */}
+            {/* Admin Ratings Route */}
+            <Route path="/admin/ratings" element={
+              <PrivateRoute allowedRoles={['admin']}>
+                <AdminRatings />
+              </PrivateRoute>
+            } />
+
+            {/* Admin Update Routes */}
+            <Route path="/employee/update-info/:requestId" element={
+              <PrivateRoute allowedRoles={['employee']}>
+                <EmployeeUpdateForm />
+              </PrivateRoute>
+            } />
+
             <Route path="/admin/send-update-request" element={
               <PrivateRoute allowedRoles={['admin']}>
                 <SendUpdateRequest />
               </PrivateRoute>
             } />
 
-            {/* ✅ UPDATE APPROVALS ROUTE - YAHI PE CLICK KARNA HAI */}
             <Route path="/admin/update-approvals" element={
               <PrivateRoute allowedRoles={['admin']}>
                 <UpdateApprovals />
@@ -233,6 +241,7 @@ function AppContent() {
                 <AdminBroadcast />
               </PrivateRoute>
             } />
+            
             {/* old routes redirect */}
             <Route path="/admin/announcements" element={<Navigate to="/admin/broadcast" replace />} />
             <Route path="/admin/send-notice" element={<Navigate to="/admin/broadcast" replace />} />
@@ -256,7 +265,6 @@ function AppContent() {
               </PrivateRoute>
             } />
 
-            {/* ✅ EMPLOYEE UPDATE REQUESTS ROUTE */}
             <Route path="/employee/update-requests" element={
               <PrivateRoute allowedRoles={['employee']}>
                 <EmployeeUpdateRequests />

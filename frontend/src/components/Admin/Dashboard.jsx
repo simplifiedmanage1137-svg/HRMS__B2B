@@ -64,6 +64,7 @@ import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../../context/NotificationContext';
+import AdminRatings from './AdminRatings';
 // import HistoricalLateMarksUpdater from './HistoricalLateMarksUpdater';
 
 ChartJS.register(
@@ -96,6 +97,9 @@ const RegularizationRequests = ({ onRequestCountChange }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
   const { addNotification } = useNotification();
+  const [ratingFilterMonth, setRatingFilterMonth] = useState(new Date().getMonth() + 1);
+  const [ratingFilterYear, setRatingFilterYear] = useState(new Date().getFullYear());
+
 
   const fetchRequests = async () => {
     try {
@@ -454,11 +458,9 @@ const RegularizationRequests = ({ onRequestCountChange }) => {
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setSelectedRequest(request);
-                                      // Convert IST string "YYYY-MM-DD HH:MM:SS" to datetime-local "YYYY-MM-DDTHH:MM"
                                       const reqTime = request.requested_clock_out_time;
                                       let dtLocalValue = '';
                                       if (reqTime) {
-                                        // Handle "YYYY-MM-DD HH:MM:SS" format
                                         const cleaned = reqTime.replace(' ', 'T').substring(0, 16);
                                         dtLocalValue = cleaned;
                                       }
@@ -908,7 +910,6 @@ const AdminDashboard = () => {
 
       fetchCompleteEvents(employees);
 
-      // FIXED: Better error handling for leave balance
       const balancesPromises = employees.map(async (emp) => {
         try {
           const balanceRes = await axios.get(API_ENDPOINTS.LEAVE_BALANCE(emp.employee_id));
@@ -921,7 +922,6 @@ const AdminDashboard = () => {
             is_probation_complete: balanceRes.data.is_probation_complete
           });
 
-          // Ensure we have all required fields with proper structure
           return {
             ...emp,
             leaveBalance: {
@@ -938,7 +938,6 @@ const AdminDashboard = () => {
           };
         } catch (error) {
           console.error(`❌ Error fetching leave balance for ${emp.employee_id}:`, error);
-          // Return default balance structure
           return {
             ...emp,
             leaveBalance: {
@@ -958,7 +957,6 @@ const AdminDashboard = () => {
 
       const employeesWithBalance = await Promise.all(balancesPromises);
 
-      // Debug: Log final balances
       console.log('\n📊 FINAL LEAVE BALANCES:');
       employeesWithBalance.forEach(emp => {
         console.log(`${emp.employee_id} | ${emp.first_name} ${emp.last_name}: Total Accrued = ${emp.leaveBalance?.total_accrued}, Available = ${emp.leaveBalance?.available}`);
@@ -1187,11 +1185,10 @@ const AdminDashboard = () => {
       const today = new Date().toISOString().split('T')[0];
       const attendanceRes = await axios.get(`${API_ENDPOINTS.ATTENDANCE_REPORT}?start=${today}&end=${today}`);
       const attendanceData = attendanceRes.data.attendance || [];
-      // Only show employees who have clocked in today
       const clockedInData = attendanceData.filter(a => a.clock_in);
       setTodayAttendance(clockedInData);
       setFilteredAttendance(clockedInData);
-      updateStats(attendanceData); // stats use full data
+      updateStats(attendanceData);
       setLastUpdated(new Date());
     } catch (error) {
       console.error('Error refreshing attendance:', error);
@@ -1203,8 +1200,7 @@ const AdminDashboard = () => {
       console.log('🔄 Fetching pending leave requests for admin dashboard...');
       const leavesRes = await axios.get(`${API_ENDPOINTS.LEAVES}?all=true`);
       console.log('📊 Leave requests response:', leavesRes.data);
-      
-      // Handle both array response and object with data property
+
       let allLeaves = [];
       if (Array.isArray(leavesRes.data)) {
         allLeaves = leavesRes.data;
@@ -1213,17 +1209,16 @@ const AdminDashboard = () => {
       } else if (leavesRes.data && Array.isArray(leavesRes.data.leaves)) {
         allLeaves = leavesRes.data.leaves;
       }
-      
+
       const pendingLeaves = allLeaves.filter(leave => leave.status === 'pending');
-      
+
       console.log(`✅ Found ${allLeaves.length} total leaves, ${pendingLeaves.length} pending`);
-      
+
       setLeaveRequests(pendingLeaves);
       setFilteredLeaveRequests(pendingLeaves);
     } catch (error) {
       console.error('❌ Error refreshing leave requests:', error);
       console.error('Error response:', error.response?.data);
-      // Set empty arrays on error to prevent UI issues
       setLeaveRequests([]);
       setFilteredLeaveRequests([]);
     }
@@ -1232,8 +1227,6 @@ const AdminDashboard = () => {
   const updateStats = (attendanceData) => {
     const total = totalEmployees;
 
-    // ✅ FIXED: Prioritize clock_in/clock_out over status field
-    // If employee has BOTH clock_in AND clock_out, they're NOT absent
     let present = 0;
     let halfDay = 0;
     let working = 0;
@@ -1241,7 +1234,6 @@ const AdminDashboard = () => {
     let late = 0;
 
     attendanceData.forEach(a => {
-      // If they have both clock_in and clock_out, they completed their shift
       if (a.clock_in && a.clock_out) {
         if (a.status === 'half_day') {
           halfDay++;
@@ -1252,14 +1244,12 @@ const AdminDashboard = () => {
           late++;
         }
       }
-      // If they're still working or only have clock_in (no clock_out)
       else if (a.clock_in && !a.clock_out) {
         working++;
         if (parseFloat(a.late_minutes) > 0) {
           late++;
         }
       }
-      // Only mark as absent if they have NO clock_in at all
       else if (!a.clock_in) {
         absent++;
       }
@@ -1268,7 +1258,6 @@ const AdminDashboard = () => {
     const onLeave = attendanceData.filter(a => a.is_on_leave || a.status === 'on_leave').length;
     const totalPresent = present + halfDay + working;
 
-    // Recalculate absent: those who are not present, not on leave, and have no clock_in
     absent = total - totalPresent - onLeave;
     absent = absent < 0 ? 0 : absent;
 
@@ -1437,7 +1426,6 @@ const AdminDashboard = () => {
           <h4 className="mb-1 d-flex align-items-center flex-wrap">
             <FaUsers className="me-2 text-dark" />
             <span>Admin Dashboard</span>
-
           </h4>
           <p className="text-muted mb-0 small d-flex align-items-center flex-wrap">
             <FaClock className="me-1" size={12} />
@@ -1445,16 +1433,12 @@ const AdminDashboard = () => {
           </p>
         </div>
 
-        {/* Only ONE set of buttons - Remove the duplicate */}
         <div className="d-flex gap-2">
           <Button
             variant="outline-primary"
             size="sm"
             onClick={() => {
               fetchDashboardData();
-              if (showNotification) {
-                showNotification('Refreshing dashboard data...', 'info');
-              }
             }}
           >
             <FaSyncAlt className="me-1" size={12} />
@@ -1464,7 +1448,6 @@ const AdminDashboard = () => {
             <FaDownload className="me-1" size={12} />
             Export
           </Button>
-          {/* <HistoricalLateMarksUpdater /> */}
         </div>
       </div>
 
@@ -1483,6 +1466,12 @@ const AdminDashboard = () => {
           >
             <FaChartBar className="me-2" />
             Overview
+          </Button>
+          <Button
+            variant={activeTab === 'ratings' ? 'primary' : 'outline-secondary'}
+            onClick={() => setActiveTab('ratings')}
+          >
+            <FaStar className="me-2" /> Employee Ratings
           </Button>
           <Button
             variant={activeTab === 'birthdays' ? 'info' : 'outline-secondary'}
@@ -1513,24 +1502,33 @@ const AdminDashboard = () => {
         </ButtonGroup>
       </div>
 
-      {activeTab === 'regularization' ? (
+      {/* Tab Content */}
+      {activeTab === 'ratings' && (
+        <AdminRatings
+          initialMonth={ratingFilterMonth}
+          initialYear={ratingFilterYear}
+        />
+      )}
+
+      {activeTab === 'regularization' && (
         <RegularizationRequests
           onRequestCountChange={setRegularizationCount}
         />
-      ) : activeTab === 'birthdays' ? (
-        // Birthdays Tab
+      )}
+
+      {activeTab === 'anniversaries' && (
         <Card className="border-0 shadow-sm">
-          <Card.Header className="bg-gradient py-3" style={{ background: 'linear-gradient(135deg, #ff6b6b 0%, #ff8e8e 100%)' }}>
+          <Card.Header className="bg-gradient py-3" style={{ background: 'linear-gradient(135deg, #ffd700 0%, #ffed4e 100%)' }}>
             <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
               <div>
-                <h5 className="mb-1 text-white d-flex align-items-center">
-                  <FaBirthdayCake className="me-2" size={20} />
-                  Employee Birthdays
+                <h5 className="mb-1 d-flex align-items-center">
+                  <FaTrophy className="me-2" size={20} />
+                  Work Anniversaries
                 </h5>
-                <p className="mb-0 text-white-50 small">Complete list of all {allBirthdays.length} employee birthdays</p>
+                <p className="mb-0 text-muted small">Complete list of all {allAnniversaries.length} employee work anniversaries</p>
               </div>
-              <Badge bg="light" text="dark" pill className="px-3 py-2">
-                Total: {allBirthdays.length} Employees
+              <Badge bg="dark" pill className="px-3 py-2">
+                Total: {allAnniversaries.length} Employees
               </Badge>
             </div>
           </Card.Header>
@@ -1542,24 +1540,24 @@ const AdminDashboard = () => {
                   <Form.Control
                     type="text"
                     placeholder="Search by name or ID..."
-                    value={birthdaySearch}
-                    onChange={(e) => setBirthdaySearch(e.target.value)}
+                    value={anniversarySearch}
+                    onChange={(e) => setAnniversarySearch(e.target.value)}
                     className="border-0 bg-transparent"
                     size="sm"
                   />
                 </div>
               </Col>
               <Col xs={6} md={2}>
-                <Form.Select size="sm" value={birthdayFilter} onChange={(e) => setBirthdayFilter(e.target.value)}>
-                  <option value="all">All Birthdays</option>
-                  <option value="today">Today's Birthdays</option>
+                <Form.Select size="sm" value={anniversaryFilter} onChange={(e) => setAnniversaryFilter(e.target.value)}>
+                  <option value="all">All Anniversaries</option>
+                  <option value="today">Today's Anniversaries</option>
                   <option value="upcoming">Upcoming</option>
                   <option value="passed">Passed (This Year)</option>
                   <option value="thisMonth">This Month</option>
                 </Form.Select>
               </Col>
               <Col xs={6} md={2}>
-                <Form.Select size="sm" value={birthdayDepartmentFilter} onChange={(e) => setBirthdayDepartmentFilter(e.target.value)}>
+                <Form.Select size="sm" value={anniversaryDepartmentFilter} onChange={(e) => setAnniversaryDepartmentFilter(e.target.value)}>
                   <option value="all">All Departments</option>
                   {uniqueDepartments.map(dept => (
                     <option key={dept} value={dept}>{dept}</option>
@@ -1567,28 +1565,28 @@ const AdminDashboard = () => {
                 </Form.Select>
               </Col>
               <Col xs={6} md={2}>
-                <Form.Select size="sm" value={birthdaySort} onChange={(e) => setBirthdaySort(e.target.value)}>
+                <Form.Select size="sm" value={anniversarySort} onChange={(e) => setAnniversarySort(e.target.value)}>
                   <option value="date">Sort by Date</option>
                   <option value="name">Sort by Name</option>
                   <option value="department">Sort by Dept</option>
+                  <option value="years">Sort by Years</option>
                   <option value="month">Sort by Month</option>
                 </Form.Select>
               </Col>
               <Col xs={6} md={1}>
-                <Button variant="outline-secondary" size="sm" onClick={() => setBirthdaySortOrder(birthdaySortOrder === 'asc' ? 'desc' : 'asc')} className="w-100">
-                  {birthdaySortOrder === 'asc' ? <FaSortUp /> : <FaSortDown />}
+                <Button variant="outline-secondary" size="sm" onClick={() => setAnniversarySortOrder(anniversarySortOrder === 'asc' ? 'desc' : 'asc')} className="w-100">
+                  {anniversarySortOrder === 'asc' ? <FaSortUp /> : <FaSortDown />}
                 </Button>
               </Col>
               <Col xs={12} md={2}>
-                <Button variant="outline-danger" size="sm" onClick={() => {
-                  setBirthdaySearch('');
-                  setBirthdayFilter('all');
-                  setBirthdayDepartmentFilter('all');
-                  setBirthdaySort('date');
-                  setBirthdaySortOrder('asc');
+                <Button variant="outline-warning" size="sm" onClick={() => {
+                  setAnniversarySearch('');
+                  setAnniversaryFilter('all');
+                  setAnniversaryDepartmentFilter('all');
+                  setAnniversarySort('date');
+                  setAnniversarySortOrder('asc');
                 }} className="w-100">
-                  <FaFilter className="me-1" size={12} />
-                  Clear
+                  <FaFilter className="me-1" size={12} /> Clear
                 </Button>
               </Col>
             </Row>
@@ -1598,19 +1596,18 @@ const AdminDashboard = () => {
                 <thead className="bg-light sticky-top">
                   <tr className="small">
                     <th className="fw-normal text-center" style={{ width: '5%' }}>#</th>
-                    <th className="fw-normal" style={{ width: '18%' }}>Employee</th>
-                    <th className="fw-normal d-none d-md-table-cell" style={{ width: '12%' }}>Department</th>
-                    <th className="fw-normal" style={{ width: '10%' }}>Birthday</th>
-                    <th className="fw-normal" style={{ width: '10%' }}>Birth Year</th>
-                    <th className="fw-normal" style={{ width: '12%' }}>Age</th>
-                    {/* <th className="fw-normal" style={{ width: '15%' }}>Days Left</th> */}
+                    <th className="fw-normal" style={{ width: '20%' }}>Employee</th>
+                    <th className="fw-normal d-none d-md-table-cell" style={{ width: '15%' }}>Department</th>
+                    <th className="fw-normal" style={{ width: '12%' }}>Joining Date</th>
+                    <th className="fw-normal" style={{ width: '15%' }}>Years</th>
                     <th className="fw-normal" style={{ width: '10%' }}>Status</th>
+                    <th className="fw-normal" style={{ width: '8%' }}>Celebration</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredBirthdays.length > 0 ? (
-                    filteredBirthdays.map((emp, index) => (
-                      <tr key={emp.id} className={emp.status === 'today' ? 'table-success' : ''}>
+                  {filteredAnniversaries.length > 0 ? (
+                    filteredAnniversaries.map((emp, index) => (
+                      <tr key={emp.id} className={emp.status === 'today' ? 'table-warning' : ''}>
                         <td className="text-center">{index + 1}</td>
                         <td className="small">
                           <div className="fw-semibold text-truncate" style={{ maxWidth: '150px' }}>
@@ -1623,49 +1620,59 @@ const AdminDashboard = () => {
                         </td>
                         <td className="small">
                           <Badge bg="light" text="dark" pill className="px-2 py-1">
-                            <FaBirthdayCake className="me-1" size={10} />
-                            {emp.birthdayDate}
+                            <FaCalendarAlt className="me-1" size={10} />
+                            {formatDate(emp.joining_date)}
                           </Badge>
                         </td>
                         <td className="small">
-                          <span className="text-muted">{emp.birthYear}</span>
-                        </td>
-                        <td className="small">
-                          <Badge bg="info" pill>{emp.age} years</Badge>
+                          <Badge bg="warning" pill className="px-2 py-1">
+                            <FaStar className="me-1" size={10} />
+                            {emp.yearsCompleted} Year{emp.yearsCompleted !== 1 ? 's' : ''}
+                          </Badge>
                         </td>
                         <td className="small">
                           {emp.status === 'today' ? (
                             <Badge bg="success" pill className="px-2 py-1">
-                              <FaGift className="me-1" size={10} /> Today
+                              <FaTrophy className="me-1" size={10} /> Today
                             </Badge>
                           ) : emp.status === 'upcoming' ? (
                             <Badge bg="info" pill>Upcoming</Badge>
                           ) : (
-                            <Badge bg="secondary" pill>Passed</Badge>
+                            <Badge bg="secondary" pill>Past</Badge>
+                          )}
+                        </td>
+                        <td className="small">
+                          {emp.yearsCompleted === 1 && <Badge bg="info" pill>1st Year 🎉</Badge>}
+                          {emp.yearsCompleted === 5 && <Badge bg="primary" pill>5 Years 🏆</Badge>}
+                          {emp.yearsCompleted === 10 && <Badge bg="success" pill>10 Years 🎊</Badge>}
+                          {emp.yearsCompleted === 20 && <Badge bg="danger" pill>20 Years 👑</Badge>}
+                          {![1, 5, 10, 20].includes(emp.yearsCompleted) && emp.yearsCompleted > 0 && (
+                            <Badge bg="secondary" pill>{emp.yearsCompleted} Years</Badge>
                           )}
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="8" className="text-center py-4">
-                        <FaBirthdayCake size={40} className="text-muted mb-2 opacity-50" />
-                        <p className="text-muted mb-0">No birthdays found matching the filters</p>
+                      <td colSpan="7" className="text-center py-4">
+                        <FaTrophy size={40} className="text-muted mb-2 opacity-50" />
+                        <p className="text-muted mb-0">No anniversaries found matching the filters</p>
                       </td>
                     </tr>
                   )}
                 </tbody>
               </Table>
             </div>
-            {filteredBirthdays.length > 0 && (
+            {filteredAnniversaries.length > 0 && (
               <div className="mt-3 text-center text-muted small">
-                Showing {filteredBirthdays.length} of {allBirthdays.length} birthdays
+                Showing {filteredAnniversaries.length} of {allAnniversaries.length} anniversaries
               </div>
             )}
           </Card.Body>
         </Card>
-      ) : activeTab === 'anniversaries' ? (
-        // Anniversaries Tab
+      )}
+
+      {activeTab === 'anniversaries' && (
         <Card className="border-0 shadow-sm">
           <Card.Header className="bg-gradient py-3" style={{ background: 'linear-gradient(135deg, #ffd700 0%, #ffed4e 100%)' }}>
             <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
@@ -1750,7 +1757,6 @@ const AdminDashboard = () => {
                     <th className="fw-normal d-none d-md-table-cell" style={{ width: '15%' }}>Department</th>
                     <th className="fw-normal" style={{ width: '12%' }}>Joining Date</th>
                     <th className="fw-normal" style={{ width: '15%' }}>Years</th>
-                    {/* <th className="fw-normal" style={{ width: '15%' }}>Days Left</th> */}
                     <th className="fw-normal" style={{ width: '10%' }}>Status</th>
                     <th className="fw-normal" style={{ width: '8%' }}>Celebration</th>
                   </tr>
@@ -1821,8 +1827,9 @@ const AdminDashboard = () => {
             )}
           </Card.Body>
         </Card>
-      ) : (
-        // Overview Tab Content
+      )}
+
+      {activeTab === 'overview' && (
         <>
           {/* Today's Events Widget */}
           {todayEvents && todayEvents.total > 0 && (
@@ -1991,7 +1998,6 @@ const AdminDashboard = () => {
                   <tbody>
                     {filteredAttendance.length > 0 ? (
                       filteredAttendance.map((att, index) => {
-                        // Calculate late display consistently
                         const lateMinutes = parseFloat(att.late_minutes) || 0;
                         let lateDisplay = null;
                         if (lateMinutes > 0) {
@@ -2005,6 +2011,41 @@ const AdminDashboard = () => {
                           if (minutes > 0) parts.push(`${minutes}m`);
                           if (seconds > 0 || (hours === 0 && minutes === 0)) parts.push(`${seconds}s`);
                           lateDisplay = parts.join(' ');
+                        }
+
+                        let workingStatus = 'Not Clocked';
+                        let statusBg = 'secondary';
+                        let statusIcon = null;
+                        let hoursDisplay = null;
+
+                        if (att.clock_in) {
+                          if (att.clock_out) {
+                            const clockInTime = new Date(att.clock_in);
+                            const clockOutTime = new Date(att.clock_out);
+                            let totalMinutes = Math.round((clockOutTime - clockInTime) / (1000 * 60));
+                            if (totalMinutes < 0) totalMinutes += 24 * 60;
+                            const displayHours = Math.floor(totalMinutes / 60);
+                            const displayMinutes = totalMinutes % 60;
+                            hoursDisplay = `${displayHours}h ${displayMinutes}m`;
+
+                            if (totalMinutes >= 540) {
+                              workingStatus = `Present (${hoursDisplay})`;
+                              statusBg = 'success';
+                              statusIcon = <FaCheckCircle className="me-1" size={10} />;
+                            } else if (totalMinutes >= 300) {
+                              workingStatus = `Half Day (${hoursDisplay})`;
+                              statusBg = 'warning';
+                              statusIcon = null;
+                            } else {
+                              workingStatus = `Absent (${hoursDisplay})`;
+                              statusBg = 'danger';
+                              statusIcon = null;
+                            }
+                          } else {
+                            workingStatus = 'Working';
+                            statusBg = 'info';
+                            statusIcon = <FaClock className="me-1" size={10} />;
+                          }
                         }
 
                         return (
@@ -2032,35 +2073,10 @@ const AdminDashboard = () => {
                               {formatTime(att.clock_out) || '--:--'}
                             </td>
                             <td>
-                              {att.clock_in && !att.clock_out ? (
-                                lateDisplay ? (
-                                  <Badge bg="warning" className="px-2 py-1">
-                                    <FaExclamationTriangle className="me-1" size={10} />
-                                    Working (Late {lateDisplay})
-                                  </Badge>
-                                ) : (
-                                  <Badge bg="info" className="px-2 py-1">
-                                    <FaClock className="me-1" size={10} />
-                                    Working
-                                  </Badge>
-                                )
-                              ) : att.clock_in && att.clock_out ? (
-                                lateDisplay ? (
-                                  <Badge bg="warning" className="px-2 py-1">
-                                    <FaExclamationTriangle className="me-1" size={10} />
-                                    Present (Late {lateDisplay})
-                                  </Badge>
-                                ) : (
-                                  <Badge bg="success" className="px-2 py-1">
-                                    <FaCheckCircle className="me-1" size={10} />
-                                    Present
-                                  </Badge>
-                                )
-                              ) : (
-                                <Badge bg="secondary" className="px-2 py-1">
-                                  Not Clocked
-                                </Badge>
-                              )}
+                              <Badge bg={statusBg} className="px-2 py-1">
+                                {statusIcon}
+                                {workingStatus}
+                              </Badge>
                             </td>
                           </tr>
                         );
@@ -2098,18 +2114,18 @@ const AdminDashboard = () => {
                   {leaveSearchTerm && <Button variant="outline-secondary" onClick={() => setLeaveSearchTerm('')} size="sm"><FaTimesCircle size={12} /></Button>}
                 </InputGroup>
                 <Badge bg="light" text="dark" className="px-3 py-2">{filteredLeaveRequests.length} / {leaveRequests.length} Pending</Badge>
-                <Button 
-                  variant="outline-primary" 
-                  size="sm" 
+                <Button
+                  variant="outline-primary"
+                  size="sm"
                   onClick={() => navigate('/admin/leave-requests')}
                   className="d-flex align-items-center"
                 >
                   <FaEye className="me-1" size={12} />
                   View All
                 </Button>
-                <Button 
-                  variant="outline-success" 
-                  size="sm" 
+                <Button
+                  variant="outline-success"
+                  size="sm"
                   onClick={refreshLeaveRequests}
                   className="d-flex align-items-center"
                 >
@@ -2161,8 +2177,8 @@ const AdminDashboard = () => {
                             <Badge bg="warning" className="small">Pending</Badge>
                           </td>
                           <td className="text-center">
-                            <Button 
-                              variant="outline-primary" 
+                            <Button
+                              variant="outline-primary"
                               size="sm"
                               onClick={() => navigate('/admin/leave-requests')}
                               title="View Details"
@@ -2177,9 +2193,9 @@ const AdminDashboard = () => {
                         <td colSpan="8" className="text-center py-4">
                           <FaCalendarAlt size={30} className="text-muted mb-2 opacity-50" />
                           <p className="text-muted mb-0">No pending leave requests found</p>
-                          <Button 
-                            variant="link" 
-                            size="sm" 
+                          <Button
+                            variant="link"
+                            size="sm"
                             onClick={() => navigate('/admin/leave-requests')}
                             className="mt-2"
                           >
@@ -2196,9 +2212,9 @@ const AdminDashboard = () => {
                   <small className="text-muted">
                     Showing first 10 of {filteredLeaveRequests.length} pending requests
                   </small>
-                  <Button 
-                    variant="link" 
-                    size="sm" 
+                  <Button
+                    variant="link"
+                    size="sm"
                     onClick={() => navigate('/admin/leave-requests')}
                     className="ms-2"
                   >
@@ -2241,7 +2257,6 @@ const AdminDashboard = () => {
               </div>
             </Card.Header>
             <Card.Body>
-              {/* Department Filter Row */}
               <div className="mb-3">
                 <div className="d-flex flex-wrap gap-2 align-items-center">
                   <small className="text-muted me-2">Filter by Department:</small>
@@ -2285,7 +2300,7 @@ const AdminDashboard = () => {
                       <th className="fw-normal text-center">#</th>
                       <th className="fw-normal" style={{ cursor: 'pointer' }} onClick={() => setSortBy('name')}>
                         Employee
-                        {sortBy === 'name' && (sortBy === 'name' ? <FaSort className="ms-1" size={10} /> : <FaSort className="ms-1" size={10} />)}
+                        {sortBy === 'name' && <FaSort className="ms-1" size={10} />}
                       </th>
                       <th className="fw-normal d-none d-md-table-cell" style={{ cursor: 'pointer' }} onClick={() => setSortBy('department')}>
                         Department
@@ -2304,14 +2319,11 @@ const AdminDashboard = () => {
                   <tbody>
                     {filteredEmployees.length > 0 ? (
                       filteredEmployees.map((emp, index) => {
-                        // Get values from leaveBalance
                         const totalAccrued = parseFloat(emp.leaveBalance?.total_accrued) || 0;
                         const used = parseFloat(emp.leaveBalance?.used) || 0;
                         const available = parseFloat(emp.leaveBalance?.available) || 0;
                         const monthsCompleted = emp.leaveBalance?.months_completed || 0;
                         const isProbationComplete = emp.leaveBalance?.is_probation_complete || false;
-
-                        // Show appropriate value based on probation status
                         const displayAvailable = isProbationComplete ? available : totalAccrued;
 
                         let statusColor = 'success';
@@ -2389,8 +2401,7 @@ const AdminDashboard = () => {
                 </Table>
               </div>
 
-              {/* Legend */}
-              <div className="mt-3 pt8-2 border-top">
+              <div className="mt-3 pt-2 border-top">
                 <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
                   <small className="text-muted">
                     Showing {filteredEmployees.length} of {employeeLeaveBalances.length} employees

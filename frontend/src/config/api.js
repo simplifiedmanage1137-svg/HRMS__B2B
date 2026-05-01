@@ -40,7 +40,7 @@ export const API_ENDPOINTS = {
     LEAVE_TYPES: `${API_BASE_URL}/api/leaves/types`,
     LEAVE_MANUAL_ACCRUAL: (employeeId) => `${API_BASE_URL}/api/leaves/manual-accrual/${employeeId}`,
     LEAVE_YEARLY_RESET: `${API_BASE_URL}/api/leaves/yearly-reset`,
-    
+
     // Comp-Off endpoints
     COMP_OFF_BALANCE: (employeeId) => `${API_BASE_URL}/api/attendance/comp-off/${employeeId}`,
     COMP_OFF_HISTORY: (employeeId) => `${API_BASE_URL}/api/attendance/comp-off/${employeeId}/history`,
@@ -48,15 +48,15 @@ export const API_ENDPOINTS = {
     // Attendance endpoints
     ATTENDANCE: `${API_BASE_URL}/api/attendance`,
     ATTENDANCE_REPORT: `${API_BASE_URL}/api/attendance/report`,
-    ATTENDANCE_EMPLOYEE_REPORT: (employee_id, start, end) => 
-        `${API_BASE_URL}/api/attendance/employee-report/${employee_id}?start=${start}&end=${end}`, 
+    ATTENDANCE_EMPLOYEE_REPORT: (employee_id, start, end) =>
+        `${API_BASE_URL}/api/attendance/employee-report/${employee_id}?start=${start}&end=${end}`,
     ATTENDANCE_TODAY: (employee_id) => `${API_BASE_URL}/api/attendance/today/${employee_id}`,
     ATTENDANCE_CLOCK_IN: `${API_BASE_URL}/api/attendance/clock-in`,
     ATTENDANCE_CLOCK_OUT: `${API_BASE_URL}/api/attendance/clock-out`,
     ATTENDANCE_HEARTBEAT: `${API_BASE_URL}/api/attendance/heartbeat`,
     ATTENDANCE_CHECK_ACTIVE: `${API_BASE_URL}/api/attendance/check-active`,
     ATTENDANCE_MARK_ABSENT: `${API_BASE_URL}/api/attendance/mark-absent`,
-    
+
     // Attendance Regularization endpoints
     ATTENDANCE_MISSED_CLOCKOUTS: (employee_id) => `${API_BASE_URL}/api/attendance/missed-clockouts/${employee_id}`,
     ATTENDANCE_REGULARIZATION_REQUEST: (employee_id) => `${API_BASE_URL}/api/attendance/regularization/${employee_id}/request`,
@@ -65,9 +65,9 @@ export const API_ENDPOINTS = {
     ATTENDANCE_REJECT_REGULARIZATION: (request_id) => `${API_BASE_URL}/api/attendance/regularization/${request_id}/reject`,
     ATTENDANCE_AUTO_CLOSE_STALE: `${API_BASE_URL}/api/attendance/auto-close-stale`,
     ATTENDANCE_UPDATE_HISTORICAL_LATE_MARKS: `${API_BASE_URL}/api/attendance/update-historical-late-marks`,
-    
+
     // Overtime endpoints
-    OVERTIME_SUMMARY: (employeeId, month, year) => 
+    OVERTIME_SUMMARY: (employeeId, month, year) =>
         `${API_BASE_URL}/api/attendance/overtime/${employeeId}/${month}/${year}`,
 
     // Announcement endpoints
@@ -189,11 +189,11 @@ export const API_ENDPOINTS = {
     ANALYTICS_DEPARTMENT: (department) => `${API_BASE_URL}/api/analytics/department/${department}`,
 
     // Calendar endpoints
-    CALENDAR_ATTENDANCE: (employeeId, month, year) => 
+    CALENDAR_ATTENDANCE: (employeeId, month, year) =>
         `${API_BASE_URL}/api/calendar/attendance/${employeeId}?month=${month}&year=${year}`,
-    CALENDAR_LEAVE: (employeeId, month, year) => 
+    CALENDAR_LEAVE: (employeeId, month, year) =>
         `${API_BASE_URL}/api/calendar/leave/${employeeId}?month=${month}&year=${year}`,
-    CALENDAR_HOLIDAY: (month, year) => 
+    CALENDAR_HOLIDAY: (month, year) =>
         `${API_BASE_URL}/api/calendar/holiday?month=${month}&year=${year}`,
 
     // Notification preferences
@@ -217,7 +217,13 @@ export const API_ENDPOINTS = {
     // System endpoints
     SYSTEM_STATUS: `${API_BASE_URL}/api/system/status`,
     SYSTEM_LOGS: `${API_BASE_URL}/api/system/logs`,
-    SYSTEM_CLEAR_CACHE: `${API_BASE_URL}/api/system/clear-cache`
+    SYSTEM_CLEAR_CACHE: `${API_BASE_URL}/api/system/clear-cache`,
+
+    RATINGS: `${API_BASE_URL}/api/ratings`,
+    // Add to src/config/api.js
+    RATINGS_ALL: `${API_BASE_URL}/api/ratings/all`,
+    RATINGS_ADMIN_RATE: `${API_BASE_URL}/api/ratings/admin-rate`,
+
 };
 
 

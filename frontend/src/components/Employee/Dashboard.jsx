@@ -1,6 +1,6 @@
 // src/components/Employee/Dashboard.jsx
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Table, Badge, Spinner, Alert, Button, ProgressBar } from 'react-bootstrap';
+import { Row, Col, Card, Table, Badge, Spinner, Alert, Button, ProgressBar, Modal, ButtonGroup } from 'react-bootstrap';
 import {
   FaUserCircle,
   FaCalendarAlt,
@@ -21,7 +21,12 @@ import {
   FaInfoCircle,
   FaSun,
   FaMoon,
-  FaCloudSun
+  FaCloudSun,
+  FaStar,
+  FaStarHalfAlt,
+  FaRegStar,
+  FaUserTie,
+  FaUserCog
 } from 'react-icons/fa';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
@@ -29,7 +34,7 @@ import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useNavigate } from 'react-router-dom';
 import { Bar, Doughnut } from 'react-chartjs-2';
-import { holidays, getHolidaysByRegion, isHoliday, getUpcomingHolidays } from '../../data/holidays';
+import { holidays } from '../../data/holidays';
 import EmployeeNotices from './EmployeeNotices';
 import AnnouncementBanner from './AnnouncementBanner';
 import {
@@ -45,7 +50,6 @@ import {
   BarElement
 } from 'chart.js';
 
-// Register ChartJS components
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -96,6 +100,14 @@ const EmployeeDashboard = () => {
     compOffEarned: 0
   });
 
+  // Rating states - Separate for Manager and Admin
+  const [managerRatings, setManagerRatings] = useState([]);
+  const [adminRatings, setAdminRatings] = useState([]);
+  const [managerAverage, setManagerAverage] = useState(null);
+  const [adminAverage, setAdminAverage] = useState(null);
+  const [showRatingHistory, setShowRatingHistory] = useState(false);
+  const [activeRatingTab, setActiveRatingTab] = useState('manager');
+
   // Chart data
   const [attendanceChartData, setAttendanceChartData] = useState({
     labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
@@ -104,13 +116,13 @@ const EmployeeDashboard = () => {
         label: 'Hours Worked',
         data: [0, 0, 0, 0, 0, 0, 0],
         backgroundColor: [
-          'rgba(54, 162, 235, 0.6)',   // Monday - Blue
-          'rgba(54, 162, 235, 0.6)',   // Tuesday - Blue
-          'rgba(54, 162, 235, 0.6)',   // Wednesday - Blue
-          'rgba(54, 162, 235, 0.6)',   // Thursday - Blue
-          'rgba(54, 162, 235, 0.6)',   // Friday - Blue
-          'rgba(169, 169, 169, 0.6)',  // Saturday - Gray (W-OFF)
-          'rgba(169, 169, 169, 0.6)'   // Sunday - Gray (W-OFF)
+          'rgba(54, 162, 235, 0.6)',
+          'rgba(54, 162, 235, 0.6)',
+          'rgba(54, 162, 235, 0.6)',
+          'rgba(54, 162, 235, 0.6)',
+          'rgba(54, 162, 235, 0.6)',
+          'rgba(169, 169, 169, 0.6)',
+          'rgba(169, 169, 169, 0.6)'
         ],
         borderColor: [
           'rgb(54, 162, 235)',
@@ -143,13 +155,60 @@ const EmployeeDashboard = () => {
   // Weekly off days (0 = Sunday, 6 = Saturday)
   const WEEKLY_OFF_DAYS = [0, 6];
 
+  // Helper functions for ratings
+  const renderStars = (rating) => {
+    const stars = [];
+    const fullStars = Math.floor(rating);
+    const hasHalfStar = rating % 1 >= 0.5;
+
+    for (let i = 1; i <= 5; i++) {
+      if (i <= fullStars) {
+        stars.push(<FaStar key={i} size={14} className="me-1 text-warning" />);
+      } else if (i === fullStars + 1 && hasHalfStar) {
+        stars.push(<FaStarHalfAlt key={i} size={14} className="me-1 text-warning" />);
+      } else {
+        stars.push(<FaRegStar key={i} size={14} className="me-1 text-secondary" />);
+      }
+    }
+    return stars;
+  };
+
+  const getRatingLabel = (rating) => {
+    if (rating >= 4.5) return 'Excellent';
+    if (rating >= 3.5) return 'Good';
+    if (rating >= 2.5) return 'Average';
+    if (rating >= 1.5) return 'Below Average';
+    return 'Needs Improvement';
+  };
+
+  const getRatingColor = (rating) => {
+    if (rating >= 4) return 'success';
+    if (rating >= 3) return 'info';
+    if (rating >= 2) return 'warning';
+    return 'danger';
+  };
+
   useEffect(() => {
     if (user?.employeeId) {
       loadDashboardData();
+      fetchEmployeeRatings();
     }
   }, [user]);
 
-  // ✅ Recalculate stats from attendance history whenever it changes
+  const fetchEmployeeRatings = async () => {
+    try {
+      const response = await axios.get(`${API_ENDPOINTS.RATINGS}/employee/${user.employeeId}/history`);
+      if (response.data.success) {
+        setManagerRatings(response.data.manager_ratings || []);
+        setAdminRatings(response.data.admin_ratings || []);
+        setManagerAverage(response.data.manager_average);
+        setAdminAverage(response.data.admin_average);
+      }
+    } catch (error) {
+      console.error('Error fetching ratings:', error);
+    }
+  };
+
   const recalculateAttendanceStats = () => {
     if (!attendanceHistory || attendanceHistory.length === 0) return;
 
@@ -162,12 +221,11 @@ const EmployeeDashboard = () => {
     attendanceHistory.forEach(record => {
       const dateObj = new Date(record.attendance_date);
       const dayOfWeek = dateObj.getDay();
-      const isWeeklyOff = dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
+      const isWeeklyOff = dayOfWeek === 0 || dayOfWeek === 6;
 
       if (isWeeklyOff) {
         weeklyOffDays++;
       } else {
-        // Working day - check status
         if (record.status === 'present' || record.status === 'working' || record.clock_in) {
           presentDays++;
           if (record.total_hours) {
@@ -175,7 +233,7 @@ const EmployeeDashboard = () => {
           }
         } else if (record.status === 'half_day') {
           halfDays++;
-          presentDays++; // Half day counts as present
+          presentDays++;
           if (record.total_hours) {
             totalWorkingHours += parseFloat(record.total_hours);
           }
@@ -195,18 +253,16 @@ const EmployeeDashboard = () => {
     }));
   };
 
-  // Update charts and stats when data changes
   useEffect(() => {
     if (attendanceHistory.length > 0) {
       updateAttendanceChart();
-      recalculateAttendanceStats(); // ✅ Recalculate stats on every attendance change
+      recalculateAttendanceStats();
     }
     if (leaveBalance) {
       updateLeaveChart();
     }
   }, [attendanceHistory, leaveBalance]);
 
-  // Load upcoming holidays from holidays.js
   useEffect(() => {
     loadUpcomingHolidays();
   }, []);
@@ -216,16 +272,12 @@ const EmployeeDashboard = () => {
       const today = new Date();
       const currentYear = today.getFullYear();
 
-      // Get holidays for current year and next year
       const allHolidays = holidays.filter(h => {
         const holidayDate = new Date(h.date);
         return holidayDate >= today && holidayDate.getFullYear() <= currentYear + 1;
       });
 
-      // Sort by date (ascending)
       const sortedHolidays = allHolidays.sort((a, b) => new Date(a.date) - new Date(b.date));
-
-      // Take only next 3 upcoming holidays
       const nextHolidays = sortedHolidays.slice(0, 3).map(holiday => {
         const holidayDate = new Date(holiday.date);
         const diffTime = holidayDate - today;
@@ -251,7 +303,6 @@ const EmployeeDashboard = () => {
     setError('');
 
     try {
-      // Fetch all data in parallel for better performance
       await Promise.all([
         fetchEmployeeData(),
         fetchLeaveBalance(),
@@ -261,8 +312,6 @@ const EmployeeDashboard = () => {
         fetchAttendanceHistory(),
         fetchTodayEvents()
       ]);
-
-      // Load upcoming holidays separately
       loadUpcomingHolidays();
     } catch (error) {
       console.error('Error loading dashboard data:', error);
@@ -271,20 +320,18 @@ const EmployeeDashboard = () => {
       setLoading(false);
     }
   };
-  
 
   const refreshData = async () => {
     setRefreshing(true);
     await loadDashboardData();
+    await fetchEmployeeRatings();
     setRefreshing(false);
     showNotification('Dashboard refreshed!', 'success');
   };
 
   const fetchEmployeeData = async () => {
     try {
-      // ✅ FIX: Use correct endpoint - EMPLOYEE_PROFILE, not ATTENDANCE_REPORT
       const response = await axios.get(API_ENDPOINTS.EMPLOYEE_PROFILE(user.employeeId));
-      console.log('📋 Employee data:', response.data);
       setEmployee(response.data);
     } catch (error) {
       console.error('Error fetching employee:', error);
@@ -294,12 +341,7 @@ const EmployeeDashboard = () => {
 
   const fetchLeaveBalance = async () => {
     try {
-      console.log('Fetching leave balance for:', user.employeeId);
-
       const response = await axios.get(API_ENDPOINTS.LEAVE_BALANCE(user.employeeId));
-      console.log('Leave balance response:', response.data);
-
-      // ✅ FIX: Use correct field names from API response
       setLeaveBalance({
         available: parseFloat(response.data.available) || 0,
         total_accrued: parseFloat(response.data.total_accrued) || 0,
@@ -312,7 +354,6 @@ const EmployeeDashboard = () => {
         months_completed: response.data.months_completed || 0,
         is_probation_complete: response.data.is_probation_complete || false
       });
-
     } catch (error) {
       console.error('Error fetching leave balance:', error);
       setLeaveBalance({
@@ -333,17 +374,14 @@ const EmployeeDashboard = () => {
 
   const fetchCompOffHistory = async () => {
     try {
-      // This endpoint might be admin-only, so wrap in try-catch
       const response = await axios.get(`${API_ENDPOINTS.ATTENDANCE}/comp-off/${user.employeeId}/history`);
       setCompOffHistory(response.data.earnings || []);
-
       const earned = response.data.earnings?.filter(e => !e.is_used).length || 0;
       setStats(prev => ({
         ...prev,
         compOffEarned: earned
       }));
     } catch (error) {
-      // Silently fail for comp-off history - it's admin-only
       console.log('Comp-off history not available for employees');
       setCompOffHistory([]);
     }
@@ -351,20 +389,9 @@ const EmployeeDashboard = () => {
 
   const fetchLeaveRequests = async () => {
     try {
-      // Don't pass employee_id in params - let the backend determine it from the token
       const response = await axios.get(API_ENDPOINTS.LEAVES);
-
       const leaves = response.data || [];
-      console.log(`📋 Fetched ${leaves.length} leave requests for current employee`);
-
-      // Log to verify we're only getting current employee's leaves
-      leaves.forEach(leave => {
-        console.log(`   - Leave: ${leave.leave_type} (${leave.status}) for date ${leave.start_date}`);
-      });
-
-      setLeaveRequests(leaves.slice(0, 5)); // Show only 5 most recent
-
-      // Calculate leave stats
+      setLeaveRequests(leaves.slice(0, 5));
       setStats(prev => ({
         ...prev,
         totalLeaves: leaves.length,
@@ -380,13 +407,8 @@ const EmployeeDashboard = () => {
   const fetchTodayAttendance = async () => {
     try {
       const today = new Date().toISOString().split('T')[0];
-
-      // ✅ FIX: Use employee-specific endpoint
       const url = `${API_ENDPOINTS.ATTENDANCE_EMPLOYEE_REPORT(user.employeeId, today, today)}`;
-      console.log('📡 Today attendance URL:', url);
-
       const response = await axios.get(url);
-
       if (response.data.attendance && response.data.attendance.length > 0) {
         setTodayAttendance(response.data.attendance[0]);
       }
@@ -400,7 +422,6 @@ const EmployeeDashboard = () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      // Salary cycle: prev month 26th → current month 25th
       let cycleStartDate, cycleEndDate;
       if (today.getDate() >= 26) {
         cycleStartDate = new Date(today.getFullYear(), today.getMonth(), 26);
@@ -411,7 +432,6 @@ const EmployeeDashboard = () => {
       }
 
       const startDateStr = cycleStartDate.toISOString().split('T')[0];
-      // Fetch only up to today (not future dates)
       const fetchEndDate = today < cycleEndDate ? today : cycleEndDate;
       const endDateStr = fetchEndDate.toISOString().split('T')[0];
 
@@ -422,7 +442,6 @@ const EmployeeDashboard = () => {
       const attendance = response.data.attendance || [];
       setAttendanceHistory(attendance);
 
-      // Count stats only for days from cycle start up to TODAY (not future)
       let presentDays = 0, halfDays = 0, weeklyOff = 0, absent = 0;
       let totalWorkingDaysCount = 0;
 
@@ -447,7 +466,6 @@ const EmployeeDashboard = () => {
         d.setDate(d.getDate() + 1);
       }
 
-      // Cycle label for display
       const cycleLabel = `${cycleStartDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} - ${cycleEndDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`;
 
       setStats(prev => ({
@@ -459,76 +477,18 @@ const EmployeeDashboard = () => {
         totalWorkingDays: totalWorkingDaysCount,
         cycleLabel
       }));
-
     } catch (error) {
       console.error('Error fetching attendance history:', error);
       setAttendanceHistory([]);
     }
   };
 
-  const generateLast30DaysAttendance = (history, startDate, endDate) => {
-    const completeHistory = [];
-    const currentDate = new Date(endDate); // Start from today and go backwards
-
-    // Generate 30 days from today backwards
-    for (let i = 0; i < 30; i++) {
-      const date = new Date(currentDate);
-      date.setDate(date.getDate() - i);
-
-      const dateStr = date.toISOString().split('T')[0];
-      const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
-
-      // Check if it's a weekly off day
-      const isWeeklyOff = WEEKLY_OFF_DAYS.includes(dayOfWeek);
-
-      // Find if there's an attendance record for this date
-      const existingRecord = history.find(h => {
-        const recordDate = new Date(h.attendance_date).toISOString().split('T')[0];
-        return recordDate === dateStr;
-      });
-
-      if (existingRecord) {
-        // Use actual attendance data
-        completeHistory.push({
-          ...existingRecord,
-          date: dateStr,
-          dayOfWeek,
-          isWeeklyOff: false,
-          displayDate: formatDate(dateStr),
-          dayName: date.toLocaleDateString('en-US', { weekday: 'short' }),
-          isToday: i === 0 // Mark today's date
-        });
-      } else {
-        // Create a placeholder record for days without attendance
-        completeHistory.push({
-          date: dateStr,
-          attendance_date: dateStr,
-          dayOfWeek,
-          isWeeklyOff,
-          dayName: date.toLocaleDateString('en-US', { weekday: 'short' }),
-          clock_in: null,
-          clock_out: null,
-          total_hours: null,
-          status: isWeeklyOff ? 'weekly_off' : 'absent',
-          late_minutes: 0,
-          late_display: null,
-          isToday: i === 0 // Mark today's date
-        });
-      }
-    }
-
-    // Sort by date descending (today first)
-    return completeHistory.sort((a, b) => new Date(b.date) - new Date(a.date));
-  };
-
   const updateAttendanceChart = () => {
-    // Show hours for each day of current week (Mon-Sun)
-    const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat (W-OFF)', 'Sun (W-OFF)'];
+    const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const hoursByDay = [0, 0, 0, 0, 0, 0, 0];
 
-    // Get current week's Monday
     const today = new Date();
-    const dayOfWeek = today.getDay(); // 0=Sun, 1=Mon...
+    const dayOfWeek = today.getDay();
     const monday = new Date(today);
     monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
     monday.setHours(0, 0, 0, 0);
@@ -539,7 +499,6 @@ const EmployeeDashboard = () => {
       recDate.setHours(0, 0, 0, 0);
       const diffDays = Math.round((recDate - monday) / (1000 * 60 * 60 * 24));
       if (diffDays >= 0 && diffDays <= 6) {
-        // diffDays 0=Mon,1=Tue,...,5=Sat,6=Sun
         const hours = parseFloat(record.total_hours) || 0;
         hoursByDay[diffDays] = Math.round(hours * 10) / 10;
       }
@@ -606,81 +565,16 @@ const EmployeeDashboard = () => {
     }
   };
 
-  const getAttendanceStatus = (record) => {
-    if (!record) return <Badge bg="secondary">Not Marked</Badge>;
-
-    const attendanceDate = new Date(record.attendance_date);
-    const dayOfWeek = attendanceDate.getDay();
-
-    // Check if it's a weekly off day
-    if (WEEKLY_OFF_DAYS.includes(dayOfWeek)) {
-      return <Badge bg="secondary"><FaMoon className="me-1" size={10} /> W-OFF</Badge>;
-    }
-
-    if (!record.clock_in) return <Badge bg="secondary">Not Clocked</Badge>;
-
-    if (record.clock_in && !record.clock_out) {
-      // Check if late while working
-      if (record.late_minutes > 0) {
-        return (
-          <Badge bg="warning">
-            <FaClock className="me-1" size={10} />
-            Working (Late {formatLateTime(record.late_minutes)})
-          </Badge>
-        );
-      }
-      return <Badge bg="info">Working</Badge>;
-    }
-
-    if (record.comp_off_awarded) {
-      return (
-        <Badge bg="purple">
-          <FaTrophy className="me-1" size={10} />
-          Comp-Off Earned
-        </Badge>
-      );
-    }
-
-    if (record.status === 'present') {
-      if (record.late_minutes > 0) {
-        return (
-          <Badge bg="warning">
-            <FaCheckCircle className="me-1" size={10} />
-            Present (Late {formatLateTime(record.late_minutes)})
-          </Badge>
-        );
-      }
-      return <Badge bg="success"><FaCheckCircle className="me-1" size={10} /> Present</Badge>;
-    }
-
-    if (record.status === 'half_day') {
-      if (record.late_minutes > 0) {
-        return (
-          <Badge bg="warning">
-            <FaCloudSun className="me-1" size={10} />
-            Half Day (Late {formatLateTime(record.late_minutes)})
-          </Badge>
-        );
-      }
-      return <Badge bg="warning"><FaCloudSun className="me-1" size={10} /> Half Day</Badge>;
-    }
-
-    return <Badge bg="secondary">Absent</Badge>;
-  };
-
   const formatLateTime = (lateMinutes) => {
     if (!lateMinutes || lateMinutes <= 0) return null;
-
     const totalSeconds = Math.round(lateMinutes * 60);
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
-
     const parts = [];
     if (hours > 0) parts.push(`${hours}h`);
     if (minutes > 0) parts.push(`${minutes}m`);
     if (seconds > 0 || (hours === 0 && minutes === 0)) parts.push(`${seconds}s`);
-
     return parts.join(' ');
   };
 
@@ -688,14 +582,6 @@ const EmployeeDashboard = () => {
     if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
-
-  const formatShortDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric'
     });
@@ -718,12 +604,6 @@ const EmployeeDashboard = () => {
     return <Badge bg={colors[region] || 'secondary'}>{region}</Badge>;
   };
 
-  const calculateLeavePercentage = () => {
-    const used = leaveBalance.used || 0;
-    const total = leaveBalance.total_accrued || 1;
-    return ((used / total) * 100).toFixed(1);
-  };
-
   const isTodayWeeklyOff = () => {
     const today = new Date();
     const dayOfWeek = today.getDay();
@@ -743,7 +623,7 @@ const EmployeeDashboard = () => {
 
   return (
     <div className="p-2 p-md-3 p-lg-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
-      {/* Welcome Header with Refresh Button - Responsive */}
+      {/* Welcome Header */}
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
         <div>
           <h5 className="mb-1 d-flex align-items-center">
@@ -755,39 +635,25 @@ const EmployeeDashboard = () => {
           </p>
         </div>
         <div className="d-flex flex-wrap gap-2 ms-0 ms-md-auto">
-          <Button
-            variant="outline-primary"
-            size="sm"
-            onClick={refreshData}
-            disabled={refreshing}
-            className="d-inline-flex align-items-center"
-          >
+          <Button variant="outline-primary" size="sm" onClick={refreshData} disabled={refreshing} className="d-inline-flex align-items-center">
             <FaSyncAlt className={`me-2 ${refreshing ? 'fa-spin' : ''}`} size={12} />
             Refresh
           </Button>
-          <Badge bg="dark" className="p-2">
-            ID: {user?.employeeId}
-          </Badge>
-          <Badge bg="info" className="p-2">
-            {employee?.employment_type || 'Full Time'}
-          </Badge>
+          <Badge bg="dark" className="p-2">ID: {user?.employeeId}</Badge>
+          <Badge bg="info" className="p-2">{employee?.employment_type || 'Full Time'}</Badge>
         </div>
       </div>
 
-      {/* Announcements from Admin */}
       <AnnouncementBanner />
-
-      {/* Notices / Warnings from Admin or Manager */}
       <EmployeeNotices />
 
-      {/* Error Alert */}
       {error && (
         <Alert variant="danger" onClose={() => setError('')} dismissible className="mb-3 py-2">
           <small>{error}</small>
         </Alert>
       )}
 
-      {/* Today's Events Widget - Responsive */}
+      {/* Today's Events Widget */}
       {todayEvents?.total > 0 && (
         <Card className="mb-4 border-0 shadow-sm" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
           <Card.Body className="p-2 p-md-3 text-white">
@@ -812,7 +678,7 @@ const EmployeeDashboard = () => {
         </Card>
       )}
 
-      {/* Today's Status Card - Responsive */}
+      {/* Today's Status Card */}
       {isTodayWeeklyOff() ? (
         <Card className="mb-4 border-0 shadow-sm bg-secondary bg-opacity-10">
           <Card.Body className="p-2 p-md-3">
@@ -855,12 +721,7 @@ const EmployeeDashboard = () => {
                   </p>
                 </div>
               </div>
-              <Button
-                variant="dark"
-                size="sm"
-                onClick={() => navigate('/attendance')}
-                className="ms-0 ms-sm-auto w-20 w-sm-auto"
-              >
+              <Button variant="dark" size="sm" onClick={() => navigate('/attendance')} className="ms-0 ms-sm-auto w-20 w-sm-auto">
                 View Details <FaArrowRight className="ms-2" size={10} />
               </Button>
             </div>
@@ -868,94 +729,220 @@ const EmployeeDashboard = () => {
         </Card>
       )}
 
-      {/* Statistics Cards - Responsive grid */}
+      {/* Statistics Cards - First Row with 3 Cards */}
       <Row className="mb-4 g-2 g-md-3">
-        <Col xs={12} sm={6} md={3}>
+        {/* Leave Balance Card */}
+        <Col xs={12} sm={6} md={4}>
           <Card className="border-0 shadow-sm h-100">
-            <Card.Body className="p-2 p-md-3">
+            <Card.Body className="p-3">
               <div className="d-flex justify-content-between align-items-start">
                 <div className="overflow-hidden">
                   <p className="text-muted small mb-1 text-truncate">Leave Balance</p>
                   <h4 className="mb-0 fw-bold text-primary">
-                    {leaveBalance.is_probation_complete
-                      ? parseFloat(leaveBalance.available).toFixed(1)
-                      : parseFloat(leaveBalance.total_accrued).toFixed(1)}
+                    {leaveBalance.is_probation_complete ? parseFloat(leaveBalance.available).toFixed(1) : parseFloat(leaveBalance.total_accrued).toFixed(1)}
                   </h4>
                   <small className="text-muted text-truncate d-block">
-                    {leaveBalance.is_probation_complete
-                      ? `Used: ${parseFloat(leaveBalance.used).toFixed(1)} | Pending: ${parseFloat(leaveBalance.pending).toFixed(1)}`
-                      : 'Earned (usable after probation)'}
+                    {leaveBalance.is_probation_complete ? `Used: ${parseFloat(leaveBalance.used).toFixed(1)} | Pending: ${parseFloat(leaveBalance.pending).toFixed(1)}` : 'Earned (usable after probation)'}
                   </small>
                 </div>
-                <div className="bg-primary bg-opacity-10 p-2 rounded-circle flex-shrink-0">
-                  <FaUmbrellaBeach className="text-primary" size={20} />
+                <div className="bg-primary bg-opacity-10 p-3 rounded-circle flex-shrink-0">
+                  <FaUmbrellaBeach className="text-primary" size={24} />
                 </div>
               </div>
             </Card.Body>
           </Card>
         </Col>
 
-        <Col xs={12} sm={6} md={3}>
+        {/* Present Days Card */}
+        <Col xs={12} sm={6} md={4}>
           <Card className="border-0 shadow-sm h-100">
-            <Card.Body className="p-2 p-md-3">
+            <Card.Body className="p-3">
               <div className="d-flex justify-content-between align-items-start">
                 <div className="overflow-hidden">
                   <p className="text-muted small mb-1 text-truncate">Present Days</p>
                   <h4 className="mb-0 fw-bold text-success">{stats.presentDays || 0}</h4>
                   <small className="text-muted text-truncate d-block">
                     Absent: <span className="text-danger fw-semibold">{stats.absentDays || 0}</span>
-                    {stats.cycleLabel && <span className="ms-1">| {stats.cycleLabel}</span>}
                   </small>
                 </div>
-                <div className="bg-success bg-opacity-10 p-2 rounded-circle flex-shrink-0">
-                  <FaCheckCircle className="text-success" size={20} />
+                <div className="bg-success bg-opacity-10 p-3 rounded-circle flex-shrink-0">
+                  <FaCheckCircle className="text-success" size={24} />
                 </div>
               </div>
             </Card.Body>
           </Card>
         </Col>
 
-       
-
-        <Col xs={12} sm={6} md={3}>
+        {/* Comp-Off Balance Card */}
+        <Col xs={12} sm={6} md={4}>
           <Card className="border-0 shadow-sm h-100">
-            <Card.Body className="p-2 p-md-3">
+            <Card.Body className="p-3">
               <div className="d-flex justify-content-between align-items-start">
                 <div className="overflow-hidden">
                   <p className="text-muted small mb-1 text-truncate">Comp-Off Balance</p>
                   <h4 className="mb-0 fw-bold text-purple">{leaveBalance.comp_off_balance || 0}</h4>
                   <small className="text-muted text-truncate d-block">Earned on holidays</small>
                 </div>
-                <div className="bg-purple bg-opacity-10 p-2 rounded-circle flex-shrink-0">
-                  <FaTrophy className="text-purple" size={20} />
+                <div className="bg-purple bg-opacity-10 p-3 rounded-circle flex-shrink-0">
+                  <FaTrophy className="text-purple" size={24} />
                 </div>
               </div>
             </Card.Body>
           </Card>
         </Col>
+      </Row>
 
-        <Col xs={12} sm={6} md={3}>
-          <Card className="border-0 shadow-sm h-100">
-            <Card.Body className="p-2 p-md-3">
-              <div className="d-flex justify-content-between align-items-start">
-                <div className="overflow-hidden">
-                  <p className="text-muted small mb-1 text-truncate">Upcoming Holiday</p>
-                  {upcomingHolidays.length > 0 ? (
-                    <>
-                      <h6 className="mb-0 fw-bold text-truncate">{upcomingHolidays[0].name}</h6>
-                      <small className="text-muted d-block text-truncate">{formatDate(upcomingHolidays[0].date)}</small>
-                      <Badge bg="info" className="mt-1">
-                        {upcomingHolidays[0].daysLeft} days left
-                      </Badge>
-                    </>
-                  ) : (
-                    <p className="mb-0 small">No upcoming holidays</p>
-                  )}
-                </div>
-                <div className="bg-info bg-opacity-10 p-2 rounded-circle flex-shrink-0">
-                  <FaCalendarAlt className="text-info" size={24} />
-                </div>
+      {/* Ratings Card - Second Row */}
+      {/* Ratings Card - Second Row */}
+      <Row className="mb-4">
+        <Col xs={12}>
+          <Card className="border-0 shadow-sm">
+            <Card.Header className="bg-white p-0 border-bottom-0">
+              <div className="d-flex">
+                <button
+                  className={`flex-grow-1 py-2 px-3 border-0 bg-transparent fw-semibold small ${activeRatingTab === 'manager' ? 'text-primary border-bottom border-primary border-2' : 'text-muted'}`}
+                  onClick={() => setActiveRatingTab('manager')}
+                  style={{ transition: 'all 0.2s' }}
+                >
+                  <FaUserTie className="me-1" size={12} />
+                  Manager Rating
+                  <Badge bg={activeRatingTab === 'manager' ? 'primary' : 'secondary'} className="ms-1" pill style={{ fontSize: '10px' }}>
+                    {managerRatings.length}
+                  </Badge>
+                </button>
+                <button
+                  className={`flex-grow-1 py-2 px-3 border-0 bg-transparent fw-semibold small ${activeRatingTab === 'admin' ? 'text-primary border-bottom border-primary border-2' : 'text-muted'}`}
+                  onClick={() => setActiveRatingTab('admin')}
+                  style={{ transition: 'all 0.2s' }}
+                >
+                  <FaUserCog className="me-1" size={12} />
+                  Admin Rating
+                  <Badge bg={activeRatingTab === 'admin' ? 'primary' : 'secondary'} className="ms-1" pill style={{ fontSize: '10px' }}>
+                    {adminRatings.length}
+                  </Badge>
+                </button>
               </div>
+            </Card.Header>
+            <Card.Body className="p-3">
+              {activeRatingTab === 'manager' ? (
+                // Manager Rating Content
+                managerRatings.length > 0 ? (
+                  <>
+                    <div className="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
+                      <div className="d-flex align-items-center gap-3">
+                        <div className="text-center">
+                          <div className="display-6 fw-bold text-info mb-0">
+                            {managerAverage ? `${managerAverage}` : '0'}
+                          </div>
+                          <div className="d-flex justify-content-center" style={{ fontSize: '10px' }}>
+                            {managerAverage && renderStars(parseFloat(managerAverage))}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="small text-muted">Overall Rating</div>
+                          <div className="small fw-semibold">Based on {managerRatings.length} review(s)</div>
+                        </div>
+                      </div>
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="p-0 text-decoration-none small"
+                        onClick={() => setShowRatingHistory(true)}
+                      >
+                        View All <FaArrowRight size={10} />
+                      </Button>
+                    </div>
+
+                    <div className="table-responsive">
+                      <table className="table table-sm table-borderless mb-0">
+                        <tbody>
+                          {managerRatings.slice(0, 3).map((rating, index) => (
+                            <tr key={index} className="border-bottom">
+                              <td style={{ width: '30%' }} className="py-2">
+                                <small className="text-muted">{rating.month_name} {rating.year}</small>
+                              </td>
+                              <td style={{ width: '35%' }} className="py-2">
+                                <div style={{ fontSize: '10px' }}>
+                                  {renderStars(rating.rating)}
+                                </div>
+                              </td>
+                              <td style={{ width: '35%' }} className="py-2">
+                                <Badge bg={getRatingColor(rating.rating)} pill style={{ fontSize: '10px' }}>
+                                  {rating.rating_label}
+                                </Badge>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-3">
+                    <FaUserTie size={30} className="text-muted mb-2 opacity-25" />
+                    <p className="text-muted small mb-0">No manager ratings yet</p>
+                  </div>
+                )
+              ) : (
+                // Admin Rating Content
+                adminRatings.length > 0 ? (
+                  <>
+                    <div className="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
+                      <div className="d-flex align-items-center gap-3">
+                        <div className="text-center">
+                          <div className="display-6 fw-bold text-success mb-0">
+                            {adminAverage ? `${adminAverage}` : '0'}
+                          </div>
+                          <div className="d-flex justify-content-center" style={{ fontSize: '10px' }}>
+                            {adminAverage && renderStars(parseFloat(adminAverage))}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="small text-muted">Overall Rating</div>
+                          <div className="small fw-semibold">Based on {adminRatings.length} review(s)</div>
+                        </div>
+                      </div>
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="p-0 text-decoration-none small"
+                        onClick={() => setShowRatingHistory(true)}
+                      >
+                        View All <FaArrowRight size={10} />
+                      </Button>
+                    </div>
+
+                    <div className="table-responsive">
+                      <table className="table table-sm table-borderless mb-0">
+                        <tbody>
+                          {adminRatings.slice(0, 3).map((rating, index) => (
+                            <tr key={index} className="border-bottom">
+                              <td style={{ width: '30%' }} className="py-2">
+                                <small className="text-muted">{rating.month_name} {rating.year}</small>
+                              </td>
+                              <td style={{ width: '35%' }} className="py-2">
+                                <div style={{ fontSize: '10px' }}>
+                                  {renderStars(rating.rating)}
+                                </div>
+                              </td>
+                              <td style={{ width: '35%' }} className="py-2">
+                                <Badge bg={getRatingColor(rating.rating)} pill style={{ fontSize: '10px' }}>
+                                  {rating.rating_label}
+                                </Badge>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-3">
+                    <FaUserCog size={30} className="text-muted mb-2 opacity-25" />
+                    <p className="text-muted small mb-0">No admin ratings yet</p>
+                  </div>
+                )
+              )}
             </Card.Body>
           </Card>
         </Col>
@@ -980,22 +967,18 @@ const EmployeeDashboard = () => {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                      legend: {
-                        display: false
-                      },
+                      legend: { display: false },
                       tooltip: {
                         backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                        titleColor: '#fff',
-                        bodyColor: '#fff',
-                        titleFont: { size: 11 },
-                        bodyFont: { size: 10 },
-                        padding: 6,
                         callbacks: {
                           label: function (context) {
                             const value = context.raw;
                             const dayIndex = context.dataIndex;
                             if (dayIndex === 5 || dayIndex === 6) {
-                              return value > 0 ? `  ${value}h (Worked on W-OFF)` : '  Weekly Off';
+                              if (value > 0) {
+                                return `  ${value}h (Worked on W-OFF)`;
+                              }
+                              return '  Weekly Off';
                             }
                             return `  ${value}h`;
                           }
@@ -1005,37 +988,15 @@ const EmployeeDashboard = () => {
                     scales: {
                       y: {
                         beginAtZero: true,
-                        max: 9,
-                        title: {
-                          display: true,
-                          text: 'Hours',
-                          color: '#6c757d',
-                          font: { size: 10 },
-                          padding: { top: 0, bottom: 5 }
-                        },
-                        grid: { color: 'rgba(0, 0, 0, 0.05)' },
-                        ticks: {
-                          stepSize: 1,
-                          callback: function (value) { return value + 'h'; },
-                          font: { size: 9 }
-                        }
+                        max: 10,
+                        title: { display: true, text: 'Hours', font: { size: 10 } },
+                        ticks: { stepSize: 1, callback: (value) => value + 'h' }
                       },
-                      x: {
-                        grid: { display: false },
-                        ticks: {
-                          font: { size: 9 },
-                          maxRotation: 45,
-                          minRotation: 45
-                        }
-                      }
-                    },
-                    barPercentage: 0.6,
-                    categoryPercentage: 0.7
+                      x: { ticks: { font: { size: 9 }, maxRotation: 45, minRotation: 45 } }
+                    }
                   }}
                 />
               </div>
-
-              {/* Legend - Responsive */}
               <div className="mt-3 d-flex flex-wrap justify-content-center align-items-center gap-3 gap-md-4 small">
                 <div className="d-flex align-items-center">
                   <div style={{ width: '12px', height: '12px', backgroundColor: 'rgba(54, 162, 235, 0.6)', borderRadius: '3px', marginRight: '4px' }}></div>
@@ -1045,11 +1006,6 @@ const EmployeeDashboard = () => {
                   <div style={{ width: '12px', height: '12px', backgroundColor: 'rgba(169, 169, 169, 0.6)', borderRadius: '3px', marginRight: '4px' }}></div>
                   <span className="text-muted">W-OFF</span>
                 </div>
-              </div>
-
-              <div className="mt-2 text-center text-muted small">
-                <FaInfoCircle className="me-1" size={8} />
-                Current week hours per day
               </div>
             </Card.Body>
           </Card>
@@ -1074,15 +1030,8 @@ const EmployeeDashboard = () => {
                       responsive: true,
                       maintainAspectRatio: false,
                       plugins: {
-                        legend: {
-                          position: 'bottom',
-                          labels: { font: { size: 10 } }
-                        },
-                        tooltip: {
-                          callbacks: {
-                            label: function (context) { return `${context.raw} days`; }
-                          }
-                        }
+                        legend: { position: 'bottom', labels: { font: { size: 10 } } },
+                        tooltip: { callbacks: { label: (context) => `${context.raw} days` } }
                       },
                       cutout: '60%'
                     }}
@@ -1091,17 +1040,17 @@ const EmployeeDashboard = () => {
                 <div className="ms-0 ms-md-4 mt-3 mt-md-0 w-100">
                   <div className="mb-3">
                     <small className="text-muted d-block">Used</small>
-                    <strong className="text-danger" style={{ fontSize: '1.1rem' }}>{leaveBalance.used} days</strong>
+                    <strong className="text-danger">{leaveBalance.used} days</strong>
                     <ProgressBar now={(leaveBalance.used / leaveBalance.total_accrued) * 100} variant="danger" style={{ height: '4px', maxWidth: '120px' }} />
                   </div>
                   <div className="mb-3">
                     <small className="text-muted d-block">Available</small>
-                    <strong className="text-success" style={{ fontSize: '1.1rem' }}>{leaveBalance.available} days</strong>
+                    <strong className="text-success">{leaveBalance.available} days</strong>
                     <ProgressBar now={(leaveBalance.available / leaveBalance.total_accrued) * 100} variant="success" style={{ height: '4px', maxWidth: '120px' }} />
                   </div>
                   <div>
                     <small className="text-muted d-block">Pending</small>
-                    <strong className="text-warning" style={{ fontSize: '1.1rem' }}>{leaveBalance.pending} days</strong>
+                    <strong className="text-warning">{leaveBalance.pending} days</strong>
                     <ProgressBar now={(leaveBalance.pending / leaveBalance.total_accrued) * 100} variant="warning" style={{ height: '4px', maxWidth: '120px' }} />
                   </div>
                 </div>
@@ -1118,12 +1067,7 @@ const EmployeeDashboard = () => {
                 <FaHistory className="me-2 text-primary" />
                 Recent Leave Requests
               </h6>
-              <Button
-                variant="link"
-                size="sm"
-                onClick={() => navigate('/apply-leave')}
-                className="text-decoration-none p-0"
-              >
+              <Button variant="link" size="sm" onClick={() => navigate('/apply-leave')} className="text-decoration-none p-0">
                 View All <FaArrowRight className="ms-1" size={10} />
               </Button>
             </Card.Header>
@@ -1144,12 +1088,8 @@ const EmployeeDashboard = () => {
                       leaveRequests.map((leave, index) => (
                         <tr key={leave.id || index}>
                           <td className="small">
-                            <Badge
-                              bg={leave.leave_type === 'Comp-Off' ? 'purple' : 'secondary'}
-                              className="px-2 py-1 text-nowrap"
-                            >
-                              {leave.leave_type === 'Comp-Off' && '🎉 '}
-                              {leave.leave_type}
+                            <Badge bg={leave.leave_type === 'Comp-Off' ? 'purple' : 'secondary'} className="px-2 py-1 text-nowrap">
+                              {leave.leave_type === 'Comp-Off' && '🎉 '}{leave.leave_type}
                             </Badge>
                           </td>
                           <td className="small d-none d-sm-table-cell">{leave.leave_duration || 'Full Day'}</td>
@@ -1168,11 +1108,7 @@ const EmployeeDashboard = () => {
                         <td colSpan="5" className="text-center py-4">
                           <FaUmbrellaBeach size={24} className="text-muted mb-2 opacity-50" />
                           <p className="text-muted small mb-2">No leave requests found</p>
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={() => navigate('/apply-leave')}
-                          >
+                          <Button variant="primary" size="sm" onClick={() => navigate('/apply-leave')}>
                             Apply for Leave
                           </Button>
                         </td>
@@ -1187,7 +1123,6 @@ const EmployeeDashboard = () => {
 
         {/* Upcoming Holidays & Quick Actions */}
         <Col lg={5}>
-          {/* Upcoming Holidays Card */}
           <Card className="border-0 shadow-sm mb-3">
             <Card.Header className="bg-white py-2 py-md-3 d-flex justify-content-between align-items-center">
               <h6 className="mb-0 small">
@@ -1206,9 +1141,7 @@ const EmployeeDashboard = () => {
                         <small className="text-muted d-block">{formatDate(holiday.date)}</small>
                         <div className="mt-1">{getRegionBadge(holiday.region)}</div>
                       </div>
-                      <Badge bg="info" pill>
-                        {holiday.daysLeft}d
-                      </Badge>
+                      <Badge bg="info" pill>{holiday.daysLeft}d</Badge>
                     </div>
                   ))}
                 </div>
@@ -1220,7 +1153,6 @@ const EmployeeDashboard = () => {
             </Card.Body>
           </Card>
 
-          {/* Comp-Off Summary Card */}
           {compOffHistory.length > 0 && (
             <Card className="border-0 shadow-sm mb-3">
               <Card.Header className="bg-purple text-white py-2">
@@ -1238,9 +1170,7 @@ const EmployeeDashboard = () => {
                           <small className="fw-semibold text-truncate d-block">{item.holiday_name}</small>
                           <small className="text-muted">{formatDate(item.attendance_date)}</small>
                         </div>
-                        <Badge bg={item.is_used ? 'secondary' : 'success'} pill>
-                          {item.is_used ? 'Used' : `${item.comp_off_days}d`}
-                        </Badge>
+                        <Badge bg={item.is_used ? 'secondary' : 'success'} pill>{item.is_used ? 'Used' : `${item.comp_off_days}d`}</Badge>
                       </div>
                     </div>
                   ))}
@@ -1249,7 +1179,6 @@ const EmployeeDashboard = () => {
             </Card>
           )}
 
-          {/* Quick Actions Card */}
           <Card className="border-0 shadow-sm">
             <Card.Header className="bg-white py-2 py-md-3">
               <h6 className="mb-0 small">
@@ -1259,30 +1188,15 @@ const EmployeeDashboard = () => {
             </Card.Header>
             <Card.Body className="p-2 p-md-3">
               <div className="d-grid gap-2">
-                <Button
-                  variant="primary"
-                  onClick={() => navigate('/apply-leave')}
-                  className="d-flex align-items-center justify-content-between"
-                  size="sm"
-                >
+                <Button variant="primary" onClick={() => navigate('/apply-leave')} className="d-flex align-items-center justify-content-between" size="sm">
                   <span><FaUmbrellaBeach className="me-2" size={12} /> Apply for Leave</span>
                   <FaArrowRight size={10} />
                 </Button>
-                <Button
-                  variant="outline-primary"
-                  onClick={() => navigate('/attendance')}
-                  className="d-flex align-items-center justify-content-between"
-                  size="sm"
-                >
+                <Button variant="outline-primary" onClick={() => navigate('/attendance')} className="d-flex align-items-center justify-content-between" size="sm">
                   <span><FaClock className="me-2" size={12} /> Mark Attendance</span>
                   <FaArrowRight size={10} />
                 </Button>
-                <Button
-                  variant="outline-success"
-                  onClick={() => navigate('/salary-slip')}
-                  className="d-flex align-items-center justify-content-between"
-                  size="sm"
-                >
+                <Button variant="outline-success" onClick={() => navigate('/salary-slip')} className="d-flex align-items-center justify-content-between" size="sm">
                   <span><FaChartLine className="me-2" size={12} /> View Salary Slip</span>
                   <FaArrowRight size={10} />
                 </Button>
@@ -1291,6 +1205,78 @@ const EmployeeDashboard = () => {
           </Card>
         </Col>
       </Row>
+
+      {/* Rating History Modal */}
+      <Modal show={showRatingHistory} onHide={() => setShowRatingHistory(false)} centered size="lg">
+        <Modal.Header closeButton className="bg-warning">
+          <Modal.Title className="h6">
+            <FaStar className="me-2" /> My Performance Rating History
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="p-0">
+          <div className="border-bottom">
+            <ButtonGroup className="w-100" size="sm">
+              <Button
+                variant={activeRatingTab === 'manager' ? 'primary' : 'light'}
+                onClick={() => setActiveRatingTab('manager')}
+                className="rounded-0"
+              >
+                <FaUserTie className="me-1" /> Manager Ratings ({managerRatings.length})
+              </Button>
+              <Button
+                variant={activeRatingTab === 'admin' ? 'primary' : 'light'}
+                onClick={() => setActiveRatingTab('admin')}
+                className="rounded-0"
+              >
+                <FaUserCog className="me-1" /> Admin Ratings ({adminRatings.length})
+              </Button>
+            </ButtonGroup>
+          </div>
+          <div className="table-responsive">
+            <Table hover className="mb-0">
+              <thead className="bg-light">
+                <tr className="small">
+                  <th className="fw-normal">Period</th>
+                  <th className="fw-normal">Rating</th>
+                  <th className="fw-normal">Comments</th>
+                  <th className="fw-normal">Rated By</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(activeRatingTab === 'manager' ? managerRatings : adminRatings).map((rating, index) => (
+                  <tr key={index}>
+                    <td className="small">{rating.month_name} {rating.year}</td>
+                    <td className="small">
+                      <div className="text-nowrap">
+                        {renderStars(rating.rating)}
+                      </div>
+                      <small className={`text-${getRatingColor(rating.rating)}`}>{rating.rating_label}</small>
+                    </td>
+                    <td className="small">{rating.comments || '-'}</td>
+                    <td className="small">
+                      {rating.rater_name}
+                      <Badge bg={rating.rater_role === 'Admin' ? 'success' : 'info'} pill className="ms-1">
+                        {rating.rater_role}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+                {(activeRatingTab === 'manager' ? managerRatings.length === 0 : adminRatings.length === 0) && (
+                  <tr>
+                    <td colSpan="4" className="text-center py-4">
+                      <FaStar size={40} className="text-muted mb-2 opacity-50" />
+                      <p className="text-muted mb-0">No {activeRatingTab === 'manager' ? 'manager' : 'admin'} ratings found</p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </Table>
+          </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" size="sm" onClick={() => setShowRatingHistory(false)}>Close</Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 };

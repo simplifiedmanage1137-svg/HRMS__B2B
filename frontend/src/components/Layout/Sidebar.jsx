@@ -24,7 +24,8 @@ import {
   FaTrophy,
   FaExclamationTriangle,
   FaUserTie,
-  FaBullhorn
+  FaBullhorn,
+  FaStar
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -372,6 +373,14 @@ const Sidebar = () => {
                   to="/admin/attendance/reports"
                   icon={<FaClock size={18} />}
                   label="Attendance"
+                  onClick={closeSidebar}
+                />
+
+                {/* EMPLOYEE RATINGS LINK */}
+                <NavItem
+                  to="/admin/ratings"
+                  icon={<FaStar size={18} />}
+                  label="Employee Ratings"
                   onClick={closeSidebar}
                 />
 

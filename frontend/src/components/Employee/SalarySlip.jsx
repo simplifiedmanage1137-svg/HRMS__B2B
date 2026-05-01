@@ -862,7 +862,7 @@ const SalarySlip = () => {
                     <tr className="small">
                       <th className="fw-normal text-center" style={{ width: '50px' }}>#</th>
                       <th className="fw-normal">Month</th>
-                      <th className="fw-normal d-none d-md-table-cell">Cycle</th>  {/* NEW COLUMN */}
+                      <th className="fw-normal d-none d-md-table-cell">Cycle</th>
                       <th className="fw-normal text-end d-none d-md-table-cell">Basic</th>
                       <th className="fw-normal text-end">OT Hrs</th>
                       <th className="fw-normal text-end d-none d-lg-table-cell">OT Amt</th>

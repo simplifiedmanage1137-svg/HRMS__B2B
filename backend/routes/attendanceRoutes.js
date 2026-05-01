@@ -10,6 +10,8 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
     router.post('/clock-out', attendanceController.clockOut);
     router.post('/heartbeat', attendanceController.heartbeat);
 
+    router.post('/clock-out-missed', authenticateToken, attendanceController.clockOutMissed);
+
     // Get today's attendance for an employee
     router.get('/today/:employee_id', attendanceController.getTodayAttendance);
 
@@ -23,10 +25,14 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
     // Admin-only attendance report (full access)
     router.get('/report', authenticateToken, requireAdmin, attendanceController.getAttendanceReport);
 
-    // Regularization endpoints (Admin only) - MUST be before /:employee_id routes
-    router.get('/regularization/pending', authenticateToken, requireAdmin, attendanceController.getPendingRegularizations);
-    router.put('/regularization/:request_id/approve', authenticateToken, requireAdmin, attendanceController.approveRegularization);
-    router.put('/regularization/:request_id/reject', authenticateToken, requireAdmin, attendanceController.rejectRegularization);
+    // ✅ NEW: Team attendance report for managers
+    router.get('/team-report', authenticateToken, attendanceController.getTeamAttendanceReport);
+
+    // Regularization endpoints
+    // Managers and admins can view and act on regularization requests according to team-level approval rules.
+    router.get('/regularization/pending', authenticateToken, attendanceController.getPendingRegularizations);
+    router.put('/regularization/:request_id/approve', authenticateToken, attendanceController.approveRegularization);
+    router.put('/regularization/:request_id/reject', authenticateToken, attendanceController.rejectRegularization);
 
     // Overtime endpoints (Admin or own data)
     router.get('/overtime/:employee_id/:month/:year', authenticateToken, attendanceController.getOvertimeSummary);
@@ -130,6 +136,6 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
         }
     });
 
-    console.log('✅ Attendance routes loaded with regularization support');
+    console.log('✅ Attendance routes loaded with regularization support and team report');
     return router;
 };

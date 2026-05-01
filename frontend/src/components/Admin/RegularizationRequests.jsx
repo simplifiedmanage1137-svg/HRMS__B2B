@@ -13,8 +13,10 @@ import {
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useNotification } from '../../context/NotificationContext';
+import { useAuth } from '../../context/AuthContext';
 
 const RegularizationRequests = ({ onRequestCountChange, onRegularizationApproved }) => {
+    const { user } = useAuth();
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedRequest, setSelectedRequest] = useState(null);
@@ -76,6 +78,19 @@ const RegularizationRequests = ({ onRequestCountChange, onRegularizationApproved
         const interval = setInterval(fetchRequests, 30000);
         return () => clearInterval(interval);
     }, []);
+
+    const isTeamLeader = (designation) => {
+        if (!designation) return false;
+        const d = designation.toLowerCase();
+        return d.includes('team leader') || d.includes('team manager') ||
+               d.includes('tl') || d.includes('lead') || d.includes('manager') ||
+               d.includes('head') || d.includes('supervisor');
+    };
+
+    const canAdminAct = (request) => {
+        if (user?.role !== 'admin') return false;
+        return isTeamLeader(request.designation);
+    };
 
     const handleApprove = async () => {
         console.log('Selected Request:', selectedRequest);
@@ -310,7 +325,8 @@ const RegularizationRequests = ({ onRequestCountChange, onRegularizationApproved
     }
 
     return (
-        <div>
+        <>
+            <div>
             {message.text && (
                 <Alert
                     variant={message.type}
@@ -435,37 +451,40 @@ const RegularizationRequests = ({ onRequestCountChange, onRegularizationApproved
                                                         </td>
                                                         <td>{getStatusBadge(request.status)}</td>
                                                         <td className="text-center">
-                                                            {request.status === 'pending' && (
-                                                                <div className="d-flex gap-2 justify-content-center">
-                                                                    <Button
-                                                                        variant="success"
-                                                                        size="sm"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            setSelectedRequest(request);
-                                                                            const localTime = toDatetimeLocal(request.requested_clock_out_time);
-                                                                            setApprovedTime(localTime || '');
-                                                                            setShowApproveModal(true);
-                                                                        }}
-                                                                    >
-                                                                        <FaCheckCircle className="me-1" size={12} />
-                                                                        Approve
-                                                                    </Button>
-                                                                    <Button
-                                                                        variant="danger"
-                                                                        size="sm"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            setSelectedRequest(request);
-                                                                            setShowRejectModal(true);
-                                                                        }}
-                                                                    >
-                                                                        <FaTimesCircle className="me-1" size={12} />
-                                                                        Reject
-                                                                    </Button>
+                                                            {request.status === 'pending' && canAdminAct(request) ? (
+                                                                <div className="d-flex flex-column gap-2 justify-content-center">
+                                                                    <div className="d-flex gap-2 justify-content-center">
+                                                                        <Button
+                                                                            variant="success"
+                                                                            size="sm"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                setSelectedRequest(request);
+                                                                                const localTime = toDatetimeLocal(request.requested_clock_out_time);
+                                                                                setApprovedTime(localTime || '');
+                                                                                setShowApproveModal(true);
+                                                                            }}
+                                                                        >
+                                                                            <FaCheckCircle className="me-1" size={12} />
+                                                                            Approve
+                                                                        </Button>
+                                                                        <Button
+                                                                            variant="danger"
+                                                                            size="sm"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                setSelectedRequest(request);
+                                                                                setShowRejectModal(true);
+                                                                            }}
+                                                                        >
+                                                                            <FaTimesCircle className="me-1" size={12} />
+                                                                            Reject
+                                                                        </Button>
+                                                                    </div>
                                                                 </div>
-                                                            )}
-                                                            {request.status !== 'pending' && (
+                                                            ) : request.status === 'pending' ? (
+                                                                <small className="text-muted">Pending approval from manager</small>
+                                                            ) : (
                                                                 <Button
                                                                     variant="outline-secondary"
                                                                     size="sm"
@@ -574,178 +593,180 @@ const RegularizationRequests = ({ onRequestCountChange, onRegularizationApproved
                 </>
             )}
 
-            {/* Approve Modal */}
-            <Modal show={showApproveModal} onHide={() => setShowApproveModal(false)} centered size="lg">
-                <Modal.Header closeButton className="bg-success text-white">
-                    <Modal.Title className="h6">
-                        <FaCheckCircle className="me-2" />
-                        Approve Regularization Request
-                    </Modal.Title>
-                </Modal.Header>
-                <Modal.Body className="p-4">
-                    {selectedRequest && (
-                        <>
-                            <div className="mb-3 p-3 bg-light rounded">
-                                <Row className="g-3">
-                                    <Col xs={12} md={6}>
-                                        <div className="small">
-                                            <strong>Employee:</strong>
-                                            <p className="mb-0">{selectedRequest.employee_name}</p>
-                                            <small className="text-muted">{selectedRequest.employee_id}</small>
-                                        </div>
-                                    </Col>
-                                    <Col xs={12} md={6}>
-                                        <div className="small">
-                                            <strong>Date:</strong>
-                                            <p className="mb-0">{formatDate(selectedRequest.attendance_date)}</p>
-                                        </div>
-                                    </Col>
-                                    <Col xs={12} md={6}>
-                                        <div className="small">
-                                            <strong>Clock In Time:</strong>
-                                            <p className="mb-0 text-success">{formatDateTime(selectedRequest.clock_in_time)}</p>
-                                        </div>
-                                    </Col>
-                                    <Col xs={12} md={6}>
-                                        <div className="small">
-                                            <strong>Requested Clock Out:</strong>
-                                            <p className="mb-0 text-warning">{formatRequestedClockOutTime(selectedRequest.requested_clock_out_time)}</p>
-                                        </div>
-                                    </Col>
-                                    <Col xs={12}>
-                                        <div className="small">
-                                            <strong>Reason:</strong>
-                                            <p className="mb-0 text-muted">{selectedRequest.reason || 'No reason provided'}</p>
-                                        </div>
-                                    </Col>
-                                </Row>
-                            </div>
-
-                            <div className="mb-3">
-                                <label className="form-label fw-semibold">Clock Out Time *</label>
-                                <input
-                                    type="datetime-local"
-                                    className="form-control"
-                                    value={approvedTime}
-                                    onChange={(e) => setApprovedTime(e.target.value)}
-                                    required
-                                />
-                                <small className="text-muted">
-                                    You can adjust the clock-out time if needed
-                                </small>
-                            </div>
-
-                            <div className="mb-3">
-                                <label className="form-label fw-semibold">Admin Notes (Optional)</label>
-                                <textarea
-                                    className="form-control"
-                                    rows="3"
-                                    placeholder="Add any notes about this approval..."
-                                    value={adminNotes}
-                                    onChange={(e) => setAdminNotes(e.target.value)}
-                                />
-                            </div>
-
-                            <Alert variant="info" className="small">
-                                <FaInfoCircle className="me-2" />
-                                After approval, the employee's attendance will be updated automatically.
-                            </Alert>
-                        </>
-                    )}
-                </Modal.Body>
-                <Modal.Footer>
-                    <Button variant="secondary" size="sm" onClick={() => setShowApproveModal(false)}>
-                        Cancel
-                    </Button>
-                    <Button
-                        variant="success"
-                        size="sm"
-                        onClick={handleApprove}
-                        disabled={processing || !approvedTime}
-                    >
-                        {processing ? (
-                            <>
-                                <Spinner size="sm" animation="border" className="me-2" />
-                                Processing...
-                            </>
-                        ) : (
-                            <>
-                                <FaCheckCircle className="me-2" />
-                                Approve Request
-                            </>
-                        )}
-                    </Button>
-                </Modal.Footer>
-            </Modal>
-
-            {/* Reject Modal */}
-            <Modal show={showRejectModal} onHide={() => setShowRejectModal(false)} centered>
-                <Modal.Header closeButton className="bg-danger text-white">
-                    <Modal.Title className="h6">
-                        <FaTimesCircle className="me-2" />
-                        Reject Regularization Request
-                    </Modal.Title>
-                </Modal.Header>
-                <Modal.Body className="p-4">
-                    {selectedRequest && (
-                        <>
-                            <div className="mb-3 p-3 bg-light rounded">
-                                <Row className="g-3">
-                                    <Col xs={12}>
-                                        <div className="small">
-                                            <strong>Employee:</strong>
-                                            <p className="mb-0">{selectedRequest.employee_name}</p>
-                                        </div>
-                                    </Col>
-                                    <Col xs={12}>
-                                        <div className="small">
-                                            <strong>Date:</strong>
-                                            <p className="mb-0">{formatDate(selectedRequest.attendance_date)}</p>
-                                        </div>
-                                    </Col>
-                                </Row>
-                            </div>
-
-                            <div className="mb-3">
-                                <label className="form-label fw-semibold">Rejection Reason *</label>
-                                <textarea
-                                    className="form-control"
-                                    rows="3"
-                                    placeholder="Please provide a reason for rejection..."
-                                    value={rejectionReason}
-                                    onChange={(e) => setRejectionReason(e.target.value)}
-                                    required
-                                />
-                                <small className="text-muted">This will be sent to the employee</small>
-                            </div>
-                        </>
-                    )}
-                </Modal.Body>
-                <Modal.Footer>
-                    <Button variant="secondary" size="sm" onClick={() => setShowRejectModal(false)}>
-                        Cancel
-                    </Button>
-                    <Button
-                        variant="danger"
-                        size="sm"
-                        onClick={handleReject}
-                        disabled={processing || !rejectionReason}
-                    >
-                        {processing ? (
-                            <>
-                                <Spinner size="sm" animation="border" className="me-2" />
-                                Processing...
-                            </>
-                        ) : (
-                            <>
-                                <FaTimesCircle className="me-2" />
-                                Reject Request
-                            </>
-                        )}
-                    </Button>
-                </Modal.Footer>
-            </Modal>
         </div>
+
+        {/* Approve Modal */}
+        <Modal show={showApproveModal} onHide={() => setShowApproveModal(false)} centered size="lg">
+            <Modal.Header closeButton className="bg-success text-white">
+                <Modal.Title className="h6">
+                    <FaCheckCircle className="me-2" />
+                    Approve Regularization Request
+                </Modal.Title>
+            </Modal.Header>
+            <Modal.Body className="p-4">
+                {selectedRequest && (
+                    <>
+                        <div className="mb-3 p-3 bg-light rounded">
+                            <Row className="g-3">
+                                <Col xs={12} md={6}>
+                                    <div className="small">
+                                        <strong>Employee:</strong>
+                                        <p className="mb-0">{selectedRequest.employee_name}</p>
+                                        <small className="text-muted">{selectedRequest.employee_id}</small>
+                                    </div>
+                                </Col>
+                                <Col xs={12} md={6}>
+                                    <div className="small">
+                                        <strong>Date:</strong>
+                                        <p className="mb-0">{formatDate(selectedRequest.attendance_date)}</p>
+                                    </div>
+                                </Col>
+                                <Col xs={12} md={6}>
+                                    <div className="small">
+                                        <strong>Clock In Time:</strong>
+                                        <p className="mb-0 text-success">{formatDateTime(selectedRequest.clock_in_time)}</p>
+                                    </div>
+                                </Col>
+                                <Col xs={12} md={6}>
+                                    <div className="small">
+                                        <strong>Requested Clock Out:</strong>
+                                        <p className="mb-0 text-warning">{formatRequestedClockOutTime(selectedRequest.requested_clock_out_time)}</p>
+                                    </div>
+                                </Col>
+                                <Col xs={12}>
+                                    <div className="small">
+                                        <strong>Reason:</strong>
+                                        <p className="mb-0 text-muted">{selectedRequest.reason || 'No reason provided'}</p>
+                                    </div>
+                                </Col>
+                            </Row>
+                        </div>
+
+                        <div className="mb-3">
+                            <label className="form-label fw-semibold">Clock Out Time *</label>
+                            <input
+                                type="datetime-local"
+                                className="form-control"
+                                value={approvedTime}
+                                onChange={(e) => setApprovedTime(e.target.value)}
+                                required
+                            />
+                            <small className="text-muted">
+                                You can adjust the clock-out time if needed
+                            </small>
+                        </div>
+
+                        <div className="mb-3">
+                            <label className="form-label fw-semibold">Admin Notes (Optional)</label>
+                            <textarea
+                                className="form-control"
+                                rows="3"
+                                placeholder="Add any notes about this approval..."
+                                value={adminNotes}
+                                onChange={(e) => setAdminNotes(e.target.value)}
+                            />
+                        </div>
+
+                        <Alert variant="info" className="small">
+                            <FaInfoCircle className="me-2" />
+                            After approval, the employee's attendance will be updated automatically.
+                        </Alert>
+                    </>
+                )}
+            </Modal.Body>
+            <Modal.Footer>
+                <Button variant="secondary" size="sm" onClick={() => setShowApproveModal(false)}>
+                    Cancel
+                </Button>
+                <Button
+                    variant="success"
+                    size="sm"
+                    onClick={handleApprove}
+                    disabled={processing || !approvedTime}
+                >
+                    {processing ? (
+                        <>
+                            <Spinner size="sm" animation="border" className="me-2" />
+                            Processing...
+                        </>
+                    ) : (
+                        <>
+                            <FaCheckCircle className="me-2" />
+                            Approve Request
+                        </>
+                    )}
+                </Button>
+            </Modal.Footer>
+        </Modal>
+
+        {/* Reject Modal */}
+        <Modal show={showRejectModal} onHide={() => setShowRejectModal(false)} centered>
+            <Modal.Header closeButton className="bg-danger text-white">
+                <Modal.Title className="h6">
+                    <FaTimesCircle className="me-2" />
+                    Reject Regularization Request
+                </Modal.Title>
+            </Modal.Header>
+            <Modal.Body className="p-4">
+                {selectedRequest && (
+                    <>
+                        <div className="mb-3 p-3 bg-light rounded">
+                            <Row className="g-3">
+                                <Col xs={12}>
+                                    <div className="small">
+                                        <strong>Employee:</strong>
+                                        <p className="mb-0">{selectedRequest.employee_name}</p>
+                                    </div>
+                                </Col>
+                                <Col xs={12}>
+                                    <div className="small">
+                                        <strong>Date:</strong>
+                                        <p className="mb-0">{formatDate(selectedRequest.attendance_date)}</p>
+                                    </div>
+                                </Col>
+                            </Row>
+                        </div>
+
+                        <div className="mb-3">
+                            <label className="form-label fw-semibold">Rejection Reason *</label>
+                            <textarea
+                                className="form-control"
+                                rows="3"
+                                placeholder="Please provide a reason for rejection..."
+                                value={rejectionReason}
+                                onChange={(e) => setRejectionReason(e.target.value)}
+                                required
+                            />
+                            <small className="text-muted">This will be sent to the employee</small>
+                        </div>
+                    </>
+                )}
+            </Modal.Body>
+            <Modal.Footer>
+                <Button variant="secondary" size="sm" onClick={() => setShowRejectModal(false)}>
+                    Cancel
+                </Button>
+                <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={handleReject}
+                    disabled={processing || !rejectionReason}
+                >
+                    {processing ? (
+                        <>
+                            <Spinner size="sm" animation="border" className="me-2" />
+                            Processing...
+                        </>
+                    ) : (
+                        <>
+                            <FaTimesCircle className="me-2" />
+                            Reject Request
+                        </>
+                    )}
+                </Button>
+            </Modal.Footer>
+        </Modal>
+        </>
     );
 };
 
