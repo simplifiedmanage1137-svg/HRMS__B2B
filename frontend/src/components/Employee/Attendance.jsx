@@ -631,7 +631,7 @@ const Attendance = () => {
 
       setMissedClockOuts(missedRecords);
 
-      const incompleteRecord = missedRecords.find(r => !r.has_clock_out && !r.is_regularized && !r.regularization_requested && r.regularization_status !== 'rejected');
+      const incompleteRecord = missedRecords.find(r => !r.has_clock_out && !r.is_regularized && !r.regularization_requested && r.regularization_status !== 'rejected' && !r.can_regularize);
 
       if (incompleteRecord && !activeSession) {
         console.log('🔄 Creating virtual session for incomplete record:', incompleteRecord.attendance_date);
@@ -1683,7 +1683,7 @@ const Attendance = () => {
       </h5>
 
       {/* Regularization Requests Section */}
-      {missedClockOuts.length > 0 && (
+      {missedClockOuts.length > 0 && !activeSession && (
         <>
           {missedClockOuts.some(r => r.can_regularize === true && (!r.regularization_requested || r.regularization_status === 'rejected') && !r.is_regularized) && (
             <Card className="mb-4 border-warning bg-warning bg-opacity-10">
