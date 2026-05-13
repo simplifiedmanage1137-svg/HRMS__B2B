@@ -125,8 +125,6 @@ const RegularizationRequests = ({ onRequestCountChange }) => {
 
   useEffect(() => {
     fetchRequests();
-    const interval = setInterval(fetchRequests, 30000);
-    return () => clearInterval(interval);
   }, []);
 
   const formatLateTime = (lateMinutes) => {
@@ -834,19 +832,6 @@ const AdminDashboard = () => {
   useEffect(() => {
     fetchDashboardData();
     fetchTodayEvents();
-
-    const attendanceInterval = setInterval(() => {
-      refreshAttendanceData();
-    }, 60000);
-
-    const leaveInterval = setInterval(() => {
-      refreshLeaveRequests();
-    }, 30000);
-
-    return () => {
-      clearInterval(attendanceInterval);
-      clearInterval(leaveInterval);
-    };
   }, []);
 
   // Debug: Log leave requests state changes

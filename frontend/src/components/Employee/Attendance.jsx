@@ -100,6 +100,7 @@ const Attendance = () => {
   const [showRegularizationModal, setShowRegularizationModal] = useState(false);
   const [selectedMissedRecord, setSelectedMissedRecord] = useState(null);
   const [regularizationTime, setRegularizationTime] = useState('');
+  const [regularizationMinTime, setRegularizationMinTime] = useState('');
   const [regularizationReason, setRegularizationReason] = useState('');
   const [submittingRequest, setSubmittingRequest] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -681,6 +682,11 @@ const Attendance = () => {
       return;
     }
 
+    if (regularizationMinTime && regularizationTime < regularizationMinTime) {
+      setMessage({ type: 'danger', text: 'Clock-out time cannot be before clock-in time.' });
+      return;
+    }
+
     setSubmittingRequest(true);
 
     try {
@@ -1177,24 +1183,31 @@ const Attendance = () => {
       console.log('✅ Clock-in response:', response.data);
       setMessage({ type: 'success', text: response.data.message });
 
+      // ✅ CRITICAL FIX: Set attendance and session correctly
+      const clockInIST = response.data.clock_in_ist || response.data.clock_in;
+
       const newAttendance = {
-        clock_in: response.data.clock_in_ist || response.data.clock_in,
+        clock_in: clockInIST,
+        clock_in_ist: clockInIST,
+        clock_in_display: formatTimeIST(clockInIST),
         late_minutes: response.data.late_minutes || 0,
         late_display: response.data.late_display || formatLateTime(response.data.late_minutes),
-        status: response.data.status,
+        status: 'working',
         attendance_date: new Date().toISOString().split('T')[0]
       };
       setAttendance(newAttendance);
 
+      // ✅ CRITICAL FIX: Set active session properly
       const session = {
         session_id: response.data.session_id,
-        clock_in_time: response.data.clock_in,
+        clock_in_time: clockInIST,
         is_virtual: false
       };
       setActiveSession(session);
       saveSessionToStorage(session);
       setHasClockedOutToday(false);
 
+      // ✅ Force fetch today's attendance again to ensure consistency
       await fetchTodayAttendance();
       await fetchAttendanceHistory();
       await fetchMissedClockOuts();
@@ -1444,6 +1457,13 @@ const Attendance = () => {
     setSelectedMissedRecord(record);
     const [year, month, day] = record.attendance_date.split('-');
     setRegularizationTime(`${year}-${month}-${day}T18:00`);
+    const clockInRaw = record.clock_in_ist || record.clock_in || '';
+    if (clockInRaw) {
+      const minDT = clockInRaw.includes('T') ? clockInRaw.slice(0, 16) : clockInRaw.replace(' ', 'T').slice(0, 16);
+      setRegularizationMinTime(minDT);
+    } else {
+      setRegularizationMinTime(`${year}-${month}-${day}T00:00`);
+    }
     setShowRegularizationModal(true);
   };
 
@@ -1459,7 +1479,12 @@ const Attendance = () => {
   const renderClockButton = () => {
     const hasIncompleteRecord = missedClockOuts.some(r => !r.has_clock_out && !r.is_regularized);
 
-    if (hasIncompleteRecord || activeSession) {
+    // ✅ CRITICAL FIX: Check if there's an active session OR today's attendance has clock_in without clock_out
+    const hasActiveSession = activeSession !== null;
+    const hasTodayClockInWithoutClockOut = attendance?.clock_in && !attendance?.clock_out;
+
+    // If there's an active session OR today's attendance has clock-in without clock-out, show Clock Out button
+    if (hasActiveSession || hasTodayClockInWithoutClockOut || hasIncompleteRecord) {
       return (
         <Button variant="warning" size="lg" className="w-100 py-3" onClick={handleClockOut} disabled={loading}>
           {loading ? (
@@ -2056,7 +2081,7 @@ const Attendance = () => {
                   {selectedMissedRecord.shift_timing && (<div className="col-12"><div className="small text-muted">Expected Shift</div><Badge bg="info" className="mt-1">{selectedMissedRecord.shift_timing}</Badge></div>)}
                 </div>
               </div>
-              <div className="mb-3"><label className="form-label fw-semibold">Select Clock Out Time *</label><input type="datetime-local" className="form-control" value={regularizationTime} onChange={(e) => setRegularizationTime(e.target.value)} required /><small className="text-muted">Select the time you actually left work on {selectedMissedRecord?.attendance_date}</small></div>
+              <div className="mb-3"><label className="form-label fw-semibold">Select Clock Out Time *</label><input type="datetime-local" className="form-control" value={regularizationTime} min={regularizationMinTime} onChange={(e) => setRegularizationTime(e.target.value)} required /><small className="text-muted">Select the time you actually left work on {selectedMissedRecord?.attendance_date}</small></div>
               <div className="mb-3"><label className="form-label fw-semibold">Reason (Optional)</label><textarea className="form-control" rows="3" placeholder="e.g., Forgot to clock out, System issue, Network problem, etc." value={regularizationReason} onChange={(e) => setRegularizationReason(e.target.value)} /></div>
               <Alert variant="info" className="small"><FaInfoCircle className="me-2" /><strong>Note:</strong> Your request will be reviewed by HR. Once approved, your attendance will be updated with the correct clock-out time.</Alert>
             </>
