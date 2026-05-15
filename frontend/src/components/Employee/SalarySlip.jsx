@@ -1,4 +1,3 @@
-// src/components/Employee/SalarySlip.jsx
 import React, { useState, useEffect } from 'react';
 import {
   Row,
@@ -997,8 +996,6 @@ const SalarySlip = () => {
         </Col>
       </Row>
 
-      {/* Salary Slip Modal - Responsive */}
-      {/* Salary Slip Modal - Responsive */}
       <Modal
         show={showSlipModal}
         onHide={() => setShowSlipModal(false)}

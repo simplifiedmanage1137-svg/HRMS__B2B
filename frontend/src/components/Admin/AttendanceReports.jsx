@@ -244,11 +244,24 @@ const AttendanceReports = () => {
       });
 
       const processedAttendance = Object.values(dedupedMap).map(record => {
+        // Use total_hours_display from backend if available
+        // Only recalculate for active sessions (no clock_out)
         if (record.clock_in && !record.clock_out) {
+          // Parse IST string manually to avoid UTC offset issue
+          const clockInStr = record.clock_in_ist || record.clock_in;
+          let clockInTime = null;
+          if (typeof clockInStr === 'string' && clockInStr.includes(' ')) {
+            const [dp, tp] = clockInStr.split(' ');
+            const [y, mo, d] = dp.split('-').map(Number);
+            const [h, mi, s = 0] = tp.split(':').map(Number);
+            clockInTime = new Date(y, mo - 1, d, h, mi, s);
+          } else {
+            clockInTime = new Date(clockInStr);
+          }
           const now = new Date();
-          const clockInTime = parseDateTime(record.clock_in);
-          const currentHours = clockInTime ? (now - clockInTime) / (1000 * 60 * 60) : 0;
-          record.total_hours = currentHours.toFixed(2);
+          const totalMinutes = clockInTime ? Math.round((now - clockInTime) / (1000 * 60)) : 0;
+          record.total_hours = (totalMinutes / 60).toFixed(2);
+          record.total_minutes = totalMinutes;
           record.status = 'working';
         }
 
@@ -1258,7 +1271,7 @@ const AttendanceReports = () => {
                             <td className="small d-none d-xl-table-cell">
                               {record.total_hours ? (
                                 <span className="text-nowrap">
-                                  {formatHours(parseFloat(record.total_hours))}
+                                  {record.total_hours_display || formatHours(parseFloat(record.total_hours))}
                                 </span>
                               ) : '-'}
                             </td>

@@ -140,11 +140,12 @@ const Attendance = () => {
     return new Date(year, month - 1, day, hour, minute, second);
   };
 
+  // In Attendance.jsx - Update calculateTotalMinutesFixed function
+
   // Calculate total minutes between two times with proper cross-midnight support
   const calculateTotalMinutesFixed = (clockInStr, clockOutOrCurrentStr) => {
     if (!clockInStr || !clockOutOrCurrentStr) return 0;
 
-    // Parse dates properly
     const parseDateTime = (dateTimeStr) => {
       let cleanStr = dateTimeStr.trim();
       cleanStr = cleanStr.replace('T', ' ');
@@ -541,6 +542,7 @@ const Attendance = () => {
       } else {
         console.log('⚠️ No attendance data for today');
         setAttendance(null);
+        setHasClockedOutToday(false);
       }
 
       // Handle server session
@@ -551,6 +553,7 @@ const Attendance = () => {
       }
       // If no server session but attendance has clock_in without clock_out
       else if (attendanceData?.clock_in && !attendanceData?.clock_out) {
+        // cross-midnight: attendance_date may be yesterday but session still active
         const inferredSession = {
           session_id: attendanceData.session_id || 'temp-' + Date.now(),
           clock_in_time: attendanceData.clock_in,
@@ -560,22 +563,16 @@ const Attendance = () => {
         saveSessionToStorage(inferredSession);
         setHasClockedOutToday(false);
       }
-      // No active session and no attendance data (cross-midnight: attendance_date is yesterday)
-      // DO NOT clear session here - isValidSession will handle it via server check
       else if (!serverSession && !attendanceData) {
-        // Only clear if stored session is virtual (no real server session backing it)
-        const stored = loadSessionFromStorage();
-        if (!stored || stored.is_virtual) {
-          setActiveSession(null);
-          clearSessionFromStorage();
-        }
+        setActiveSession(null);
+        clearSessionFromStorage();
         setHasClockedOutToday(false);
       }
-      // No active server session + today's attendance is complete (regularization approved)
       else if (!serverSession && attendanceData?.clock_out) {
         setActiveSession(null);
         clearSessionFromStorage();
         setHasClockedOutToday(true);
+        fetchMissedClockOuts();
       }
 
       // Set up real-time interval for updating working hours every minute
@@ -672,11 +669,11 @@ const Attendance = () => {
       }
 
       // ✅ Show regularization messages only for PAST dates
-      const nowISTDate = new Date().toISOString().split('T')[0];
+      const nowISTDateStr = nowIST().split(' ')[0];
       const eligibleRecords = missedRecords.filter(r =>
         r.can_regularize === true &&
         !r.is_regularized &&
-        r.attendance_date !== nowISTDate
+        r.attendance_date !== nowISTDateStr
       );
       const pendingRecords = missedRecords.filter(r =>
         r.regularization_requested &&
@@ -1099,6 +1096,23 @@ const Attendance = () => {
           }
           return prev;
         });
+      } else if (!todayRecord) {
+        // No record for today - clear stale attendance state
+        // (handles cross-midnight case where yesterday's record is still in state)
+        setAttendance(prev => {
+          if (prev && prev.attendance_date && prev.attendance_date !== todayStr) {
+            return null;
+          }
+          return prev;
+        });
+        // Also clear active session if no today record and no server session
+        setActiveSession(prev => {
+          if (prev && !prev.is_virtual) {
+            // Will be validated by isValidSession check
+            return prev;
+          }
+          return prev;
+        });
       }
 
       // Salary cycle: today >= 26 → this month 26 to next month 25
@@ -1192,7 +1206,7 @@ const Attendance = () => {
         !r.is_regularized &&
         !r.regularization_requested &&
         r.regularization_status !== 'rejected' &&
-        r.is_today === true  // Only block for today's incomplete record
+        r.is_today === true  // Only block for today's incomplete record (backend uses IST date)
       );
 
       if (incompleteRecord) {
@@ -1304,42 +1318,38 @@ const Attendance = () => {
   const handleClockOut = async () => {
     setLoading(true);
     try {
-      // ✅ FIRST: Get session from state or storage
-      let sessionId = activeSession?.session_id || loadSessionFromStorage()?.session_id;
+      // ✅ PRE-CHECK: Verify there's actually an active session on server
+      const preCheckResponse = await axios.get(API_ENDPOINTS.ATTENDANCE_TODAY(user.employeeId));
+      const serverSession = preCheckResponse.data.active_session;
+      const todayAtt = preCheckResponse.data.attendance;
 
-      // ✅ SECOND: If no session in storage, try to get from API
-      if (!sessionId) {
-        console.log('🔍 No session in storage, fetching from API...');
-        try {
-          const attendanceResponse = await axios.get(API_ENDPOINTS.ATTENDANCE_TODAY(user.employeeId));
-          const todayAttendance = attendanceResponse.data.attendance;
-          const serverSession = attendanceResponse.data.active_session;
-
-          if (serverSession && serverSession.session_id) {
-            sessionId = serverSession.session_id;
-            setActiveSession(serverSession);
-            saveSessionToStorage(serverSession);
-            console.log('✅ Found session from server:', sessionId);
-          } else if (todayAttendance && todayAttendance.session_id && !todayAttendance.clock_out) {
-            sessionId = todayAttendance.session_id;
-            const newSession = {
-              session_id: sessionId,
-              clock_in_time: todayAttendance.clock_in_ist || todayAttendance.clock_in,
-              is_virtual: false
-            };
-            setActiveSession(newSession);
-            saveSessionToStorage(newSession);
-            console.log('✅ Created session from attendance record:', sessionId);
-          }
-        } catch (error) {
-          console.error('Error fetching session from API:', error);
-        }
+      // If no active server session AND today's attendance is complete → show Clock In
+      if (!serverSession && todayAtt?.clock_out) {
+        setActiveSession(null);
+        clearSessionFromStorage();
+        setHasClockedOutToday(true);
+        setMissedClockOuts([]);
+        setLoading(false);
+        return;
       }
 
-      // ✅ THIRD: If we have a session ID, proceed with clock-out
-      if (sessionId) {
-        console.log('🔄 Using session for clock-out:', sessionId);
+      // Get session ID
+      let sessionId = serverSession?.session_id || activeSession?.session_id || loadSessionFromStorage()?.session_id;
 
+      // If no session found, try from today's attendance
+      if (!sessionId && todayAtt && todayAtt.session_id && !todayAtt.clock_out) {
+        sessionId = todayAtt.session_id;
+        const newSession = {
+          session_id: sessionId,
+          clock_in_time: todayAtt.clock_in_ist || todayAtt.clock_in,
+          is_virtual: false
+        };
+        setActiveSession(newSession);
+        saveSessionToStorage(newSession);
+      }
+
+      // Proceed with clock-out
+      if (sessionId) {
         const response = await axios.post(API_ENDPOINTS.ATTENDANCE_CLOCK_OUT, {
           employee_id: user.employeeId,
           session_id: sessionId,
@@ -1348,9 +1358,9 @@ const Attendance = () => {
           accuracy: null
         });
 
-        console.log('✅ Clock-out response:', response.data);
         setMessage({ type: 'success', text: response.data.message });
 
+        // ✅ CRITICAL: Update attendance state to show clock_out
         setAttendance(prev => ({
           ...prev,
           clock_out: response.data.clock_out_ist || response.data.clock_out,
@@ -1361,10 +1371,13 @@ const Attendance = () => {
           status: response.data.status
         }));
 
+        // ✅ Clear session and set hasClockedOutToday = true
         setActiveSession(null);
         clearSessionFromStorage();
         setHasClockedOutToday(true);
+        setMissedClockOuts([]);
 
+        // ✅ Force refresh to get fresh state
         await fetchTodayAttendance();
         await fetchAttendanceHistory();
         await fetchMissedClockOuts();
@@ -1373,46 +1386,22 @@ const Attendance = () => {
         return;
       }
 
-      // ✅ FOURTH: Check if there's an incomplete record for today
-      const nowISTDate = new Date().toISOString().split('T')[0];
-      const todayIncompleteRecord = missedClockOuts.find(r =>
-        !r.has_clock_out &&
-        !r.is_regularized &&
-        r.attendance_date === nowISTDate &&
-        (!r.regularization_requested || r.regularization_status === 'rejected')
-      );
-
-      if (todayIncompleteRecord) {
-        console.log('🔄 Found today\'s incomplete record, clocking out via missed endpoint:', todayIncompleteRecord.attendance_date);
-
-        const response = await axios.post(`${API_ENDPOINTS.ATTENDANCE}/clock-out-missed`, {
-          employee_id: user.employeeId,
-          attendance_id: todayIncompleteRecord.id,
-          attendance_date: todayIncompleteRecord.attendance_date
-        });
-
-        console.log('✅ Clock-out response:', response.data);
-        setMessage({ type: 'success', text: response.data.message });
-
-        setActiveSession(null);
-        clearSessionFromStorage();
-        setHasClockedOutToday(true);
-
-        await fetchTodayAttendance();
-        await fetchAttendanceHistory();
-        await fetchMissedClockOuts();
-
-        setLoading(false);
-        return;
-      }
-
-      // ✅ If no session found
       setMessage({ type: 'warning', text: 'No active session found. Please clock in first.' });
       setLoading(false);
 
     } catch (error) {
       console.error('❌ Clock-out error:', error);
-      setMessage({ type: 'danger', text: error.response?.data?.message || 'Failed to clock out' });
+      const errData = error.response?.data;
+      if (errData?.already_clocked_out || error.response?.status === 404) {
+        setActiveSession(null);
+        clearSessionFromStorage();
+        setHasClockedOutToday(true);
+        setMissedClockOuts([]);
+        await fetchTodayAttendance();
+        await fetchMissedClockOuts();
+      } else {
+        setMessage({ type: 'danger', text: errData?.message || 'Failed to clock out' });
+      }
       setLoading(false);
     }
   };
@@ -1443,15 +1432,14 @@ const Attendance = () => {
       // Server has matching active session
       if (serverSession && serverSession.session_id === currentSession.session_id) return true;
 
+      // No server active session at all - stored session is stale
+      if (!serverSession) return false;
+
       // Today's attendance is complete (clock_out set) - session no longer valid
       if (todayAttendance?.clock_out) return false;
 
       // Today's attendance has clock_in without clock_out - session valid
       if (todayAttendance?.clock_in && !todayAttendance?.clock_out) return true;
-
-      // Cross-midnight: no today attendance but server has active session for this employee
-      // (attendance_date is yesterday, but session is still active)
-      if (serverSession && serverSession.is_active) return true;
 
       return false;
     } catch (error) {
@@ -1461,11 +1449,20 @@ const Attendance = () => {
 
   useEffect(() => {
     const checkSession = async () => {
+      if (!activeSession) return;
       const valid = await isValidSession();
       setIsSessionValid(valid);
-      if (!valid && activeSession) {
+      if (!valid) {
         setActiveSession(null);
         clearSessionFromStorage();
+        // Check if today's attendance is complete
+        try {
+          const res = await axios.get(API_ENDPOINTS.ATTENDANCE_TODAY(user.employeeId));
+          if (res.data.attendance?.clock_out) {
+            setHasClockedOutToday(true);
+            setMissedClockOuts([]);
+          }
+        } catch (_) { }
       }
     };
     checkSession();
@@ -1480,7 +1477,6 @@ const Attendance = () => {
     const updateCurrentHours = () => {
       const clockInStr = attendance.clock_in_ist || attendance.clock_in;
       const currentTimeIST = nowIST();
-
       const totalMinutes = calculateTotalMinutesFixed(clockInStr, currentTimeIST);
       const hours = Math.floor(totalMinutes / 60);
       const minutes = Math.round(totalMinutes % 60);
@@ -1492,7 +1488,6 @@ const Attendance = () => {
         total_minutes: totalMinutes
       }));
 
-      // Also update in attendanceHistory
       setAttendanceHistory(prevHistory => {
         const todayStr = formatDateStr(new Date());
         return prevHistory.map(record => {
@@ -1509,23 +1504,25 @@ const Attendance = () => {
       });
     };
 
-    // Update every minute
     const interval = setInterval(updateCurrentHours, 60000);
-
     return () => clearInterval(interval);
   }, [attendance?.clock_in, attendance?.clock_out]);
 
   useEffect(() => {
-    // Only create virtual session for TODAY's incomplete record (not past dates needing regularization)
+    // Only create virtual session for TODAY's incomplete record
+    // AND only if server confirms there's an active session
+    if (!missedClockOuts.length || activeSession) return;
+
     const todayIncomplete = missedClockOuts.find(r =>
       !r.has_clock_out &&
       !r.is_regularized &&
       !r.regularization_requested &&
       r.regularization_status !== 'rejected' &&
-      r.is_today === true
+      r.is_today === true &&
+      r.has_active_session === true  // ✅ Only if server confirms active session
     );
 
-    if (todayIncomplete && !activeSession) {
+    if (todayIncomplete) {
       const virtualSession = {
         session_id: `virtual-${todayIncomplete.id}-${Date.now()}`,
         clock_in_time: todayIncomplete.clock_in_ist || todayIncomplete.clock_in,
@@ -1544,7 +1541,7 @@ const Attendance = () => {
   };
 
   const handleOpenRegularizationModal = (record) => {
-    if (record.has_clock_out) {
+    if (record.clock_out || record.clock_out_ist) {
       setMessage({ type: 'info', text: `Attendance for ${record.attendance_date} already has a clock-out time.` });
       return;
     }
@@ -1582,98 +1579,110 @@ const Attendance = () => {
   // In Attendance.jsx - Replace renderClockButton function
 
   const renderClockButton = () => {
-    const nowISTDate = new Date().toISOString().split('T')[0];
-    const regularizationThreshold = missedClockOuts[0]?.regularization_threshold || 15;
+    const REGULARIZATION_THRESHOLD = 15; // hours
+    const nowISTDateStr = nowIST().split(' ')[0];
 
-    // ✅ Check for active session (regardless of date)
-    const hasActiveSession = activeSession !== null;
+    // Current working hours (real-time)
+    const currentHours = attendance?.total_hours || 0;
 
-    // ✅ Check if today's attendance has clock_in without clock_out
-    const hasTodayClockInWithoutClockOut = attendance?.clock_in && !attendance?.clock_out;
+    // ✅ Is employee currently clocked in (no clock_out yet)?
+    const isClockedIn = !!attendance?.clock_in && !attendance?.clock_out;
 
-    // ✅ Check for today's incomplete record (NOT previous days)
-    const hasTodayIncompleteRecord = missedClockOuts.some(r =>
-      !r.has_clock_out &&
-      !r.is_regularized &&
-      r.attendance_date === nowISTDate &&
-      (!r.regularization_requested || r.regularization_status === 'rejected')
-    );
+    // ✅ Has employee clocked out today?
+    const isClockedOut = !!attendance?.clock_in && !!attendance?.clock_out;
 
-    // ✅ Check for eligible regularization (PAST dates ONLY, hours >= 15)
-    const eligibleRegularization = missedClockOuts.some(r =>
-      r.can_regularize === true &&
-      !r.is_regularized &&
-      r.attendance_date !== nowISTDate &&  // NOT today
-      (!r.regularization_requested || r.regularization_status === 'rejected')
-    );
+    // ✅ Check if there's an active session from server
+    const hasActiveSession = !!activeSession;
 
-    // ✅ Check for pending regularization requests (PAST dates only)
-    const hasPendingRegularization = missedClockOuts.some(r =>
-      r.regularization_requested &&
-      r.regularization_status === 'pending' &&
-      r.attendance_date !== nowISTDate
-    );
+    // ✅ For night shift: If clocked in AND hours >= 15 → Show Regularization
+    if (isClockedIn && currentHours >= REGULARIZATION_THRESHOLD) {
+      return (
+        <div className="text-center">
+          <Button
+            variant="warning"
+            size="lg"
+            className="w-100 py-3"
+            onClick={() => {
+              const pseudoRecord = {
+                id: attendance?.id,
+                attendance_date: attendance?.attendance_date,
+                clock_in: attendance?.clock_in,
+                clock_in_ist: attendance?.clock_in_ist,
+                clock_in_display: attendance?.clock_in_display,
+                has_clock_out: false,
+                is_regularized: false,
+                regularization_requested: false
+              };
+              handleOpenRegularizationModal(pseudoRecord);
+            }}
+            disabled={loading || submittingRequest}
+          >
+            {loading || submittingRequest ? (
+              <><Spinner size="sm" animation="border" className="me-2" />Processing...</>
+            ) : (
+              <><FaRegClock className="me-2" />Request Regularization</>
+            )}
+          </Button>
+          <small className="text-muted d-block mt-2">
+            Working {currentHours.toFixed(1)}h — Exceeded {REGULARIZATION_THRESHOLD}h limit
+          </small>
+        </div>
+      );
+    }
 
-    // ✅ PRIORITY 1: If there's an active session or today's incomplete record, show CLOCK OUT
-    if (hasActiveSession || hasTodayClockInWithoutClockOut || hasTodayIncompleteRecord) {
-      // Calculate current working hours for today
-      const currentHours = attendance?.total_hours || 0;
-      const hoursNeededForReg = (regularizationThreshold - currentHours).toFixed(1);
-
+    // ✅ If clocked in (under 15h) → Show Clock Out button
+    if (isClockedIn && hasActiveSession) {
       return (
         <div className="text-center">
           <Button variant="warning" size="lg" className="w-100 py-3" onClick={handleClockOut} disabled={loading}>
             {loading ? (
-              <>
-                <Spinner size="sm" animation="border" className="me-2" />
-                Processing...
-              </>
+              <><Spinner size="sm" animation="border" className="me-2" />Processing...</>
             ) : (
-              <>
-                <FaSignOutAlt className="me-2" />
-                Clock Out
-              </>
+              <><FaSignOutAlt className="me-2" />Clock Out</>
             )}
           </Button>
-          {currentHours > 0 && currentHours < regularizationThreshold && (
+          {currentHours > 0 && (
             <small className="text-muted d-block mt-2">
-              Current hours: {currentHours.toFixed(1)}h / Need {hoursNeededForReg}h more for regularization
+              Working: {currentHours.toFixed(1)}h / {REGULARIZATION_THRESHOLD}h limit
             </small>
           )}
         </div>
       );
     }
 
-    // ✅ PRIORITY 2: If there's pending regularization (past dates), show message but keep CLOCK IN for today
-    if (hasPendingRegularization) {
+    // ✅ If clocked out today (or has clock_out) → Show Clock In button
+    if (isClockedOut || hasClockedOutToday) {
       return (
         <div className="text-center">
           <Button variant="success" size="lg" className="w-100 py-3" onClick={handleClockIn} disabled={loading}>
             {loading ? (
-              <>
-                <Spinner size="sm" animation="border" className="me-2" />
-                Processing...
-              </>
+              <><Spinner size="sm" animation="border" className="me-2" />Processing...</>
             ) : (
-              <>
-                <FaMapMarkerAlt className="me-2" />
-                Clock In
-              </>
+              <><FaMapMarkerAlt className="me-2" />Clock In</>
             )}
           </Button>
-          <small className="text-info d-block mt-2">
-            You have pending regularization requests for previous days.
-          </small>
+          {isClockedOut && (
+            <small className="text-success d-block mt-2">
+              You have already clocked out today. You can clock in again for next shift.
+            </small>
+          )}
         </div>
       );
     }
 
-    // ✅ PRIORITY 3: If eligible for regularization (past dates, hours >= 15), show REGULARIZATION button
+    // ✅ Check for past date pending regularization (not today, no active session)
+    const eligibleRegularization = missedClockOuts.some(r =>
+      r.can_regularize === true &&
+      !r.is_regularized &&
+      r.attendance_date !== nowISTDateStr &&
+      (!r.regularization_requested || r.regularization_status === 'rejected')
+    );
+
     if (eligibleRegularization) {
       const eligibleRecord = missedClockOuts.find(r =>
         r.can_regularize === true &&
         !r.is_regularized &&
-        r.attendance_date !== nowISTDate &&
+        r.attendance_date !== nowISTDateStr &&
         (!r.regularization_requested || r.regularization_status === 'rejected')
       );
       return (
@@ -1686,143 +1695,94 @@ const Attendance = () => {
             disabled={loading || submittingRequest}
           >
             {loading || submittingRequest ? (
-              <>
-                <Spinner size="sm" animation="border" className="me-2" />
-                Processing...
-              </>
+              <><Spinner size="sm" animation="border" className="me-2" />Processing...</>
             ) : (
-              <>
-                <FaRegClock className="me-2" />
-                Request Regularization for {eligibleRecord?.attendance_date}
-              </>
+              <><FaRegClock className="me-2" />Request Regularization for {eligibleRecord?.attendance_date}</>
             )}
           </Button>
           <small className="text-muted d-block mt-2">
-            You have completed {eligibleRecord?.total_hours_worked} hours.
-            Regularization required to complete this attendance.
+            {eligibleRecord?.total_hours_worked}h worked — Regularization required
           </small>
         </div>
       );
     }
 
-    // ✅ PRIORITY 4: If already clocked out today
-    if (hasClockedOutToday) {
-      return (
-        <Button variant="secondary" size="lg" className="w-100 py-2" disabled>
-          <FaSignOutAlt className="me-2" />
-          Clock Out (Completed)
-        </Button>
-      );
-    }
-
-    // ✅ DEFAULT: Show Clock In button
+    // ✅ DEFAULT: Clock In button
     return (
       <Button variant="success" size="lg" className="w-100 py-3" onClick={handleClockIn} disabled={loading}>
         {loading ? (
-          <>
-            <Spinner size="sm" animation="border" className="me-2" />
-            Processing...
-          </>
+          <><Spinner size="sm" animation="border" className="me-2" />Processing...</>
         ) : (
-          <>
-            <FaMapMarkerAlt className="me-2" />
-            Clock In
-          </>
+          <><FaMapMarkerAlt className="me-2" />Clock In</>
         )}
       </Button>
     );
   };
+  // In Attendance.jsx - Update the initialization useEffect
 
-  // Initialize session on mount
   useEffect(() => {
     if (!user?.employeeId) return;
 
-    const initializeSession = async () => {
-      const stored = loadSessionFromStorage();
+    // ✅ Clear ALL stale attendance sessions from localStorage on mount
+    clearSessionFromStorage();
 
+    const initializeSession = async () => {
       try {
         const response = await axios.get(API_ENDPOINTS.ATTENDANCE_TODAY(user.employeeId));
         const todayAttendance = response.data.attendance;
         const serverSession = response.data.active_session;
 
-        console.log('🔄 Initializing session - Today attendance:', todayAttendance);
+        console.log('🔄 Initializing - Today attendance:', todayAttendance);
         console.log('🔄 Server session:', serverSession);
-        console.log('🔄 Stored session:', stored);
 
-        const { data: incompleteRecords } = await axios.get(API_ENDPOINTS.ATTENDANCE_MISSED_CLOCKOUTS(user.employeeId));
-        const hasIncompleteRecord = incompleteRecords && incompleteRecords.missed_clockouts &&
-          incompleteRecords.missed_clockouts.length > 0;
+        // ✅ CASE 1: No active server session
+        if (!serverSession) {
+          setActiveSession(null);
+          clearSessionFromStorage();
 
-        const nowISTDateStr = new Date().toISOString().split('T')[0];
-        // Only create virtual session for TODAY's incomplete record (not past dates needing regularization)
-        const todayIncomplete = hasIncompleteRecord &&
-          incompleteRecords.missed_clockouts.find(r =>
-            !r.has_clock_out &&
-            !r.is_regularized &&
-            !r.regularization_requested &&
-            r.regularization_status !== 'rejected' &&
-            r.is_today === true  // Only today's record
-          );
-
-        if (todayIncomplete) {
-          console.log('⚠️ Found today incomplete record from:', todayIncomplete.attendance_date);
-
-          if (!activeSession) {
-            const virtualSession = {
-              session_id: `virtual-${todayIncomplete.id}-${Date.now()}`,
-              clock_in_time: todayIncomplete.clock_in,
-              is_virtual: true,
-              attendance_id: todayIncomplete.id,
-              attendance_date: todayIncomplete.attendance_date
-            };
-            setActiveSession(virtualSession);
-            saveSessionToStorage(virtualSession);
+          if (todayAttendance?.clock_out) {
+            setHasClockedOutToday(true);
+            setAttendance(todayAttendance);
+          } else if (todayAttendance?.clock_in && !todayAttendance?.clock_out) {
+            // Has clock_in but no active session = data inconsistency
             setHasClockedOutToday(false);
+            setAttendance(todayAttendance);
+          } else {
+            setHasClockedOutToday(false);
+            setAttendance(null);
           }
+          await fetchMissedClockOuts();
+          await fetchTodayAttendance();
+          getCurrentLocation();
           return;
         }
 
-        if (todayAttendance && todayAttendance.clock_out) {
-          setHasClockedOutToday(true);
-          if (activeSession) {
-            setActiveSession(null);
-            clearSessionFromStorage();
-          }
-        } else if (todayAttendance && todayAttendance.clock_in && !todayAttendance.clock_out) {
-          setHasClockedOutToday(false);
-          if (!activeSession) {
-            const inferredSession = {
-              session_id: todayAttendance.session_id || 'temp-' + Date.now(),
-              clock_in_time: todayAttendance.clock_in
-            };
-            setActiveSession(inferredSession);
-            saveSessionToStorage(inferredSession);
-          }
-        } else if (serverSession && serverSession.is_active) {
-          setHasClockedOutToday(false);
-          if (!activeSession) {
-            setActiveSession(serverSession);
-            saveSessionToStorage(serverSession);
-          }
-        } else if (stored && stored.session_id && (!todayAttendance || !todayAttendance.clock_in)) {
-          setHasClockedOutToday(false);
-          if (!activeSession) {
-            setActiveSession(stored);
-          }
-        } else {
-          setHasClockedOutToday(false);
-          if (activeSession && !activeSession.is_virtual) {
-            setActiveSession(null);
-            clearSessionFromStorage();
+        // ✅ CASE 2: Active server session exists
+        setHasClockedOutToday(false);
+        setActiveSession(serverSession);
+        saveSessionToStorage(serverSession);
+
+        // Check if hours exceeded 15 for regularization
+        if (todayAttendance && todayAttendance.clock_in && !todayAttendance.clock_out) {
+          const totalMinutes = calculateTotalMinutesFixed(
+            todayAttendance.clock_in_ist || todayAttendance.clock_in,
+            nowIST()
+          );
+          const totalHours = totalMinutes / 60;
+          if (totalHours >= 15) {
+            console.log(`⚠️ ${user.employeeId} has ${totalHours.toFixed(1)}h, can regularize`);
           }
         }
+
       } catch (error) {
-        console.error('Error checking today attendance:', error);
+        console.error('Error initializing:', error);
+        setActiveSession(null);
+        clearSessionFromStorage();
         setHasClockedOutToday(false);
       }
 
-      fetchTodayAttendance();
-      fetchMissedClockOuts();
+      await fetchTodayAttendance();
+      await fetchMissedClockOuts();
       getCurrentLocation();
     };
 
