@@ -250,7 +250,6 @@ const RegularizationRequests = ({ onRequestCountChange }) => {
   const formatDateTime = (datetime) => {
     if (!datetime) return 'N/A';
     try {
-      // Handle IST string format: "YYYY-MM-DD HH:MM:SS"
       if (typeof datetime === 'string' && datetime.includes(' ') && !datetime.includes('T')) {
         const [datePart, timePart] = datetime.split(' ');
         const [year, month, day] = datePart.split('-');
