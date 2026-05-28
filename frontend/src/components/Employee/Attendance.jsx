@@ -63,6 +63,13 @@ const Attendance = () => {
   const [attendanceHistory, setAttendanceHistory] = useState([]);
   const [isSessionValid, setIsSessionValid] = useState(false);
   const [hasIncompleteRecord, setHasIncompleteRecord] = useState(false);
+  // Infinite scroll states
+  const [historyOffset, setHistoryOffset] = useState(0);  // days offset from today
+  const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const tableScrollRef = React.useRef(null);
+  const INITIAL_DAYS = 30;
+  const LOAD_MORE_DAYS = 10;
   const [monthlyStats, setMonthlyStats] = useState({
     totalDays: 0,
     presentDays: 0,
@@ -1059,12 +1066,16 @@ const Attendance = () => {
     });
   };
 
-  const fetchAttendanceHistory = async () => {
+  const fetchAttendanceHistory = async (offsetDays = 0, append = false) => {
     try {
+      if (append) setLoadingMore(true);
+
       const today = new Date();
       const endDate = new Date(today);
-      const startDate = new Date(today);
-      startDate.setDate(startDate.getDate() - 30);
+      endDate.setDate(endDate.getDate() - offsetDays);
+      const startDate = new Date(endDate);
+      const daysToLoad = offsetDays === 0 ? INITIAL_DAYS : LOAD_MORE_DAYS;
+      startDate.setDate(startDate.getDate() - daysToLoad + 1);
 
       const formatDate = (date) => {
         const year = date.getFullYear();
@@ -1074,78 +1085,163 @@ const Attendance = () => {
       };
 
       const startDateStr = formatDate(startDate);
-      const endDateStr = formatDate(endDate);
+      const endDateStr = formatDate(offsetDays === 0 ? today : endDate);
 
       const response = await axios.get(
         API_ENDPOINTS.ATTENDANCE_EMPLOYEE_REPORT(user.employeeId, startDateStr, endDateStr)
       );
 
-      console.log('✅ API Response Status:', response.status);
-      console.log('📊 Total records:', response.data.attendance?.length || 0);
-
       let history = response.data.attendance || [];
-      const completeHistory = generateLast30DaysAttendance(history);
 
-      // Sync today's attendance to state if not already set
-      const todayStr = formatDate(today);
-      const todayRecord = history.find(r => r.attendance_date === todayStr);
-      if (todayRecord && todayRecord.clock_in) {
-        setAttendance(prev => {
-          // Only update if not already set or missing display fields
-          if (!prev || !prev.clock_in_display) {
-            const clockIn = todayRecord.clock_in_ist || todayRecord.clock_in;
-            const clockOut = todayRecord.clock_out_ist || todayRecord.clock_out;
-            return {
-              ...todayRecord,
-              clock_in: clockIn,
-              clock_out: clockOut,
-              clock_in_display: clockIn ? formatTimeIST(clockIn) : null,
-              clock_out_display: clockOut ? formatTimeIST(clockOut) : null,
-              late_minutes: Number(todayRecord.late_minutes) || 0,
-              late_display: todayRecord.late_display || null
-            };
+      // Generate complete days (including absent/weekly off)
+      const generateDays = (apiHistory, fromDate, toDate) => {
+        const result = [];
+        const historyMap = {};
+        apiHistory.forEach(r => { if (r.attendance_date) historyMap[r.attendance_date] = r; });
+
+        const todayStr = formatDate(today);
+        if (attendance && attendance.attendance_date === todayStr) {
+          historyMap[todayStr] = attendance;
+        }
+
+        let d = new Date(toDate);
+        const stopDate = new Date(fromDate);
+        while (d >= stopDate) {
+          const dateStr = formatDate(d);
+          const dayOfWeek = d.getDay();
+          const isToday = dateStr === todayStr;
+          const isWeeklyOff = dayOfWeek === 0 || dayOfWeek === 6;
+          const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+          const existingRecord = historyMap[dateStr];
+
+          if (existingRecord) {
+            const lateMinutes = Number(existingRecord.late_minutes) || 0;
+            const lateDisplay = existingRecord.late_display || (lateMinutes > 0 ? formatLateTime(lateMinutes) : null);
+            const clockInValue = existingRecord.clock_in_ist || existingRecord.clock_in;
+            const clockOutValue = existingRecord.clock_out_ist || existingRecord.clock_out;
+            let displayStatus = existingRecord.status;
+            let totalHoursDisplay = existingRecord.total_hours_display;
+            let totalHours = existingRecord.total_hours;
+            let currentHoursDisplay = null;
+            let formattedClockIn = clockInValue ? formatTimeIST(clockInValue) : null;
+            let formattedClockOut = clockOutValue ? formatTimeIST(clockOutValue) : null;
+
+            if (!displayStatus && clockInValue && !clockOutValue && isToday) displayStatus = 'working';
+
+            if (clockInValue && clockOutValue) {
+              const totalMinutes = calculateTotalMinutesFixed(clockInValue, clockOutValue);
+              const h = Math.floor(totalMinutes / 60), m = Math.round(totalMinutes % 60);
+              totalHoursDisplay = `${h}h ${m}m`;
+              totalHours = totalMinutes / 60;
+            } else if (clockInValue && !clockOutValue && isToday) {
+              const totalMinutes = calculateTotalMinutesFixed(clockInValue, nowIST());
+              const h = Math.floor(totalMinutes / 60), m = Math.round(totalMinutes % 60);
+              currentHoursDisplay = `${h}h ${m}m`;
+              totalHoursDisplay = currentHoursDisplay;
+              totalHours = totalMinutes / 60;
+              displayStatus = 'working';
+              formattedClockOut = 'Working';
+            } else if (clockInValue && !clockOutValue && !isToday) {
+              const totalMinutes = calculateTotalMinutesFixed(clockInValue, nowIST());
+              const h = Math.floor(totalMinutes / 60), m = Math.round(totalMinutes % 60);
+              totalHoursDisplay = `${h}h ${m}m (Missed)`;
+              totalHours = totalMinutes / 60;
+              if (!displayStatus) displayStatus = 'working';
+            }
+
+            result.push({
+              id: existingRecord.id, date: dateStr, attendance_date: dateStr,
+              dayOfWeek, isWeeklyOff: false, dayName, isToday,
+              clock_in: clockInValue, clock_out: clockOutValue,
+              formatted_clock_in: formattedClockIn, formatted_clock_out: formattedClockOut,
+              total_hours: totalHours, total_hours_display: totalHoursDisplay,
+              current_hours_display: currentHoursDisplay,
+              status: existingRecord.is_regularized ? 'present' : displayStatus,
+              original_status: displayStatus, late_minutes: lateMinutes,
+              late_display: lateDisplay, is_regularized: existingRecord.is_regularized || false
+            });
+          } else {
+            result.push({
+              id: null, date: dateStr, attendance_date: dateStr,
+              dayOfWeek, isWeeklyOff, dayName, isToday,
+              clock_in: null, clock_out: null, formatted_clock_in: null, formatted_clock_out: null,
+              total_hours: null, total_hours_display: null, current_hours_display: null,
+              status: isWeeklyOff ? 'weekly_off' : 'not_clocked',
+              original_status: isWeeklyOff ? 'weekly_off' : 'not_clocked',
+              late_minutes: 0, late_display: null, is_regularized: false
+            });
           }
-          return prev;
+          d.setDate(d.getDate() - 1);
+        }
+        return result;
+      };
+
+      const newRecords = generateDays(history, startDate, offsetDays === 0 ? today : endDate);
+
+      // If less than expected days returned, no more history
+      if (newRecords.length < daysToLoad) setHasMoreHistory(false);
+
+      if (append) {
+        setAttendanceHistory(prev => [...prev, ...newRecords]);
+      } else {
+        setAttendanceHistory(newRecords);
+        setHistoryOffset(INITIAL_DAYS);
+
+        // Sync today's attendance
+        const todayStr = formatDate(today);
+        const todayRecord = history.find(r => r.attendance_date === todayStr);
+        if (todayRecord && todayRecord.clock_in) {
+          setAttendance(prev => {
+            if (!prev || !prev.clock_in_display) {
+              const clockIn = todayRecord.clock_in_ist || todayRecord.clock_in;
+              const clockOut = todayRecord.clock_out_ist || todayRecord.clock_out;
+              return {
+                ...todayRecord, clock_in: clockIn, clock_out: clockOut,
+                clock_in_display: clockIn ? formatTimeIST(clockIn) : null,
+                clock_out_display: clockOut ? formatTimeIST(clockOut) : null,
+                late_minutes: Number(todayRecord.late_minutes) || 0,
+                late_display: todayRecord.late_display || null
+              };
+            }
+            return prev;
+          });
+        }
+
+        // Stats calculation
+        const todayDay = today.getDate();
+        const cycleStart = todayDay >= 26
+          ? new Date(today.getFullYear(), today.getMonth(), 26)
+          : new Date(today.getFullYear(), today.getMonth() - 1, 26);
+        const cycleEnd = todayDay >= 26
+          ? new Date(today.getFullYear(), today.getMonth() + 1, 25)
+          : new Date(today.getFullYear(), today.getMonth(), 25);
+        const periodHistory = newRecords.filter(r => {
+          const rd = new Date(r.date);
+          return rd >= cycleStart && rd <= cycleEnd;
         });
-      } else if (!todayRecord) {
-        // No record for today - but DON'T clear attendance if there's an open session
-        // (cross-midnight: yesterday's record is still active)
-        setAttendance(prev => {
-          // Only clear if no active session and no open attendance
-          if (prev && prev.attendance_date && prev.attendance_date !== todayStr) {
-            // Keep it if clock_in exists without clock_out (cross-midnight active session)
-            if (prev.clock_in && !prev.clock_out) return prev;
-            return null;
-          }
-          return prev;
-        });
+        calculateMonthlyStats(periodHistory.length > 0 ? periodHistory : newRecords);
+        updateChartData(periodHistory.length > 0 ? periodHistory : newRecords);
       }
-
-      // Salary cycle: today >= 26 → this month 26 to next month 25
-      //               today < 26  → prev month 26 to this month 25
-      const todayDay = today.getDate();
-      const cycleStart = todayDay >= 26
-        ? new Date(today.getFullYear(), today.getMonth(), 26)
-        : new Date(today.getFullYear(), today.getMonth() - 1, 26);
-      const cycleEnd = todayDay >= 26
-        ? new Date(today.getFullYear(), today.getMonth() + 1, 25)
-        : new Date(today.getFullYear(), today.getMonth(), 25);
-
-      const periodHistory = completeHistory.filter(record => {
-        const recordDate = new Date(record.date);
-        return recordDate >= cycleStart && recordDate <= cycleEnd;
-      });
-
-      setAttendanceHistory(completeHistory);
-      calculateMonthlyStats(periodHistory.length > 0 ? periodHistory : completeHistory);
-      updateChartData(periodHistory.length > 0 ? periodHistory : completeHistory);
-
     } catch (error) {
       console.error('❌ Error fetching attendance history:', error);
-      const emptyHistory = generateLast30DaysAttendance([]);
-      setAttendanceHistory(emptyHistory);
-      calculateMonthlyStats([]);
-      updateChartData([]);
+      if (!append) {
+        setAttendanceHistory(generateLast30DaysAttendance([]));
+        calculateMonthlyStats([]);
+        updateChartData([]);
+      }
+    } finally {
+      if (append) setLoadingMore(false);
+    }
+  };
+
+  // Infinite scroll handler
+  const handleTableScroll = (e) => {
+    const el = e.target;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (nearBottom && hasMoreHistory && !loadingMore) {
+      const newOffset = historyOffset + LOAD_MORE_DAYS;
+      setHistoryOffset(newOffset);
+      fetchAttendanceHistory(historyOffset, true);
     }
   };
 
@@ -2082,7 +2178,12 @@ const Attendance = () => {
 
               {activeTab === 'daily' ? (
                 <>
-                  <div className="table-responsive" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                  <div
+                    className="table-responsive"
+                    style={{ maxHeight: '500px', overflowY: 'auto' }}
+                    onScroll={handleTableScroll}
+                    ref={tableScrollRef}
+                  >
                     <Table hover size="sm" className="mb-0">
                       <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
                         <tr>
@@ -2180,8 +2281,22 @@ const Attendance = () => {
                   </div>
                   <div className="mt-2 text-muted small">
                     <FaInfoCircle className="me-1" size={10} />
-                    Showing last 30 days from {attendanceHistory.length > 0 ? formatShortDate(attendanceHistory[attendanceHistory.length - 1]?.date) : 'N/A'} to {attendanceHistory.length > 0 ? formatShortDate(attendanceHistory[0]?.date) : 'N/A'}
+                    Showing {attendanceHistory.length} days
+                    {hasMoreHistory && !loadingMore && (
+                      <span className="ms-2 text-primary" style={{ cursor: 'pointer' }}>↓ Scroll for more</span>
+                    )}
                   </div>
+                  {loadingMore && (
+                    <div className="text-center py-2">
+                      <Spinner animation="border" size="sm" variant="primary" className="me-2" />
+                      <small className="text-muted">Loading more records...</small>
+                    </div>
+                  )}
+                  {!hasMoreHistory && attendanceHistory.length > INITIAL_DAYS && (
+                    <div className="text-center py-2">
+                      <small className="text-muted">All attendance records loaded</small>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
