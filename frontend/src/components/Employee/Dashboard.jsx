@@ -536,19 +536,27 @@ const EmployeeDashboard = () => {
   };
 
   const updateLeaveChart = () => {
+    const used = parseFloat(leaveBalance.used) || 0;
+    const pending = parseFloat(leaveBalance.pending) || 0;
+    const totalAccrued = parseFloat(leaveBalance.total_accrued) || 0;
+
+    // Probation mein available = 0 aata hai backend se
+    // To available = total_accrued - used - pending calculate karo
+    const available = Math.max(0, totalAccrued - used - pending);
+    const total = used + available + pending;
+
+    const hasData = total > 0;
+
     setLeaveChartData({
       labels: ['Used', 'Available', 'Pending'],
-      datasets: [
-        {
-          data: [
-            leaveBalance.used || 0,
-            leaveBalance.available || 0,
-            leaveBalance.pending || 0
-          ],
-          backgroundColor: ['#dc3545', '#28a745', '#ffc107'],
-          borderWidth: 0
-        }
-      ]
+      datasets: [{
+        data: hasData ? [used, available, pending] : [1, 1, 1],
+        backgroundColor: hasData
+          ? ['#dc3545', '#28a745', '#ffc107']
+          : ['#e9ecef', '#e9ecef', '#e9ecef'],
+        borderWidth: 0,
+        borderRadius: 2
+      }]
     });
   };
 
@@ -1031,28 +1039,49 @@ const EmployeeDashboard = () => {
                       maintainAspectRatio: false,
                       plugins: {
                         legend: { position: 'bottom', labels: { font: { size: 10 } } },
-                        tooltip: { callbacks: { label: (context) => `${context.raw} days` } }
+                        tooltip: {
+                          callbacks: {
+                            label: (context) => {
+                              const used = parseFloat(leaveBalance.used) || 0;
+                              const available = parseFloat(leaveBalance.available) || 0;
+                              const pending = parseFloat(leaveBalance.pending) || 0;
+                              const total = used + available + pending;
+                              if (total === 0) return ' No data';
+                              return ` ${context.raw} days`;
+                            }
+                          }
+                        }
                       },
                       cutout: '60%'
                     }}
                   />
                 </div>
                 <div className="ms-0 ms-md-4 mt-3 mt-md-0 w-100">
-                  <div className="mb-3">
-                    <small className="text-muted d-block">Used</small>
-                    <strong className="text-danger">{leaveBalance.used} days</strong>
-                    <ProgressBar now={(leaveBalance.used / leaveBalance.total_accrued) * 100} variant="danger" style={{ height: '4px', maxWidth: '120px' }} />
-                  </div>
-                  <div className="mb-3">
-                    <small className="text-muted d-block">Available</small>
-                    <strong className="text-success">{leaveBalance.available} days</strong>
-                    <ProgressBar now={(leaveBalance.available / leaveBalance.total_accrued) * 100} variant="success" style={{ height: '4px', maxWidth: '120px' }} />
-                  </div>
-                  <div>
-                    <small className="text-muted d-block">Pending</small>
-                    <strong className="text-warning">{leaveBalance.pending} days</strong>
-                    <ProgressBar now={(leaveBalance.pending / leaveBalance.total_accrued) * 100} variant="warning" style={{ height: '4px', maxWidth: '120px' }} />
-                  </div>
+                  {(() => {
+                    const used = parseFloat(leaveBalance.used) || 0;
+                    const pending = parseFloat(leaveBalance.pending) || 0;
+                    const totalAccrued = parseFloat(leaveBalance.total_accrued) || 0;
+                    const available = Math.max(0, totalAccrued - used - pending);
+                    return (
+                      <>
+                        <div className="mb-3">
+                          <small className="text-muted d-block">Used</small>
+                          <strong className="text-danger">{used.toFixed(1)} days</strong>
+                          <ProgressBar now={totalAccrued > 0 ? (used / totalAccrued) * 100 : 0} variant="danger" style={{ height: '4px', maxWidth: '120px' }} />
+                        </div>
+                        <div className="mb-3">
+                          <small className="text-muted d-block">Available</small>
+                          <strong className="text-success">{available.toFixed(1)} days</strong>
+                          <ProgressBar now={totalAccrued > 0 ? (available / totalAccrued) * 100 : 0} variant="success" style={{ height: '4px', maxWidth: '120px' }} />
+                        </div>
+                        <div>
+                          <small className="text-muted d-block">Pending</small>
+                          <strong className="text-warning">{pending.toFixed(1)} days</strong>
+                          <ProgressBar now={totalAccrued > 0 ? (pending / totalAccrued) * 100 : 0} variant="warning" style={{ height: '4px', maxWidth: '120px' }} />
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             </Card.Body>

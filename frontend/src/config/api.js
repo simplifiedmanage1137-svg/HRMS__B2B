@@ -225,6 +225,16 @@ export const API_ENDPOINTS = {
     RATINGS_ALL: `${API_BASE_URL}/api/ratings/all`,
     RATINGS_ADMIN_RATE: `${API_BASE_URL}/api/ratings/admin-rate`,
 
+    // Public login feed (no auth)
+    LOGIN_FEED: `${API_BASE_URL}/api/public/login-feed`,
+    OFFICE_EVENTS_CREATE: `${API_BASE_URL}/api/public/office-events`,
+    OFFICE_EVENT_DELETE: (id) => `${API_BASE_URL}/api/public/office-events/${id}`,
+
+    // Public login feed
+    LOGIN_FEED: `${API_BASE_URL}/api/public/login-feed`,
+    OFFICE_EVENTS: `${API_BASE_URL}/api/public/office-events`,
+    OFFICE_EVENT_DELETE: (id) => `${API_BASE_URL}/api/public/office-events/${id}`,
+
 };
 
 

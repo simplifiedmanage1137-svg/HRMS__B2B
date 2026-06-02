@@ -340,8 +340,9 @@ const Attendance = () => {
     const lateFormatted = record.late_display || (record.late_minutes > 0 ? formatLateTime(record.late_minutes) : null);
     const lateText = lateFormatted ? ` (Late ${lateFormatted})` : '';
 
-    if (record.isWeeklyOff) {
-      return <Badge bg="secondary" className="px-2 py-1"><FaMoon className="me-1" size={10} /> W-OFF</Badge>;
+    const isWeekend = record.dayOfWeek === 0 || record.dayOfWeek === 6;
+    if (record.isWeeklyOff || (isWeekend && !record.clock_in)) {
+      return <Badge bg="secondary" className="px-2 py-1"><FaMoon className="me-1" size={10} /> W-Off</Badge>;
     }
 
     if (!record.clock_in) {
@@ -1151,7 +1152,7 @@ const Attendance = () => {
 
             result.push({
               id: existingRecord.id, date: dateStr, attendance_date: dateStr,
-              dayOfWeek, isWeeklyOff: false, dayName, isToday,
+              dayOfWeek, isWeeklyOff: isWeeklyOff && !existingRecord.clock_in && !existingRecord.clock_in_ist, dayName, isToday,
               clock_in: clockInValue, clock_out: clockOutValue,
               formatted_clock_in: formattedClockIn, formatted_clock_out: formattedClockOut,
               total_hours: totalHours, total_hours_display: totalHoursDisplay,

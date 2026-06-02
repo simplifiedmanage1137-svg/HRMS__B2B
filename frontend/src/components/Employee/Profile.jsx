@@ -122,10 +122,11 @@ const Profile = () => {
 
     const fetchCompOffHistory = async () => {
         try {
-            const response = await axios.get(`${API_ENDPOINTS.ATTENDANCE}/comp-off/${user?.employeeId}/history`);
+            const response = await axios.get(API_ENDPOINTS.COMP_OFF_HISTORY(user?.employeeId));
             setCompOffHistory(response.data.earnings || []);
         } catch (error) {
             console.error('Error fetching comp-off history:', error);
+            setCompOffHistory([]);
         }
     };
 
@@ -714,12 +715,11 @@ const Profile = () => {
                                                     <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
                                                         <tr>
                                                             <th className="small text-dark">Sr No</th>
-                                                            <th className="small text-dark d-none d-sm-table-cell">Date Earned</th>
+                                                            <th className="small text-dark d-none d-sm-table-cell">Holiday Date</th>
                                                             <th className="small text-dark">Holiday</th>
                                                             <th className="small text-dark d-none d-md-table-cell">Hours Worked</th>
-                                                            <th className="small text-dark">Days</th>
+                                                            <th className="small text-dark d-none d-md-table-cell">Expires On</th>
                                                             <th className="small text-dark">Status</th>
-                                                            <th className="small text-dark d-none d-lg-table-cell">Used Date</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
@@ -733,16 +733,17 @@ const Profile = () => {
                                                                     </Badge>
                                                                 </td>
                                                                 <td className="small d-none d-md-table-cell">{item.hours_worked} hrs</td>
-                                                                <td className="small fw-bold">{item.comp_off_days}</td>
+                                                                <td className="small d-none d-md-table-cell">
+                                                                    {item.expiry_date ? formatDate(item.expiry_date) : '-'}
+                                                                </td>
                                                                 <td className="small">
-                                                                    {item.is_used ? (
+                                                                    {item.status === 'used' ? (
                                                                         <Badge bg="secondary" pill>Used</Badge>
+                                                                    ) : item.status === 'expired' ? (
+                                                                        <Badge bg="danger" pill>Expired</Badge>
                                                                     ) : (
                                                                         <Badge bg="success" pill>Available</Badge>
                                                                     )}
-                                                                </td>
-                                                                <td className="small d-none d-lg-table-cell">
-                                                                    {item.used_date ? formatDate(item.used_date) : '-'}
                                                                 </td>
                                                             </tr>
                                                         ))}

@@ -60,11 +60,11 @@ const HolidayCalendar = ({ employeeRegion = 'All' }) => {
       <Card.Header className="bg-gradient py-3" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
         <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
           <div>
-            <h6 className="mb-1 text-white d-flex align-items-center">
+            <h6 className="mb-1 text-dark d-flex align-items-center">
               <FaCalendarAlt className="me-2" />
               Company Holiday Calendar — {selectedYear}
             </h6>
-            <p className="mb-0 text-white-50 small">United States & India</p>
+            <p className="mb-0 text-black-50 small">United States & India</p>
           </div>
           <div className="d-flex gap-2">
             <Button 
