@@ -33,6 +33,13 @@ const isAdmin = (req, res, next) => {
     next();
 };
 
+const isAdminOrManager = (req, res, next) => {
+    if (!['admin', 'manager'].includes(req.user?.role)) {
+        return res.status(403).json({ success: false, message: 'Manager or Admin access required' });
+    }
+    next();
+};
+
 const isOwnDataOrAdmin = (req, res, next) => {
     const userRole = req.user?.role;
     const userEmployeeId = req.user?.employeeId;
@@ -51,4 +58,4 @@ const isOwnDataOrAdmin = (req, res, next) => {
     return res.status(403).json({ success: false, message: 'Access denied: You can only access your own data' });
 };
 
-module.exports = { verifyToken, isAdmin, isOwnDataOrAdmin };
+module.exports = { verifyToken, isAdmin, isAdminOrManager, isOwnDataOrAdmin };

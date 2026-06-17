@@ -4,7 +4,7 @@ const supabase = require('../config/supabase');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { verifyToken, isAdmin } = require('../middleware/auth');
+const { verifyToken, isAdmin, isAdminOrManager } = require('../middleware/auth');
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -116,6 +116,42 @@ const generateEmployeeIdBasedOnJoiningDate = async (joiningDate) => {
         return `B2B${year}${month}${fallbackSeq}`;
     }
 };
+
+// Get employee statistics (Admin only) — MUST be before /:id
+router.get('/stats/summary', verifyToken, isAdmin, async (req, res) => {
+    try {
+        const { count: total, error: totalError } = await supabase
+            .from('employees').select('*', { count: 'exact', head: true });
+        if (totalError) throw totalError;
+
+        const { count: active, error: activeError } = await supabase
+            .from('employees').select('*', { count: 'exact', head: true }).eq('is_active', true);
+        if (activeError) throw activeError;
+
+        const { data: deptStats, error: deptError } = await supabase
+            .from('employees').select('department').eq('is_active', true);
+        if (deptError) throw deptError;
+
+        const deptMap = {};
+        deptStats?.forEach(item => { deptMap[item.department] = (deptMap[item.department] || 0) + 1; });
+        const department_breakdown = Object.entries(deptMap).map(([department, count]) => ({ department, count }));
+
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const { count: recent, error: recentError } = await supabase
+            .from('employees').select('*', { count: 'exact', head: true })
+            .gte('joining_date', thirtyDaysAgo.toISOString().split('T')[0]);
+        if (recentError) throw recentError;
+
+        res.json({
+            success: true,
+            stats: { total: total || 0, active: active || 0, inactive: (total || 0) - (active || 0), recent_joinings: recent || 0, department_breakdown }
+        });
+    } catch (error) {
+        console.error('Error fetching employee stats:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch statistics', error: error.message });
+    }
+});
 
 // ============== REPORTING MANAGER: GET TEAM MEMBERS ==============
 router.get('/manager/team', verifyToken, async (req, res) => {
@@ -361,7 +397,7 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
                     emergency_contact: employeeData.emergency_contact || null,
                     contract_policy: employeeData.contract_policy || null,
                     is_active: true,
-                    role: 'employee',
+                    role: employeeData.role || 'employee',
                     joining_month_count: 0,
                     can_apply_leave: false,
                     created_at: new Date().toISOString()
@@ -415,12 +451,46 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
     }
 });
 
+// Update employee role (Admin only)
+router.patch('/:id/role', verifyToken, isAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { role } = req.body;
+        const validRoles = ['admin', 'manager', 'employee'];
+        if (!validRoles.includes(role)) {
+            return res.status(400).json({ success: false, message: `Invalid role. Must be one of: ${validRoles.join(', ')}` });
+        }
+        const { data, error } = await supabase
+            .from('employees')
+            .update({ role })
+            .eq('id', id)
+            .select('id, employee_id, role');
+        if (error) throw error;
+        if (!data || data.length === 0) return res.status(404).json({ success: false, message: 'Employee not found' });
+        res.json({ success: true, message: 'Role updated successfully', employee: data[0] });
+    } catch (error) {
+        console.error('Error updating role:', error);
+        res.status(500).json({ success: false, message: 'Failed to update role', error: error.message });
+    }
+});
+
 // Update employee (Admin only)
 router.put('/:id', verifyToken, isAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         const updates = req.body;
         const newShiftTiming = updates.shift_timing;
+
+        // Only admin can change role
+        if ('role' in updates && req.user?.role !== 'admin') {
+            delete updates.role;
+        }
+        if ('role' in updates) {
+            const validRoles = ['admin', 'manager', 'employee'];
+            if (!validRoles.includes(updates.role)) {
+                return res.status(400).json({ success: false, message: 'Invalid role value' });
+            }
+        }
 
         // Remove fields that shouldn't be updated
         delete updates.id;
@@ -965,75 +1035,6 @@ router.delete('/:employeeId/documents/:documentType', verifyToken, async (req, r
         res.status(500).json({
             success: false,
             message: 'Failed to delete document',
-            error: error.message
-        });
-    }
-});
-
-// Get employee statistics (Admin only)
-router.get('/stats/summary', verifyToken, isAdmin, async (req, res) => {
-    try {
-        // Total employees
-        const { count: total, error: totalError } = await supabase
-            .from('employees')
-            .select('*', { count: 'exact', head: true });
-
-        if (totalError) throw totalError;
-
-        // Active employees
-        const { count: active, error: activeError } = await supabase
-            .from('employees')
-            .select('*', { count: 'exact', head: true })
-            .eq('is_active', true);
-
-        if (activeError) throw activeError;
-
-        // Department wise count
-        const { data: deptStats, error: deptError } = await supabase
-            .from('employees')
-            .select('department, count')
-            .eq('is_active', true);
-
-        if (deptError) throw deptError;
-
-        // Process department stats
-        const deptMap = {};
-        deptStats?.forEach(item => {
-            deptMap[item.department] = (deptMap[item.department] || 0) + 1;
-        });
-
-        const deptArray = Object.entries(deptMap).map(([department, count]) => ({
-            department,
-            count
-        }));
-
-        // Recent joinings (last 30 days)
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-        const { count: recent, error: recentError } = await supabase
-            .from('employees')
-            .select('*', { count: 'exact', head: true })
-            .gte('joining_date', thirtyDaysAgo.toISOString().split('T')[0]);
-
-        if (recentError) throw recentError;
-
-        res.json({
-            success: true,
-            stats: {
-                total: total || 0,
-                active: active || 0,
-                inactive: (total || 0) - (active || 0),
-                recent_joinings: recent || 0,
-                department_breakdown: deptArray || []
-            }
-        });
-
-    } catch (error) {
-        console.error('Error fetching employee stats:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch statistics',
             error: error.message
         });
     }
