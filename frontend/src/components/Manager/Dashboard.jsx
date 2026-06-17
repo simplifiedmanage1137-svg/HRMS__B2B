@@ -87,12 +87,17 @@ const ManagerDashboard = () => {
   const designationLabels = Object.keys(designationMap);
   const designationValues = Object.values(designationMap);
 
+  const totalLeaves = leaveRequests.length;
+
   const leaveChartData = {
     labels: ['Pending', 'Approved', 'Rejected'],
     datasets: [{
       data: [pendingLeaves.length, approvedLeaves.length, rejectedLeaves.length],
-      backgroundColor: ['#ffc107', '#28a745', '#dc3545'],
-      borderWidth: 0,
+      backgroundColor: ['#F97316', '#22C55E', '#EF4444'],
+      borderColor: ['#EA580C', '#16A34A', '#DC2626'],
+      borderWidth: 2,
+      hoverOffset: 14,
+      borderRadius: 4,
     }],
   };
 
@@ -101,22 +106,76 @@ const ManagerDashboard = () => {
     datasets: [{
       label: 'Members',
       data: designationValues,
-      backgroundColor: ['#0d6efd', '#6f42c1', '#0dcaf0', '#fd7e14', '#20c997', '#e83e8c'],
-      borderRadius: 4,
+      backgroundColor: ['#3B82F6', '#8B5CF6', '#22C55E', '#F97316', '#EF4444', '#0EA5E9'],
+      borderRadius: 6,
+      borderSkipped: false,
     }],
+  };
+
+  const leaveCenterPlugin = {
+    id: 'leaveCenterText',
+    beforeDraw(chart) {
+      if (chart.config.type !== 'doughnut') return;
+      const { width, height, ctx } = chart;
+      ctx.save();
+      const cx = width / 2;
+      const cy = height / 2 - 10;
+      ctx.font = 'bold 26px Inter,system-ui,sans-serif';
+      ctx.fillStyle = '#0F172A';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(totalLeaves > 0 ? totalLeaves : '—', cx, cy);
+      ctx.font = '500 9.5px Inter,system-ui,sans-serif';
+      ctx.fillStyle = '#94A3B8';
+      ctx.fillText('TOTAL REQUESTS', cx, cy + 18);
+      ctx.restore();
+    },
   };
 
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+    cutout: '62%',
+    animation: { animateRotate: true, duration: 900 },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: 'rgba(15,23,42,.93)',
+        padding: 10,
+        cornerRadius: 8,
+        borderColor: 'rgba(255,255,255,.1)',
+        borderWidth: 1,
+        callbacks: {
+          label: (ctx) => {
+            const pct = totalLeaves > 0 ? Math.round((ctx.parsed / totalLeaves) * 100) : 0;
+            return \  \: \  (\%)\;
+          },
+        },
+      },
+    },
   };
 
   const barOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    plugins: { legend: { display: false } },
-    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: 'rgba(15,23,42,.93)',
+        padding: 10,
+        cornerRadius: 8,
+        borderColor: 'rgba(255,255,255,.1)',
+        borderWidth: 1,
+      },
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#64748B' } },
+      y: {
+        beginAtZero: true,
+        ticks: { stepSize: 1, font: { size: 11 }, color: '#64748B' },
+        grid: { color: '#F1F5F9' },
+      },
+    },
   };
 
   const quickActions = [
@@ -194,50 +253,104 @@ const ManagerDashboard = () => {
 
       {/* Charts Row */}
       <Row className="g-3 mb-4">
+
+        {/* Leave Request Status – premium doughnut */}
         <Col xs={12} md={5}>
-          <Card className="border-0 shadow-sm h-100">
-            <Card.Body className="p-3">
-              <div className="d-flex align-items-center gap-2 mb-3">
-                <FaChartPie className="text-primary" size={16} />
-                <span className="fw-semibold small">Leave Request Status</span>
+          <Card className="border-0 h-100" style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,.06),0 4px 20px rgba(0,0,0,.07)', overflow: 'hidden' }}>
+            <Card.Body className="p-0">
+              {/* Header */}
+              <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 10, background: 'linear-gradient(135deg,#F97316,#EA580C)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <FaChartPie size={15} color="#fff" />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: '#0F172A' }}>Leave Request Status</div>
+                  <div style={{ fontSize: 11, color: '#94A3B8' }}>All-time breakdown</div>
+                </div>
               </div>
-              {loading ? (
-                <div className="d-flex justify-content-center align-items-center" style={{ height: 200 }}>
-                  <Spinner animation="border" variant="primary" />
-                </div>
-              ) : leaveRequests.length === 0 ? (
-                <div className="d-flex justify-content-center align-items-center text-muted small" style={{ height: 200 }}>
-                  No leave requests yet
-                </div>
-              ) : (
-                <div style={{ height: 220 }}>
-                  <Doughnut data={leaveChartData} options={chartOptions} />
+
+              {/* Chart */}
+              <div style={{ padding: '16px 20px 0' }}>
+                {loading ? (
+                  <div className="d-flex justify-content-center align-items-center" style={{ height: 210 }}>
+                    <Spinner animation="border" variant="primary" />
+                  </div>
+                ) : leaveRequests.length === 0 ? (
+                  <div className="d-flex flex-column justify-content-center align-items-center text-muted" style={{ height: 210, gap: 8 }}>
+                    <FaCalendarAlt size={28} opacity={0.4} />
+                    <small>No leave requests yet</small>
+                  </div>
+                ) : (
+                  <div style={{ height: 210 }}>
+                    <Doughnut data={leaveChartData} options={chartOptions} plugins={[leaveCenterPlugin]} />
+                  </div>
+                )}
+              </div>
+
+              {/* Badge legend */}
+              {!loading && leaveRequests.length > 0 && (
+                <div style={{ padding: '14px 20px 18px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {[
+                    { label: 'Pending',  count: pendingLeaves.length,  color: '#F97316', bg: '#FFF7ED', border: '#FED7AA', tc: '#C2410C' },
+                    { label: 'Approved', count: approvedLeaves.length, color: '#22C55E', bg: '#F0FDF4', border: '#BBF7D0', tc: '#15803D' },
+                    { label: 'Rejected', count: rejectedLeaves.length, color: '#EF4444', bg: '#FEF2F2', border: '#FECACA', tc: '#B91C1C' },
+                  ].map(item => (
+                    <div key={item.label} style={{ background: item.bg, border: `1px solid ${item.border}`, borderRadius: 10, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: item.color, boxShadow: `0 0 0 2px ${item.border}`, flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: 11, color: item.tc, fontWeight: 600 }}>{item.label}</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', lineHeight: 1.1 }}>
+                          {item.count}
+                          <span style={{ fontSize: 11, fontWeight: 500, color: '#94A3B8', marginLeft: 4 }}>
+                            {totalLeaves > 0 ? `${Math.round((item.count / totalLeaves) * 100)}%` : '0%'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </Card.Body>
           </Card>
         </Col>
 
+        {/* Team by Designation – premium bar */}
         <Col xs={12} md={7}>
-          <Card className="border-0 shadow-sm h-100">
-            <Card.Body className="p-3">
-              <div className="d-flex align-items-center gap-2 mb-3">
-                <FaChartBar className="text-primary" size={16} />
-                <span className="fw-semibold small">Team by Designation</span>
+          <Card className="border-0 h-100" style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,.06),0 4px 20px rgba(0,0,0,.07)', overflow: 'hidden' }}>
+            <Card.Body className="p-0">
+              {/* Header */}
+              <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 10, background: 'linear-gradient(135deg,#3B82F6,#2563EB)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <FaChartBar size={15} color="#fff" />
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: '#0F172A' }}>Team by Designation</div>
+                    <div style={{ fontSize: 11, color: '#94A3B8' }}>Member distribution</div>
+                  </div>
+                </div>
+                <span style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#1D4ED8', borderRadius: 20, padding: '3px 12px', fontSize: 12, fontWeight: 700 }}>
+                  {team.length} members
+                </span>
               </div>
-              {loading ? (
-                <div className="d-flex justify-content-center align-items-center" style={{ height: 200 }}>
-                  <Spinner animation="border" variant="primary" />
-                </div>
-              ) : team.length === 0 ? (
-                <div className="d-flex justify-content-center align-items-center text-muted small" style={{ height: 200 }}>
-                  No team members found
-                </div>
-              ) : (
-                <div style={{ height: 220 }}>
-                  <Bar data={teamChartData} options={barOptions} />
-                </div>
-              )}
+
+              {/* Chart */}
+              <div style={{ padding: '16px 20px 20px' }}>
+                {loading ? (
+                  <div className="d-flex justify-content-center align-items-center" style={{ height: 240 }}>
+                    <Spinner animation="border" variant="primary" />
+                  </div>
+                ) : team.length === 0 ? (
+                  <div className="d-flex flex-column justify-content-center align-items-center text-muted" style={{ height: 240, gap: 8 }}>
+                    <FaUsers size={28} opacity={0.4} />
+                    <small>No team members found</small>
+                  </div>
+                ) : (
+                  <div style={{ height: 240 }}>
+                    <Bar data={teamChartData} options={barOptions} />
+                  </div>
+                )}
+              </div>
             </Card.Body>
           </Card>
         </Col>
