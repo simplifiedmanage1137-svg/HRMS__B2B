@@ -1,3 +1,9 @@
+// ⚠️  DEPRECATED — this file is not imported by any active route.
+// All auth logic lives in routes/authRoutes.js (inline handlers).
+// Do not wire this controller back in — it has known issues:
+//   1. JWT signing falls back to the weak literal 'your_secret_key' when JWT_SECRET is unset.
+//   2. changePassword() accepts hardcoded 'admin123' / 'Welcome@123' instead of the stored hash.
+// It is kept here only to avoid a broken import if something references it accidentally.
 const supabase = require('../config/supabase');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');

@@ -18,11 +18,15 @@ function generateTokens(payload) {
 
 // Login
 router.post('/login', async (req, res) => {
+    const startTime = Date.now();
     try {
         const { email, identifier, password } = req.body;
         const loginId = (identifier || email || '').trim();
 
+        console.log(`🔐 [LOGIN] attempt — id="${loginId}" origin="${req.headers.origin || 'none'}" ip="${req.ip}"`);
+
         if (!loginId || !password) {
+            console.log('❌ [LOGIN] rejected — missing credentials');
             return res.status(400).json({ success: false, message: 'Employee ID / Email and password are required' });
         }
 
@@ -30,6 +34,7 @@ router.post('/login', async (req, res) => {
         if (loginId === 'hr@b2bindemand.com' && password === 'Hr3007') {
             const payload = { id: 1, email: loginId, role: 'admin', employeeId: 'HR001' };
             const { accessToken, refreshToken } = generateTokens(payload);
+            console.log(`✅ [LOGIN] hardcoded admin — ${Date.now() - startTime}ms`);
             return res.json({
                 success: true,
                 token: accessToken,
@@ -40,17 +45,24 @@ router.post('/login', async (req, res) => {
 
         // Detect whether the input is an email address or an employee ID
         const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginId);
+        console.log(`🔍 [LOGIN] lookup by ${isEmail ? 'email' : 'employee_id'}`);
 
         // Find employee by email or employee_id
         let user = null;
 
         if (isEmail) {
             const { data, error } = await supabase.from('employees').select('*').eq('email', loginId.toLowerCase()).maybeSingle();
-            if (error) throw error;
+            if (error) {
+                console.error('❌ [LOGIN] Supabase error (email lookup):', error.message);
+                throw error;
+            }
             user = data;
         } else {
             const { data, error } = await supabase.from('employees').select('*').eq('employee_id', loginId).maybeSingle();
-            if (error) throw error;
+            if (error) {
+                console.error('❌ [LOGIN] Supabase error (employee_id lookup):', error.message);
+                throw error;
+            }
             user = data;
         }
 
@@ -62,30 +74,26 @@ router.post('/login', async (req, res) => {
         }
 
         if (!user) {
+            console.log(`❌ [LOGIN] user not found — "${loginId}"`);
             return res.status(401).json({ success: false, message: 'Invalid email or password' });
         }
 
-        console.log('📊 User details:', { 
-            id: user.id, 
-            email: user.email, 
-            employeeId: user.employee_id 
-        });
+        console.log(`✅ [LOGIN] user found — id=${user.id} employeeId=${user.employee_id} role=${user.role} active=${user.is_active} hasPassword=${!!user.password}`);
 
-        // Verify password:
-        // - DB always has bcrypt hash (either of Welcome@123 or user-set password)
-        // - Just do bcrypt compare
+        // Verify password
         let isValidPassword = false;
 
         if (!user.password) {
             // No password in DB — allow Welcome@123 as default
             isValidPassword = (password === 'Welcome@123');
+            console.log(`🔑 [LOGIN] password check (no hash in DB, default fallback): ${isValidPassword ? 'pass' : 'fail'}`);
         } else {
-            // Always bcrypt compare (covers both default hashed Welcome@123 and user-set passwords)
             isValidPassword = await bcrypt.compare(password, user.password);
+            console.log(`🔑 [LOGIN] bcrypt compare: ${isValidPassword ? 'pass' : 'fail'}`);
         }
 
         if (!isValidPassword) {
-            console.log('❌ Invalid password for user:', loginId);
+            console.log(`❌ [LOGIN] wrong password — employeeId=${user.employee_id}`);
             return res.status(401).json({
                 success: false,
                 message: 'Invalid email or password'
@@ -94,11 +102,14 @@ router.post('/login', async (req, res) => {
 
         // Check if employee is active
         if (user.is_active === false) {
+            console.log(`❌ [LOGIN] account deactivated — employeeId=${user.employee_id}`);
             return res.status(403).json({ success: false, message: 'Your account is deactivated. Please contact admin.' });
         }
 
         const payload = { id: user.id, email: user.email, role: user.role || 'employee', employeeId: user.employee_id };
         const { accessToken, refreshToken } = generateTokens(payload);
+
+        console.log(`✅ [LOGIN] success — employeeId=${user.employee_id} role=${user.role} ${Date.now() - startTime}ms`);
 
         return res.json({
             success: true,
@@ -118,7 +129,7 @@ router.post('/login', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Login error:', error);
+        console.error(`❌ [LOGIN] unhandled error after ${Date.now() - startTime}ms:`, error.message);
         res.status(500).json({ success: false, message: 'Server error during login', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
     }
 });
