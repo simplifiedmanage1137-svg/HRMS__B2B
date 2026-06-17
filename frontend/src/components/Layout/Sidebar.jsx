@@ -5,7 +5,7 @@ import {
   FaTachometerAlt, FaUsers, FaCalendarAlt, FaMoneyBill,
   FaUserCircle, FaSignOutAlt, FaFingerprint, FaClock,
   FaBell, FaPaperPlane, FaEdit, FaUserTie,
-  FaBullhorn, FaStar, FaChevronRight
+  FaBullhorn, FaStar, FaChevronRight, FaLayerGroup
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -202,7 +202,7 @@ const Sidebar = () => {
             <div className="hrms-sidebar__logo-text">
               <div className="hrms-sidebar__logo-title">EMS Portal</div>
               <div className="hrms-sidebar__logo-sub">
-                {user?.role === 'admin' ? 'Admin Dashboard' : 'Employee Dashboard'}
+                {user?.role === 'admin' ? 'Admin Dashboard' : user?.role === 'manager' ? 'Manager Dashboard' : 'Employee Dashboard'}
               </div>
             </div>
           )}
@@ -223,6 +223,7 @@ const Sidebar = () => {
               <NavItem to="/admin/ratings"           icon={<FaStar />}        label="Employee Ratings" />
 
               <Section label="Admin Tools" />
+              <NavItem to="/admin/teams"             icon={<FaLayerGroup />}  label="Teams" />
               <NavItem to="/admin/send-update-request" icon={<FaPaperPlane />} label="Send Update Request" />
               <NavItem
                 to="/admin/update-approvals"
@@ -233,6 +234,17 @@ const Sidebar = () => {
               />
               <NavItem to="/admin/broadcast" icon={<FaBullhorn />} label="Broadcast" />
             </>
+          ) : user?.role === 'manager' ? (
+            <>
+              <Section label="My Space" />
+              <NavItem to="/profile"     icon={<FaUserCircle />}  label="My Profile" />
+              <NavItem to="/attendance" icon={<FaFingerprint />} label="Daily Attendance" />
+              <NavItem to="/apply-leave" icon={<FaCalendarAlt />} label="Apply Leave" />
+              <NavItem to="/salary-slip" icon={<FaMoneyBill />}   label="Salary Slip" />
+              <Section label="Team" />
+              {/* <NavItem to="/admin/teams" icon={<FaLayerGroup />} label="My Teams" /> */}
+              <NavItem to="/manager/panel" icon={<FaUserTie />} label="Team Panel" />
+            </>
           ) : (
             <>
               <Section label="My Space" />
@@ -241,20 +253,6 @@ const Sidebar = () => {
               <NavItem to="/apply-leave"             icon={<FaCalendarAlt />} label="Apply Leave" />
               <NavItem to="/salary-slip"             icon={<FaMoneyBill />}   label="Salary Slip" />
               <NavItem to="/employee/update-requests" icon={<FaEdit />}       label="Update Requests" />
-
-              {(() => {
-                const d = (employeeDesignation || '').toLowerCase();
-                const isTL =
-                  d.includes('team leader') || d.includes('team manager') ||
-                  d.includes('tl') || d.includes('lead') ||
-                  d.includes('manager') || d.includes('head') || d.includes('supervisor');
-                return isTL ? (
-                  <>
-                    <Section label="Team" />
-                    <NavItem to="/manager/panel" icon={<FaUserTie />} label="My Team" />
-                  </>
-                ) : null;
-              })()}
             </>
           )}
         </nav>
@@ -269,7 +267,7 @@ const Sidebar = () => {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="hrms-sidebar__user-name">{employeeName}</div>
                 <div className="hrms-sidebar__user-role">
-                  {user?.role === 'admin' ? 'Administrator' : `ID: ${user?.employeeId}`}
+                  {user?.role === 'admin' ? 'Administrator' : user?.role === 'manager' ? 'Manager' : `ID: ${user?.employeeId}`}
                 </div>
               </div>
               <button className="hrms-logout-btn" onClick={logout} title="Logout">

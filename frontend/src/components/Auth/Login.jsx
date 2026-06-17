@@ -36,7 +36,10 @@ const Login = () => {
     try {
       const result = await login(email, password);
       if (result.success) {
-        navigate(result.user.role === 'admin' ? '/admin/dashboard' : '/employee/dashboard');
+        const { role } = result.user;
+        if (role === 'admin') navigate('/admin/dashboard');
+        else if (role === 'manager') navigate('/manager/dashboard');
+        else navigate('/employee/dashboard');
       } else {
         setError(result.message || 'Login failed. Please try again.');
       }

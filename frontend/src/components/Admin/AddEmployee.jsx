@@ -148,16 +148,8 @@ const AddEmployee = () => {
   useEffect(() => {
     const fetchManagers = async () => {
       try {
-        const res = await axios.get(API_ENDPOINTS.EMPLOYEES);
-        const all = Array.isArray(res.data) ? res.data : res.data?.data || res.data?.employees || [];
-        const isMgr = (d) => {
-          if (!d) return false;
-          const dl = d.toLowerCase();
-          return dl.includes('team leader') || dl.includes('team manager') ||
-                 dl.includes('tl') || dl.includes('lead') || dl.includes('manager') ||
-                 dl.includes('head') || dl.includes('supervisor');
-        };
-        setManagers(all.filter(e => isMgr(e.designation)));
+        const res = await axios.get(API_ENDPOINTS.TEAMS_MANAGERS_LIST);
+        setManagers(res.data.managers || []);
       } catch (err) {
         console.error('Error fetching managers:', err);
       }
@@ -1384,7 +1376,6 @@ const AddEmployee = () => {
                   label={`${uploadProgress}%`}
                   striped
                   animated
-                  size="sm" const employeeData
                 />
                 <small className="text-muted mt-1 d-block">Uploading documents...</small>
               </div>

@@ -858,14 +858,20 @@ html, body, #root {
 }
 
 /* ── Notice Board Marquee Animations ── */
+/*
+  Two identical halves sit side-by-side inside an inline-flex container.
+  Moving -50% of the container's own width = exactly one half's width,
+  so the second half slides into the exact position the first half started.
+  The loop is seamless — no gap, no jump.
+*/
 @keyframes noticeScrollRTL {
-  0%   { transform: translateX(100vw); }
-  100% { transform: translateX(-100%); }
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
 }
 
 @keyframes noticeScrollLTR {
-  0%   { transform: translateX(-100%); }
-  100% { transform: translateX(100vw); }
+  0%   { transform: translateX(-50%); }
+  100% { transform: translateX(0); }
 }
 
 /* ── Notice Board Font Imports ── */

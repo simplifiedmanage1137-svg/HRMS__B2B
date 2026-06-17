@@ -30,6 +30,7 @@ const ROUTE_LABELS = {
   '/salary-slip':                'Salary Slip',
   '/employee/update-requests':   'Update Requests',
   '/manager/panel':              'My Team',
+  '/admin/teams':                'Teams',
 };
 
 const Navbar = () => {
@@ -233,7 +234,7 @@ const Navbar = () => {
           fontSize: '11px', fontWeight: 400, lineHeight: 1,
           color: activeNotice ? noticeColor : 'var(--text-muted)', opacity: 0.75,
         }}>
-          {user?.role === 'admin' ? 'Admin' : 'Employee'} Portal
+          {user?.role === 'admin' ? 'Admin' : user?.role === 'manager' ? 'Manager' : 'Employee'} Portal
         </div>
         <div style={{
           fontSize: '15px', fontWeight: 700, lineHeight: 1.3, marginTop: '2px',
@@ -285,21 +286,33 @@ const Navbar = () => {
                 onMouseEnter={() => setNoticePaused(true)}
                 onMouseLeave={() => setNoticePaused(false)}
               >
-                <span style={{
-                  display: 'inline-block',
-                  fontSize: '23px',
-                  marginLeft:"200px",
-                  color: noticeColor,
-                  fontStyle: noticeItalic ? 'italic' : 'normal',
-                  fontWeight: noticeBold ? '700' : '500',
-                  paddingRight: '60px',
+                {/*
+                  Two identical halves inside an inline-flex wrapper.
+                  Each half = message repeated 5× with a separator.
+                  Animation moves -50% of the wrapper's own width = one half,
+                  so the second half seamlessly takes the first half's position.
+                */}
+                <div style={{
+                  display: 'inline-flex',
                   animation: noticePaused ? 'none'
                     : activeNotice.direction === 'left_to_right'
-                      ? 'noticeScrollLTR 28s linear infinite'
-                      : 'noticeScrollRTL 28s linear infinite',
+                      ? 'noticeScrollLTR 30s linear infinite'
+                      : 'noticeScrollRTL 30s linear infinite',
                 }}>
-                  {activeNotice.message}
-                </span>
+                  {[0, 1].map(half => (
+                    <span key={half} style={{
+                      display: 'inline-block',
+                      whiteSpace: 'nowrap',
+                      paddingRight: '4em',
+                      fontSize: '19px',
+                      color: noticeColor,
+                      fontStyle: noticeItalic ? 'italic' : 'normal',
+                      fontWeight: noticeBold ? '700' : '500',
+                    }}>
+                      {Array(5).fill(activeNotice.message).join('    ·    ')}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -359,7 +372,7 @@ const Navbar = () => {
             <div className="hrms-profile-chip__info d-none d-md-block">
               <div className="hrms-profile-chip__name">{employeeName}</div>
               <div className="hrms-profile-chip__role">
-                {user?.role === 'admin' ? 'Administrator' : user?.employeeId}
+                {user?.role === 'admin' ? 'Administrator' : user?.role === 'manager' ? 'Manager' : user?.employeeId}
               </div>
             </div>
             <FaChevronDown size={9} style={{ color: 'var(--text-muted)', marginLeft: '2px' }} />
@@ -380,11 +393,11 @@ const Navbar = () => {
               </div>
               <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>{employeeName}</div>
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '1px' }}>
-                {user?.role === 'admin' ? 'Administrator' : user?.employeeId}
+                {user?.role === 'admin' ? 'Administrator' : user?.role === 'manager' ? 'Manager' : user?.employeeId}
               </div>
             </div>
 
-            {user?.role === 'employee' && (
+            {(user?.role === 'employee' || user?.role === 'manager') && (
               <Dropdown.Item as={Link} to="/profile" style={{
                 borderRadius: 'var(--radius-sm)', fontSize: '13px', padding: '8px 12px',
                 display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)',

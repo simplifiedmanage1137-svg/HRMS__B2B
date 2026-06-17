@@ -6,11 +6,14 @@ import { FaSave, FaArrowLeft, FaFileAlt, FaFileImage, FaFilePdf, FaDownload, FaE
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useNotification } from '../../context/NotificationContext';
+import { useAuth } from '../../context/AuthContext';
 
 const EditEmployee = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const { showNotification, triggerEmployeeUpdate } = useNotification();
+    const { user } = useAuth();
+    const isAdmin = user?.role === 'admin';
 
     // Form states
     const [formData, setFormData] = useState({
@@ -41,7 +44,8 @@ const EditEmployee = () => {
         pincode: '',
         blood_group: '',
         emergency_contact: '',
-        contract_policy: ''
+        contract_policy: '',
+        role: 'employee'
     });
 
     // UI states
@@ -91,16 +95,8 @@ const EditEmployee = () => {
 
     const fetchManagers = async () => {
         try {
-            const res = await axios.get(API_ENDPOINTS.EMPLOYEES);
-            const all = Array.isArray(res.data) ? res.data : res.data?.data || res.data?.employees || [];
-            const isManagerDesignation = (d) => {
-                if (!d) return false;
-                const dl = d.toLowerCase();
-                return dl.includes('team leader') || dl.includes('team manager') ||
-                       dl.includes('tl') || dl.includes('lead') || dl.includes('manager') ||
-                       dl.includes('head') || dl.includes('supervisor');
-            };
-            setManagers(all.filter(e => isManagerDesignation(e.designation)));
+            const res = await axios.get(API_ENDPOINTS.TEAMS_MANAGERS_LIST);
+            setManagers(res.data.managers || []);
         } catch (err) {
             console.error('Error fetching managers:', err);
         }
@@ -559,6 +555,26 @@ const EditEmployee = () => {
                                 </Form.Group>
                             </Col>
                         </Row>
+
+                        {isAdmin && (
+                            <Row className="g-2 g-md-3 mb-3">
+                                <Col xs={12} md={4}>
+                                    <Form.Group>
+                                        <Form.Label className="fw-semibold small">Role <span className="text-danger">*</span></Form.Label>
+                                        <Form.Select
+                                            name="role"
+                                            value={formData.role || 'employee'}
+                                            onChange={handleChange}
+                                            size="sm"
+                                        >
+                                            <option value="employee">Employee</option>
+                                            <option value="manager">Manager</option>
+                                            <option value="admin">Admin</option>
+                                        </Form.Select>
+                                    </Form.Group>
+                                </Col>
+                            </Row>
+                        )}
                     </Card.Body>
                 </Card>
 

@@ -378,14 +378,42 @@ const NoticeBoardManager = () => {
                   border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '8px',
                 }}>
                   <FaBullhorn size={12} style={{ color: form.text_color, flexShrink: 0, opacity: 0.7 }} />
-                  <span style={{
-                    fontSize: '13px', color: form.text_color,
-                    fontStyle: form.font_style.includes('italic') ? 'italic' : 'normal',
-                    fontWeight: form.font_style.includes('bold') ? '700' : '400',
-                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                  }}>
-                    {form.message || 'Your notice message will appear here...'}
-                  </span>
+                  <div style={{ flex: 1, overflow: 'hidden' }}>
+                    {form.display_type === 'static' ? (
+                      <span style={{
+                        fontSize: '13px', color: form.text_color,
+                        fontStyle: form.font_style.includes('italic') ? 'italic' : 'normal',
+                        fontWeight: form.font_style.includes('bold') ? '700' : '400',
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        display: 'block',
+                      }}>
+                        {form.message || 'Your notice message will appear here...'}
+                      </span>
+                    ) : (
+                      <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                        <div style={{
+                          display: 'inline-flex',
+                          animation: form.direction === 'left_to_right'
+                            ? 'noticeScrollLTR 30s linear infinite'
+                            : 'noticeScrollRTL 30s linear infinite',
+                        }}>
+                          {[0, 1].map(half => (
+                            <span key={half} style={{
+                              display: 'inline-block',
+                              whiteSpace: 'nowrap',
+                              paddingRight: '4em',
+                              fontSize: '13px',
+                              color: form.text_color,
+                              fontStyle: form.font_style.includes('italic') ? 'italic' : 'normal',
+                              fontWeight: form.font_style.includes('bold') ? '700' : '400',
+                            }}>
+                              {Array(5).fill(form.message || 'Your notice message will appear here...').join('    ·    ')}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
