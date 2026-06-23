@@ -1,21 +1,19 @@
 {
   "version": 2,
 
-  "buildCommand": "cd frontend && npm install && npm run build",
+  "installCommand": "npm install",
+  "buildCommand": "npm --prefix frontend install && npm --prefix frontend run build",
   "outputDirectory": "frontend/dist",
-  "installCommand": "npm install && cd backend && npm install",
   "framework": null,
 
   "rewrites": [
-    { "source": "/api/cron/:path*", "destination": "/api/cron/:path*" },
-    { "source": "/api/:path*",      "destination": "/api/index"        },
-    { "source": "/(.*)",            "destination": "/index.html"       }
+    { "source": "/api/:path*", "destination": "/api/index" },
+    { "source": "/(.*)",       "destination": "/index.html" }
   ],
 
   "crons": [
-    { "path": "/api/cron/daily-absent",    "schedule": "29 18 * * *"  },
-    { "path": "/api/cron/weekly-cleanup",  "schedule": "30 20 * * 0"  },
-    { "path": "/api/cron/monthly-accrual", "schedule": "30 19 1 * *"  }
+    { "path": "/api/cron/daily-absent",    "schedule": "29 18 * * *" },
+    { "path": "/api/cron/monthly-accrual", "schedule": "30 19 1 * *" }
   ],
 
   "env": {
@@ -24,10 +22,7 @@
 
   "functions": {
     "api/index.js": {
-      "maxDuration": 30
-    },
-    "api/cron/*.js": {
-      "maxDuration": 300
+      "maxDuration": 10
     }
   }
 }

@@ -37,6 +37,7 @@ const noticeBoardRoutes   = require('./routes/noticeBoardRoutes');
 const teamRoutes          = require('./routes/teamRoutes');
 
 const attendanceController = require('./controllers/attendanceController');
+const cronRoutes           = require('./routes/cronRoutes');
 
 const app = express();
 
@@ -162,6 +163,8 @@ const requireAdmin = (req, res, next) => {
 // ─── Public routes ────────────────────────────────────────────────────────────
 app.use('/api/auth',   authRoutes);
 app.use('/api/public', loginFeedRoutes);
+// Cron endpoints — no JWT, auth via CRON_SECRET (called by Vercel scheduler)
+app.use('/api/cron',   cronRoutes);
 
 // ─── Protected routes ─────────────────────────────────────────────────────────
 app.use('/api/employees',        authenticateToken, employeeRoutes);

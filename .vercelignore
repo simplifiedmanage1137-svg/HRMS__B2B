@@ -1,0 +1,8 @@
+backend/node_modules
+frontend/node_modules
+backend/logs
+backend/uploads
+backend/.env
+**/*.log
+*.sql
+debug-team.js
