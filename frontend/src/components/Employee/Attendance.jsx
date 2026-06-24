@@ -1728,20 +1728,9 @@ const Attendance = () => {
         );
       }
 
-      // Still in 15-min cooldown — hide clock-out button completely
+      // Still in 15-min cooldown — show nothing
       if (!canClockOut) {
-        const totalLeft = clockOutSecondsLeft !== null ? clockOutSecondsLeft : 15 * 60;
-        const mins = Math.floor(totalLeft / 60);
-        const secs = totalLeft % 60;
-        const countdown = `${mins}:${String(secs).padStart(2, '0')}`;
-        return (
-          <div className="text-center py-2">
-            <small className="text-muted">
-              <FaRegClock className="me-1" />
-              Clock Out available in {countdown}
-            </small>
-          </div>
-        );
+        return null;
       }
 
       return (

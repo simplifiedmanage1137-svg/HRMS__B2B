@@ -232,14 +232,7 @@ const EmployeeDashboard = () => {
 
     if (hasOpenSession) {
       if (!canClockOut) {
-        const totalLeft = clockOutSecondsLeft !== null ? clockOutSecondsLeft : 15 * 60;
-        const mins = Math.floor(totalLeft / 60);
-        const secs = totalLeft % 60;
-        return (
-          <small className="text-white-50" style={{ fontSize: '11px' }}>
-            Clock Out in {mins}:{String(secs).padStart(2, '0')}
-          </small>
-        );
+        return null;
       }
       return (
         <Button
