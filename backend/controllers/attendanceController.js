@@ -1020,6 +1020,25 @@ exports.clockOut = async (req, res) => {
         const queryTime = Date.now() - startTime;
         console.log(`✅ Query time: ${queryTime}ms`);
 
+        // 15-minute minimum between clock-in and clock-out
+        if (attendanceRecord.clock_in) {
+            // Force UTC parse: DB stores UTC without 'Z', so JS parses it as local time on IST machines
+            const rawClockIn = attendanceRecord.clock_in;
+            const clockInStr = rawClockIn.includes('Z') || rawClockIn.includes('+') ? rawClockIn : rawClockIn + 'Z';
+            const clockInMs = new Date(clockInStr).getTime();
+            const minutesSince = (Date.now() - clockInMs) / (1000 * 60);
+            console.log(`⏱️ Minutes since clock-in: ${minutesSince.toFixed(2)}`);
+            if (minutesSince < 15) {
+                const remaining = Math.ceil(15 - minutesSince);
+                return res.status(400).json({
+                    success: false,
+                    message: `Please wait ${remaining} more minute(s) before clocking out.`,
+                    too_early: true,
+                    remaining_minutes: remaining
+                });
+            }
+        }
+
         // Use IST strings for accurate diff (avoids UTC offset issues)
         const clockInIST = attendanceRecord.clock_in_ist || nowIST();
 
@@ -3589,11 +3608,14 @@ exports.importAttendance = async (req, res) => {
             .gte('attendance_date', startDate)
             .lte('attendance_date', endDate);
 
+        // Collect ALL record IDs per employee+date — duplicate records exist when imports
+        // created ghost records alongside real clock-in records. Admin must override ALL of them.
         const existingMap = {};
-        // Normalize attendance_date to YYYY-MM-DD — Supabase may return timestamp with T suffix
         (existing || []).forEach(r => {
             const dateKey = r.attendance_date ? String(r.attendance_date).split('T')[0] : r.attendance_date;
-            existingMap[`${r.employee_id}__${dateKey}`] = r.id;
+            const key = `${r.employee_id}__${dateKey}`;
+            if (!existingMap[key]) existingMap[key] = [];
+            existingMap[key].push(r.id);
         });
 
         const toInsert = [];
@@ -3623,9 +3645,10 @@ exports.importAttendance = async (req, res) => {
                     late_minutes:  0,  // Excel is source of truth — no late marks on import
                 };
 
-                const existingId = existingMap[`${employee_id}__${date}`];
-                if (existingId) {
-                    toUpdate.push({ id: existingId, ...payload });
+                const existingIds = existingMap[`${employee_id}__${date}`];
+                if (existingIds && existingIds.length > 0) {
+                    // Update ALL records for this date so admin status applies everywhere
+                    existingIds.forEach(id => toUpdate.push({ id, ...payload }));
                 } else {
                     toInsert.push(payload);
                 }

@@ -152,8 +152,9 @@ const buildPDFHTML = (slip, emp, a, monthName, logoBase64) => {
               <tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#475569;">Provident Fund (PF)</td><td style="padding:7px 0;text-align:right;">₹0</td></tr>
               <tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#475569;">Professional Tax</td><td style="padding:7px 0;text-align:right;">₹0</td></tr>
               <tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#475569;">TDS</td><td style="padding:7px 0;text-align:right;">₹0</td></tr>
+              ${(a.absentDays + a.unpaidLeaveDays) > 0 ? `<tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#dc2626;font-weight:600;">Absent Deduction (${a.absentDays > 0 ? a.absentDays + ' absent' : ''}${a.unpaidLeaveDays > 0 ? (a.absentDays > 0 ? ' + ' : '') + a.unpaidLeaveDays + ' unpaid leave' : ''} × ₹${fmtNum(a.perDaySalary)}/day)</td><td style="padding:7px 0;text-align:right;color:#dc2626;font-weight:700;">₹${fmtNum((a.absentDays + a.unpaidLeaveDays) * a.perDaySalary)}</td></tr>` : ''}
               <tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#b45309;font-weight:600;">DT (Fixed Deduction)</td><td style="padding:7px 0;text-align:right;color:#b45309;font-weight:700;">₹${fmtNum(a.deduction)}</td></tr>
-              <tr style="background:#f8fafc;"><td style="padding:8px 4px;font-weight:700;color:#dc2626;">Total Deductions</td><td style="padding:8px 4px;text-align:right;font-weight:700;color:#dc2626;">₹${fmtNum(a.deduction)}</td></tr>
+              <tr style="background:#f8fafc;"><td style="padding:8px 4px;font-weight:700;color:#dc2626;">Total Deductions</td><td style="padding:8px 4px;text-align:right;font-weight:700;color:#dc2626;">₹${fmtNum(a.deduction + (a.absentDays + a.unpaidLeaveDays) * a.perDaySalary)}</td></tr>
             </table>
           </td>
         </tr>
@@ -473,8 +474,15 @@ const SalarySlipManager = ({ employee }) => {
               <SalaryRow label="Provident Fund (PF)"  value={0} />
               <SalaryRow label="Professional Tax"      value={0} />
               <SalaryRow label="TDS"                   value={0} />
+              {(a.absentDays + a.unpaidLeaveDays) > 0 && (
+                <SalaryRow
+                  label={`Absent Deduction (${a.absentDays > 0 ? `${a.absentDays} absent` : ''}${a.unpaidLeaveDays > 0 ? `${a.absentDays > 0 ? ' + ' : ''}${a.unpaidLeaveDays} unpaid` : ''} × ₹${fmtNum(a.perDaySalary)}/day)`}
+                  value={(a.absentDays + a.unpaidLeaveDays) * a.perDaySalary}
+                  accent="#dc2626"
+                />
+              )}
               <SalaryRow label="DT (Fixed Deduction)"  value={a.deduction} accent="#b45309" />
-              <SalaryRow label="Total Deductions"      value={a.deduction} bold accent="#dc2626" last />
+              <SalaryRow label="Total Deductions"      value={a.deduction + (a.absentDays + a.unpaidLeaveDays) * a.perDaySalary} bold accent="#dc2626" last />
             </div>
           </Col>
         </Row>

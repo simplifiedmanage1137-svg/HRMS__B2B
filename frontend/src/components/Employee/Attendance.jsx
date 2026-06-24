@@ -112,6 +112,8 @@ const Attendance = () => {
   const [submittingRequest, setSubmittingRequest] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [canClockOut, setCanClockOut] = useState(false);
+  const [clockOutSecondsLeft, setClockOutSecondsLeft] = useState(null);
 
   const STORAGE_KEY = `attendance_session_${user?.employeeId}`;
 
@@ -1478,7 +1480,9 @@ const Attendance = () => {
     } catch (error) {
       console.error('❌ Clock-out error:', error);
       const errData = error.response?.data;
-      if (errData?.already_clocked_out || error.response?.status === 404) {
+      if (errData?.too_early) {
+        setMessage({ type: 'warning', text: errData.message });
+      } else if (errData?.already_clocked_out || error.response?.status === 404) {
         setActiveSession(null);
         clearSessionFromStorage();
         setHasClockedOutToday(false);
@@ -1570,6 +1574,34 @@ const Attendance = () => {
     };
 
     const interval = setInterval(updateCurrentHours, 60000);
+    return () => clearInterval(interval);
+  }, [attendance?.clock_in, attendance?.clock_out]);
+
+  // 15-minute clock-out cooldown after clock-in
+  useEffect(() => {
+    if (!attendance?.clock_in || attendance?.clock_out) {
+      setCanClockOut(false);
+      setClockOutSecondsLeft(null);
+      return;
+    }
+    const COOLDOWN_MS = 15 * 60 * 1000;
+    const raw = attendance.clock_in;
+    const clockInMs = raw.includes('T')
+      ? new Date(raw.endsWith('Z') || raw.includes('+') ? raw : raw + 'Z').getTime()
+      : new Date(raw.replace(' ', 'T') + '+05:30').getTime();
+    const availableAt = clockInMs + COOLDOWN_MS;
+    const tick = () => {
+      const remaining = Math.ceil((availableAt - Date.now()) / 1000);
+      if (remaining <= 0) {
+        setCanClockOut(true);
+        setClockOutSecondsLeft(0);
+      } else {
+        setCanClockOut(false);
+        setClockOutSecondsLeft(remaining);
+      }
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
   }, [attendance?.clock_in, attendance?.clock_out]);
 
@@ -1691,6 +1723,22 @@ const Attendance = () => {
             </Button>
             <small className="text-muted d-block mt-2">
               Working {currentHours.toFixed(1)}h — Exceeded {REGULARIZATION_THRESHOLD}h limit
+            </small>
+          </div>
+        );
+      }
+
+      // Still in 15-min cooldown — hide clock-out button completely
+      if (!canClockOut) {
+        const totalLeft = clockOutSecondsLeft !== null ? clockOutSecondsLeft : 15 * 60;
+        const mins = Math.floor(totalLeft / 60);
+        const secs = totalLeft % 60;
+        const countdown = `${mins}:${String(secs).padStart(2, '0')}`;
+        return (
+          <div className="text-center py-2">
+            <small className="text-muted">
+              <FaRegClock className="me-1" />
+              Clock Out available in {countdown}
             </small>
           </div>
         );

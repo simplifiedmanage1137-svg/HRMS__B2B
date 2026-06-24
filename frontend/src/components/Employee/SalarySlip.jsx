@@ -374,7 +374,9 @@ const SalarySlip = () => {
         text: 'Generating PDF...'
       });
 
-      const { basicSalary, deduction, netSalary, overtimeAmount, overtimeHours } = getSlipAmounts(slip);
+      const { basicSalary, deduction, netSalary, overtimeAmount, overtimeHours, absentDays, unpaidLeaveDays, unpaidDeduction, perDaySalary } = getSlipAmounts(slip);
+      const totalAbsentDeduction = (absentDays + unpaidLeaveDays) * perDaySalary;
+      const totalDeductionsForPrint = deduction + totalAbsentDeduction;
 
       let logoBase64 = '';
       try {
@@ -450,15 +452,20 @@ const SalarySlip = () => {
           </thead>
           <tbody>
             <tr><td style="padding: 4px 4px;">PF (Provident Fund)</td><td style="text-align: right; padding: 4px 4px;">0</td></tr>
-            <tr><td style="padding: 4px 4px;">ESI (Employee State Insurance)</td><td style="text-align: right; padding: 4px 4px;">0</td></tr>
-            <tr><td style="padding: 4px 4px;">TDS (Tax Deducted at Source)</td><td style="text-align: right; padding: 4px 4px;">0</td></tr>
+            <tr><td style="padding: 4px 4px;">Professional Tax</td><td style="text-align: right; padding: 4px 4px;">0</td></tr>
+            <tr><td style="padding: 4px 4px;">TDS</td><td style="text-align: right; padding: 4px 4px;">0</td></tr>
+            ${totalAbsentDeduction > 0 ? `
+            <tr style="background-color: #ffe0e0;">
+              <td style="padding: 4px 4px; color: #d9534f;">Absent Deduction (${absentDays > 0 ? absentDays + ' absent' : ''}${unpaidLeaveDays > 0 ? (absentDays > 0 ? ' + ' : '') + unpaidLeaveDays + ' unpaid leave' : ''} × ₹${formatCurrency(perDaySalary)}/day)</td>
+              <td style="text-align: right; font-weight: bold; color: #d9534f; padding: 4px 4px;">₹${formatCurrency(totalAbsentDeduction)}</td>
+            </tr>` : ''}
             <tr style="background-color: #fff3cd;">
               <td style="font-weight: bold; padding: 4px 4px;">DT (Fixed Deduction)</td>
               <td style="text-align: right; font-weight: bold; color: #d9534f; padding: 4px 4px;">${formatCurrency(deduction)}</td>
             </tr>
             <tr style="background-color: #f2f2f2;">
               <td style="font-weight: bold; padding: 4px 4px;">Total Deductions</td>
-              <td style="text-align: right; font-weight: bold; color: #d9534f; padding: 4px 4px;">${formatCurrency(deduction)}</td>
+              <td style="text-align: right; font-weight: bold; color: #d9534f; padding: 4px 4px;">${formatCurrency(totalDeductionsForPrint)}</td>
             </tr>
             <tr style="font-weight: bold; border-top: 2px solid #000;">
               <td style="padding: 8px 4px;">NET SALARY</td>
@@ -468,8 +475,9 @@ const SalarySlip = () => {
         </table>
 
         <div style="background-color: #f8f9fa; padding: 10px; margin-bottom: 20px; border-radius: 5px; font-size: 13px;">
-          <strong>Calculation:</strong> Basic Salary (₹${formatCurrency(basicSalary)}) 
-          + Overtime (₹${formatCurrency(overtimeAmount)}) 
+          <strong>Calculation:</strong> Basic Salary (₹${formatCurrency(basicSalary)})
+          + Overtime (₹${formatCurrency(overtimeAmount)})
+          ${totalAbsentDeduction > 0 ? ` - Absent Deduction (₹${formatCurrency(totalAbsentDeduction)})` : ''}
           - DT Deduction (₹${formatCurrency(deduction)}) = Net Salary (₹${formatCurrency(netSalary)})
         </div>
 
@@ -1158,8 +1166,18 @@ const SalarySlip = () => {
                   </thead>
                   <tbody>
                     <tr><td className="py-1 ps-2">PF (Provident Fund)</td><td className="text-end py-1 pe-2">0</td></tr>
-                    <tr><td className="py-1 ps-2">ESI (Employee State Insurance)</td><td className="text-end py-1 pe-2">0</td></tr>
-                    <tr><td className="py-1 ps-2">TDS (Tax Deducted at Source)</td><td className="text-end py-1 pe-2">0</td></tr>
+                    <tr><td className="py-1 ps-2">Professional Tax</td><td className="text-end py-1 pe-2">0</td></tr>
+                    <tr><td className="py-1 ps-2">TDS</td><td className="text-end py-1 pe-2">0</td></tr>
+                    {(selectedSlipAmounts.absentDays + selectedSlipAmounts.unpaidLeaveDays) > 0 && (
+                      <tr style={{ backgroundColor: '#ffe0e0' }}>
+                        <td className="py-1 ps-2 text-danger">
+                          Absent Deduction ({selectedSlipAmounts.absentDays > 0 ? `${selectedSlipAmounts.absentDays} absent` : ''}{selectedSlipAmounts.unpaidLeaveDays > 0 ? `${selectedSlipAmounts.absentDays > 0 ? ' + ' : ''}${selectedSlipAmounts.unpaidLeaveDays} unpaid leave` : ''} × ₹{formatCurrency(selectedSlipAmounts.perDaySalary)}/day)
+                        </td>
+                        <td className="text-end fw-bold text-danger py-1 pe-2">
+                          {formatCurrency((selectedSlipAmounts.absentDays + selectedSlipAmounts.unpaidLeaveDays) * selectedSlipAmounts.perDaySalary)}
+                        </td>
+                      </tr>
+                    )}
                     <tr style={{ backgroundColor: '#fff3cd' }}>
                       <td className="fw-bold py-1 ps-2">DT (Fixed Deduction)</td>
                       <td className="text-end fw-bold text-danger py-1 pe-2">
@@ -1169,7 +1187,7 @@ const SalarySlip = () => {
                     <tr style={{ backgroundColor: '#f2f2f2' }}>
                       <td className="fw-bold py-1 ps-2">Total Deductions</td>
                       <td className="text-end fw-bold text-danger py-1 pe-2">
-                        {formatCurrency(selectedSlipAmounts.deduction)}
+                        {formatCurrency(selectedSlipAmounts.deduction + (selectedSlipAmounts.absentDays + selectedSlipAmounts.unpaidLeaveDays) * selectedSlipAmounts.perDaySalary)}
                       </td>
                     </tr>
                     <tr className="fw-bold" style={{ borderTop: '2px solid #000' }}>
@@ -1184,9 +1202,9 @@ const SalarySlip = () => {
 
               {/* Calculation */}
               <div className="bg-light p-2 mb-3 rounded small">
-                <strong>Calculation:</strong> Monthly Salary (₹{formatCurrency(selectedSlipAmounts.monthlySalary)})
-                {selectedSlipAmounts.unpaidLeaveDays > 0 && (
-                  <span className="text-danger"> - Unpaid Leave (₹{formatCurrency(selectedSlipAmounts.unpaidDeduction)})</span>
+                <strong>Calculation:</strong> Basic Salary (₹{formatCurrency(selectedSlipAmounts.basicSalary)})
+                {(selectedSlipAmounts.absentDays + selectedSlipAmounts.unpaidLeaveDays) > 0 && (
+                  <span className="text-danger"> - Absent Deduction (₹{formatCurrency((selectedSlipAmounts.absentDays + selectedSlipAmounts.unpaidLeaveDays) * selectedSlipAmounts.perDaySalary)})</span>
                 )}
                 {selectedSlipAmounts.overtimeAmount > 0 && (
                   <span className="text-success"> + Overtime (₹{formatCurrency(selectedSlipAmounts.overtimeAmount)})</span>

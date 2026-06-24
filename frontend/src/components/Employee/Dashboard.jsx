@@ -80,6 +80,8 @@ const EmployeeDashboard = () => {
   const [hasClockedOutToday, setHasClockedOutToday] = useState(false);
   const [clockLoading, setClockLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [canClockOut, setCanClockOut] = useState(false);
+  const [clockOutSecondsLeft, setClockOutSecondsLeft] = useState(null);
 
   const OFFICE_COORDS = { radius: 100 };
   const STORAGE_KEY = `attendance_session_${user?.employeeId}`;
@@ -98,6 +100,29 @@ const EmployeeDashboard = () => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // 15-minute clock-out cooldown after clock-in
+  useEffect(() => {
+    if (!attendance?.clock_in || attendance?.clock_out) {
+      setCanClockOut(false);
+      setClockOutSecondsLeft(null);
+      return;
+    }
+    const COOLDOWN_MS = 15 * 60 * 1000;
+    const raw = attendance.clock_in;
+    const clockInMs = raw.includes('T')
+      ? new Date(raw.endsWith('Z') || raw.includes('+') ? raw : raw + 'Z').getTime()
+      : new Date(raw.replace(' ', 'T') + '+05:30').getTime();
+    const availableAt = clockInMs + COOLDOWN_MS;
+    const tick = () => {
+      const remaining = Math.ceil((availableAt - Date.now()) / 1000);
+      if (remaining <= 0) { setCanClockOut(true); setClockOutSecondsLeft(0); }
+      else { setCanClockOut(false); setClockOutSecondsLeft(remaining); }
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [attendance?.clock_in, attendance?.clock_out]);
 
   const formatTimeIST = (datetime) => {
     if (!datetime) return '--:--';
@@ -206,6 +231,16 @@ const EmployeeDashboard = () => {
     const hasOpenSession = !!activeSession || (!!attendance?.clock_in && !attendance?.clock_out);
 
     if (hasOpenSession) {
+      if (!canClockOut) {
+        const totalLeft = clockOutSecondsLeft !== null ? clockOutSecondsLeft : 15 * 60;
+        const mins = Math.floor(totalLeft / 60);
+        const secs = totalLeft % 60;
+        return (
+          <small className="text-white-50" style={{ fontSize: '11px' }}>
+            Clock Out in {mins}:{String(secs).padStart(2, '0')}
+          </small>
+        );
+      }
       return (
         <Button
           variant="warning"

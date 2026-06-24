@@ -212,7 +212,9 @@ const Sidebar = () => {
         <nav className="hrms-sidebar__nav">
 
           <Section label="Overview" />
-          <NavItem to="/" end icon={<FaTachometerAlt />} label="Dashboard" />
+          <div style={{ display: 'none' }}>
+            <NavItem to="/" end icon={<FaTachometerAlt />} label="Dashboard" />
+          </div>
 
           {user?.role === 'admin' ? (
             <>

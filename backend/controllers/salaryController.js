@@ -138,7 +138,10 @@ const getAttendanceRecords = async (employeeId, startDateStr, endDateStr) => {
 
     if (error) throw error;
 
-    // Keep best record per day: prefer clocked-out > clocked-in > absent
+    // Keep best record per day.
+    // Priority: admin-set status (absent/present with total_minutes=0 from import) > clock data.
+    // When admin marks a day via the calendar, all duplicate records get the same status (fixed in importAttendance).
+    // We pick the record with the highest total_minutes so a genuinely worked day is represented correctly.
     const bestPerDay = {};
     for (const rec of (attendance || [])) {
         const dateKey = rec.attendance_date.split('T')[0];
@@ -147,14 +150,26 @@ const getAttendanceRecords = async (employeeId, startDateStr, endDateStr) => {
             bestPerDay[dateKey] = rec;
             continue;
         }
-        // Prefer record with clock_out over one without
-        const existingHasOut = !!existing.clock_out;
-        const recHasOut = !!rec.clock_out;
-        if (!existingHasOut && recHasOut) {
+        const recStatus = (rec.status || '').toLowerCase();
+        const existingStatus = (existing.status || '').toLowerCase();
+
+        // Admin explicitly set absent (total_minutes forced to 0) — keep absent over present
+        const recIsAdminAbsent = recStatus === 'absent' && (rec.total_minutes || 0) === 0;
+        const existingIsAdminAbsent = existingStatus === 'absent' && (existing.total_minutes || 0) === 0;
+        if (recIsAdminAbsent && !existingIsAdminAbsent) {
             bestPerDay[dateKey] = rec;
-        } else if (existingHasOut && recHasOut) {
-            // Both have clock_out — keep the one with more minutes
-            if ((rec.total_minutes || 0) > (existing.total_minutes || 0)) {
+            continue;
+        }
+        if (existingIsAdminAbsent && !recIsAdminAbsent) {
+            continue; // keep existing admin-absent record
+        }
+
+        // Both admin-absent or neither — prefer higher total_minutes (more worked time)
+        if ((rec.total_minutes || 0) > (existing.total_minutes || 0)) {
+            bestPerDay[dateKey] = rec;
+        } else if ((rec.total_minutes || 0) === (existing.total_minutes || 0)) {
+            // Tie: prefer clocked-out record
+            if (!existing.clock_out && rec.clock_out) {
                 bestPerDay[dateKey] = rec;
             }
         }
@@ -363,9 +378,17 @@ exports.generateSalarySlip = async (req, res) => {
         const totalPaidDays = summary.presentDays + summary.paidLeaveDays + holidayDays;
         const basicSalary = parseFloat(Math.min(totalPaidDays * perDaySalary, monthlySalary).toFixed(2));
 
-        // Unpaid deduction for record-keeping
+        // Absent/unpaid deduction — always applied against the full monthly salary
         const deductibleDays  = summary.absentDays + summary.unpaidLeaveDays;
         const unpaidDeduction = parseFloat((deductibleDays * perDaySalary).toFixed(2));
+
+        // When holidays inflate totalPaidDays to >= totalWorkingDays, basicSalary hits
+        // the monthly cap and absent days are NOT already excluded from it.
+        // In that case we must explicitly subtract the absent deduction.
+        // When no holidays, basicSalary < monthlySalary and absent days were never
+        // added to totalPaidDays, so they are already excluded — no double-deduction.
+        const absentAlreadyExcluded = totalPaidDays < totalWorkingDays;
+        const effectiveUnpaidDeduction = absentAlreadyExcluded ? 0 : unpaidDeduction;
 
         // OT from attendance records
         const overtimeHours  = parseFloat((summary.totalOvertimeHours  || 0).toFixed(2));
@@ -375,7 +398,7 @@ exports.generateSalarySlip = async (req, res) => {
         const dtDeduction = basicSalary > 0 ? 200 : 0;
 
         // Net salary
-        const netSalary = parseFloat(Math.max(0, basicSalary + overtimeAmount - dtDeduction).toFixed(2));
+        const netSalary = parseFloat(Math.max(0, basicSalary + overtimeAmount - effectiveUnpaidDeduction - dtDeduction).toFixed(2));
 
         const salaryData = {
             employee_id,

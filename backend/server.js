@@ -64,6 +64,8 @@ const ALLOWED_ORIGINS = new Set([
     'https://hrms-p-test.vercel.app',
     'https://hrms-b2-bindemand-a31u.vercel.app',
     'https://hrms-p-test-1.onrender.com',
+    'http://hrms.b2bindemand.agency',
+    'https://hrms.b2bindemand.agency',
 ]);
 
 if (process.env.ALLOWED_ORIGINS) {
