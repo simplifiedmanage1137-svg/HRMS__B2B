@@ -69,7 +69,9 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 
 if (process.env.ALLOWED_ORIGINS) {
-    process.env.ALLOWED_ORIGINS.split(',').forEach(o => {
+    // Strip any accidental Markdown link formatting e.g. [url](url) → url
+    const raw = process.env.ALLOWED_ORIGINS.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+    raw.split(',').forEach(o => {
         const t = o.trim();
         if (t) ALLOWED_ORIGINS.add(t);
     });
@@ -80,22 +82,26 @@ ALLOWED_ORIGINS.forEach(o => console.log(`   - ${o}`));
 
 const corsOptions = {
     origin(origin, callback) {
+        // Requests with no origin (server-to-server, curl, mobile) — always allow
         if (!origin) return callback(null, true);
 
+        // localhost / 127.0.0.1 any port
         if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
             return callback(null, true);
         }
+        // Private LAN ranges
         if (/^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(origin)) {
             return callback(null, true);
         }
         // Any *.vercel.app preview deployment
-        if (/^https:\/\/[a-zA-Z0-9-]+-[a-zA-Z0-9-]+\.vercel\.app$/.test(origin)) {
+        if (/^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/.test(origin)) {
             return callback(null, true);
         }
         if (ALLOWED_ORIGINS.has(origin)) return callback(null, true);
 
         console.warn(`⛔ CORS blocked: ${origin}`);
-        return callback(null, false);
+        // Pass an error string so browser sees a clear rejection (not silence)
+        return callback(new Error(`CORS: origin '${origin}' not allowed`));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -103,10 +109,13 @@ const corsOptions = {
         'Content-Type', 'Authorization', 'X-Requested-With',
         'Accept', 'Origin', 'employee-id', 'X-Employee-Id',
     ],
+    exposedHeaders: ['Content-Length', 'X-Request-Id'],
     maxAge: 86400,
     optionsSuccessStatus: 204,
 };
 
+// Handle OPTIONS preflight FIRST — before any other middleware or auth
+app.options('*', cors(corsOptions));
 app.use(cors(corsOptions));
 
 // ─── Body parsers ─────────────────────────────────────────────────────────────
