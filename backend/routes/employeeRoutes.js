@@ -5,6 +5,7 @@ const multer = require('multer');
 const path = require('path');
 const { verifyToken, isAdmin, isAdminOrManager } = require('../middleware/auth');
 const { uploadFile, deleteFile, folderForField } = require('../lib/supabaseStorage');
+const { sendShiftChangeEmail } = require('../services/emailService');
 
 // Memory storage — files are uploaded to Supabase Storage (no local disk in serverless)
 const upload = multer({
@@ -165,9 +166,10 @@ router.get('/manager/team', verifyToken, async (req, res) => {
 
 // ============== REPORTING MANAGER: UPDATE TEAM MEMBER SHIFT ==============
 router.put('/manager/shift/:employee_id', verifyToken, async (req, res) => {
+    console.log(`🔄 [SHIFT UPDATE] API hit — employee_id: ${req.params.employee_id} | by: ${req.user?.employeeId}`);
     try {
         const { employee_id } = req.params;
-        const { shift_timing } = req.body;
+        const { shift_timing, effective_from, effective_until } = req.body;
         const managerEmployeeId = req.user?.employeeId;
 
         if (!shift_timing || !shift_timing.trim()) {
@@ -182,15 +184,17 @@ router.put('/manager/shift/:employee_id', verifyToken, async (req, res) => {
         const managerName = `${manager.first_name} ${manager.last_name}`.trim();
 
         const { data: emp, error: empErr } = await supabase
-            .from('employees').select('employee_id, first_name, last_name, reporting_manager')
+            .from('employees').select('employee_id, first_name, last_name, reporting_manager, email, shift_timing')
             .eq('employee_id', employee_id).single();
         if (empErr || !emp) return res.status(404).json({ success: false, message: 'Employee not found' });
+
+        console.log(`📧 [SHIFT UPDATE] Employee email found: ${emp.email || 'NULL — no email on record'}`);
 
         if (emp.reporting_manager?.trim().toLowerCase() !== managerName.toLowerCase()) {
             return res.status(403).json({ success: false, message: 'You can only update shift for employees who report to you' });
         }
 
-        const effectiveFrom = new Date().toISOString().split('T')[0];
+        const effectiveFrom = effective_from || new Date().toISOString().split('T')[0];
 
         const { data, error } = await supabase
             .from('employees')
@@ -203,12 +207,49 @@ router.put('/manager/shift/:employee_id', verifyToken, async (req, res) => {
         await supabase.from('employee_shift_history').insert([{
             employee_id,
             shift_timing: shift_timing.trim(),
-            effective_from: effectiveFrom
+            effective_from: effectiveFrom,
+            ...(effective_until ? { effective_until } : {})
         }]);
 
+        console.log(`✅ [SHIFT UPDATE] DB updated — new shift: ${shift_timing.trim()} | effective_from: ${effectiveFrom}`);
+
         res.json({ success: true, message: `Shift updated for ${emp.first_name} ${emp.last_name}`, employee: data[0] });
+
+        // Non-blocking email — runs after response is sent
+        ;(async () => {
+            try {
+                console.log(`🔑 [SHIFT EMAIL] RESEND_API_KEY exists: ${!!process.env.RESEND_API_KEY}`);
+
+                if (!emp.email) {
+                    console.warn('⚠️ [SHIFT EMAIL] Skipped — no email address on employee record');
+                    return;
+                }
+
+                console.log(`📤 [SHIFT EMAIL] Sending to: ${emp.email} | new shift: ${shift_timing.trim()}`);
+
+                const result = await sendShiftChangeEmail(
+                    { email: emp.email, first_name: emp.first_name, last_name: emp.last_name },
+                    {
+                        oldShift: emp.shift_timing || null,
+                        newShift: shift_timing.trim(),
+                        effectiveFrom,
+                        effectiveUntil: effective_until || null,
+                        changedBy: managerName,
+                    }
+                );
+
+                if (result?.success) {
+                    console.log(`✅ [SHIFT EMAIL] Sent successfully | Resend ID: ${result.id}`);
+                } else {
+                    console.error(`❌ [SHIFT EMAIL] Failed | reason: ${result?.reason || result?.error || 'unknown'}`);
+                }
+            } catch (emailErr) {
+                console.error('❌ [SHIFT EMAIL] Exception:', emailErr.message);
+            }
+        })();
+
     } catch (error) {
-        console.error('Error updating shift:', error);
+        console.error('❌ [SHIFT UPDATE] Error:', error.message);
         res.status(500).json({ success: false, message: 'Failed to update shift', error: error.message });
     }
 });

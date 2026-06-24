@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../config/supabase');
 const { verifyToken, isAdmin } = require('../middleware/auth');
+const { sendEmployeeUpdateEmail } = require('../services/emailService');
 
 // Get all employees for admin
 router.get('/employees', verifyToken, isAdmin, async (req, res) => {
@@ -451,6 +452,21 @@ router.post('/handle-request', verifyToken, isAdmin, async (req, res) => {
             status: newStatus,
             is_document_update: request.is_document_update
         });
+
+        // Non-blocking email notification
+        supabase.from('employees').select('email, first_name, last_name')
+            .eq('employee_id', request.employee_id).single()
+            .then(({ data: emp }) => {
+                if (emp?.email) {
+                    sendEmployeeUpdateEmail(emp, {
+                        action,
+                        fields: request.employee_data ? Object.keys(request.employee_data) : [],
+                        isDocumentUpdate: request.is_document_update,
+                        documentTypes: request.document_types || [],
+                    }).catch(err => console.error('⚠️ Update email error:', err.message));
+                }
+            })
+            .catch(err => console.error('⚠️ Update email fetch error:', err.message));
 
     } catch (error) {
         console.error('❌ Error handling request:', error);

@@ -1,4 +1,5 @@
 const supabase = require('../config/supabase');
+const { sendLeaveStatusEmail } = require('../services/emailService');
 
 // Replace the getCompletedMonthsInCurrentYear function with this simplified version:
 
@@ -507,6 +508,24 @@ exports.updateLeaveStatus = async (req, res) => {
         }
 
         res.json({ success: true, message: `Leave ${status} successfully`, leave: updatedLeave[0] });
+
+        // Non-blocking email notification
+        supabase.from('employees').select('email, first_name, last_name')
+            .eq('employee_id', leave.employee_id).single()
+            .then(({ data: emp }) => {
+                if (emp?.email) {
+                    sendLeaveStatusEmail(emp, {
+                        status,
+                        leaveType: leave.leave_type,
+                        startDate: leave.start_date,
+                        endDate: leave.end_date,
+                        daysCount: leave.days_count,
+                        remarks: remarks || null,
+                        approvedBy: approver_id || null,
+                    }).catch(err => console.error('⚠️ Leave email error:', err.message));
+                }
+            })
+            .catch(err => console.error('⚠️ Leave email fetch error:', err.message));
 
     } catch (error) {
         console.error('❌ Error updating leave status:', error);

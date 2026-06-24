@@ -3,6 +3,7 @@ const router = express.Router();
 const supabase = require('../config/supabase');
 const multer = require('multer');
 const { uploadFile, deleteFile } = require('../lib/supabaseStorage');
+const { sendAnnouncementEmail } = require('../services/emailService');
 
 // Memory storage — announcement images go to Supabase Storage (no local disk in serverless)
 const upload = multer({
@@ -71,6 +72,20 @@ router.post('/', upload.single('image'), async (req, res) => {
             .select();
         if (error) throw error;
         res.json({ success: true, announcement: data[0] });
+
+        // Non-blocking: email all active employees about the new announcement
+        supabase.from('employees').select('email, first_name, last_name').eq('status', 'active')
+            .then(({ data: employees }) => {
+                sendAnnouncementEmail(employees || [], {
+                    title: title.trim(),
+                    message: message.trim(),
+                    type: type || 'announcement',
+                    priority: priority || 'normal',
+                    createdBy: req.user?.employeeId || 'Admin',
+                }).catch(err => console.error('⚠️ Announcement email error:', err.message));
+            })
+            .catch(err => console.error('⚠️ Announcement email fetch error:', err.message));
+
     } catch (error) {
         res.status(500).json({ success: false, message: 'Failed to create announcement', error: error.message });
     }

@@ -2,6 +2,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../config/supabase');
+const { sendNoticeBoardEmail } = require('../services/emailService');
 
 // ── GET /api/notice-board/active  (no auth — called by navbar for all users)
 router.get('/active', async (req, res) => {
@@ -70,6 +71,20 @@ router.post('/', async (req, res) => {
 
         if (error) throw error;
         res.json({ success: true, notice: data });
+
+        // Non-blocking: email employees only when the notice is being activated
+        if (is_active) {
+            supabase.from('employees').select('email, first_name, last_name').eq('status', 'active')
+                .then(({ data: employees }) => {
+                    sendNoticeBoardEmail(employees || [], {
+                        title,
+                        message,
+                        createdBy: req.user?.employeeId || 'Admin',
+                    }).catch(err => console.error('⚠️ Notice email error:', err.message));
+                })
+                .catch(err => console.error('⚠️ Notice email fetch error:', err.message));
+        }
+
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
@@ -100,6 +115,20 @@ router.put('/:id', async (req, res) => {
 
         if (error) throw error;
         res.json({ success: true, notice: data });
+
+        // Non-blocking: email employees only when notice is being activated via PUT
+        if (updates.is_active === true) {
+            supabase.from('employees').select('email, first_name, last_name').eq('status', 'active')
+                .then(({ data: employees }) => {
+                    sendNoticeBoardEmail(employees || [], {
+                        title: data.title,
+                        message: data.message,
+                        createdBy: req.user?.employeeId || 'Admin',
+                    }).catch(err => console.error('⚠️ Notice email error:', err.message));
+                })
+                .catch(err => console.error('⚠️ Notice email fetch error:', err.message));
+        }
+
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }

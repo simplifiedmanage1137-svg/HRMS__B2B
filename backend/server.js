@@ -7,6 +7,10 @@ const multer = require('multer');
 
 dotenv.config();
 
+// ─── Temporary: verify email env vars are loaded ──────────────────────────────
+console.log("EMAIL_FROM =", JSON.stringify(process.env.EMAIL_FROM));
+console.log("FRONTEND_URL =", JSON.stringify(process.env.FRONTEND_URL));
+
 // ─── Startup env validation ───────────────────────────────────────────────────
 const REQUIRED_ENV = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY'];
 const missingEnv = REQUIRED_ENV.filter(k => !process.env[k]);
@@ -115,7 +119,12 @@ const corsOptions = {
 };
 
 // Handle OPTIONS preflight FIRST — before any other middleware or auth
-app.options('*', cors(corsOptions));
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    return cors(corsOptions)(req, res, next);
+  }
+  next();
+});
 app.use(cors(corsOptions));
 
 // ─── Body parsers ─────────────────────────────────────────────────────────────
