@@ -27,6 +27,19 @@ function getHandler() {
 }
 
 module.exports = (req, res) => {
+    // Instant diagnostic — responds before loading any backend code
+    if (req.url === '/api/_ping' || req.url === '/_ping') {
+        return res.end(JSON.stringify({
+            ok: true,
+            ts: new Date().toISOString(),
+            NODE_ENV: process.env.NODE_ENV || 'MISSING',
+            VERCEL: process.env.VERCEL || 'MISSING',
+            SUPABASE_URL: process.env.SUPABASE_URL ? 'SET' : 'MISSING',
+            JWT_SECRET: process.env.JWT_SECRET ? 'SET' : 'MISSING',
+            SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SET' : 'MISSING',
+        }));
+    }
+
     try {
         return getHandler()(req, res);
     } catch (err) {
