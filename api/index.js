@@ -26,4 +26,12 @@ function getHandler() {
     return _handler;
 }
 
-module.exports = (req, res) => getHandler()(req, res);
+module.exports = (req, res) => {
+    try {
+        return getHandler()(req, res);
+    } catch (err) {
+        console.error('❌ [api/index] startup error:', err.message);
+        console.error(err.stack);
+        res.status(500).json({ error: 'Function failed to initialize', detail: err.message });
+    }
+};
