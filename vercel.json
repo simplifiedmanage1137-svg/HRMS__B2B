@@ -8,21 +8,8 @@
     },
     "backend": {
       "root": "backend",
-      "routePrefix": "/_/backend"
+      "routePrefix": "/_/backend",
+      "entrypoint": "server.js"
     }
-  },
-  "crons": [
-    {
-      "path": "/_/backend/api/cron/daily-absent",
-      "schedule": "29 18 * * *"
-    },
-    {
-      "path": "/_/backend/api/cron/monthly-accrual",
-      "schedule": "30 19 1 * *"
-    },
-    {
-      "path": "/_/backend/api/cron/weekly-cleanup",
-      "schedule": "30 20 * * 0"
-    }
-  ]
+  }
 }

@@ -248,13 +248,16 @@ app.use((err, req, res, next) => {
     });
 });
 
-// ─── Local development server ─────────────────────────────────────────────────
-// In Vercel this block never executes — api/index.js wraps the exported app.
-if (require.main === module) {
+// Start the HTTP server when run directly OR when deployed as a Vercel service.
+// The process.env.VERCEL guard covers the case where Vercel imports this file
+// as a module rather than executing it directly with `node server.js`.
+if (require.main === module || process.env.VERCEL) {
     app.listen(PORT, '0.0.0.0', () => {
         console.log('='.repeat(70));
-        console.log('🚀 SERVER STARTED (local)');
-        console.log(`   http://localhost:${PORT}`);
+        console.log('🚀 SERVER STARTED');
+        console.log(`   Port        : ${PORT}`);
+        console.log(`   Environment : ${process.env.NODE_ENV || 'development'}`);
+        console.log(`   Runtime     : ${process.env.VERCEL ? 'Vercel Service' : 'local Node.js'}`);
         console.log('='.repeat(70));
 
         supabase.from('employees').select('count', { count: 'exact', head: true }).then(({ error }) => {
@@ -262,56 +265,58 @@ if (require.main === module) {
             else console.log('✅ Supabase connected');
         });
 
-        // Repair orphaned attendance records / stale sessions on local startup
-        setTimeout(async () => {
-            try {
-                const fix = await attendanceController.fixOrphanedAttendance(null, null);
-                console.log(`✅ Orphan fix: ${fix.fixed} fixed, ${fix.skipped} skipped`);
+        // Orphaned-record repair only runs locally — avoid on every Vercel cold start
+        if (!process.env.VERCEL) {
+            setTimeout(async () => {
+                try {
+                    const fix = await attendanceController.fixOrphanedAttendance(null, null);
+                    console.log(`✅ Orphan fix: ${fix.fixed} fixed, ${fix.skipped} skipped`);
 
-                const { data: staleSessions } = await supabase
-                    .from('attendance_sessions')
-                    .select('session_id, employee_id')
-                    .eq('is_active', true);
+                    const { data: staleSessions } = await supabase
+                        .from('attendance_sessions')
+                        .select('session_id, employee_id')
+                        .eq('is_active', true);
 
-                let staleFixed = 0;
-                for (const s of (staleSessions || [])) {
-                    const { data: clocked } = await supabase
-                        .from('attendance')
-                        .select('id, clock_out')
-                        .eq('employee_id', s.employee_id)
-                        .eq('session_id', s.session_id)
-                        .not('clock_out', 'is', null)
-                        .maybeSingle();
-
-                    if (clocked) {
-                        await supabase.from('attendance_sessions')
-                            .update({ is_active: false, clock_out_time: clocked.clock_out })
+                    let staleFixed = 0;
+                    for (const s of (staleSessions || [])) {
+                        const { data: clocked } = await supabase
+                            .from('attendance')
+                            .select('id, clock_out')
+                            .eq('employee_id', s.employee_id)
                             .eq('session_id', s.session_id)
-                            .eq('employee_id', s.employee_id);
-                        staleFixed++;
-                        continue;
-                    }
+                            .not('clock_out', 'is', null)
+                            .maybeSingle();
 
-                    const { data: any } = await supabase
-                        .from('attendance')
-                        .select('id')
-                        .eq('employee_id', s.employee_id)
-                        .eq('session_id', s.session_id)
-                        .maybeSingle();
+                        if (clocked) {
+                            await supabase.from('attendance_sessions')
+                                .update({ is_active: false, clock_out_time: clocked.clock_out })
+                                .eq('session_id', s.session_id)
+                                .eq('employee_id', s.employee_id);
+                            staleFixed++;
+                            continue;
+                        }
 
-                    if (!any) {
-                        await supabase.from('attendance_sessions')
-                            .update({ is_active: false, clock_out_time: new Date().toISOString() })
+                        const { data: any } = await supabase
+                            .from('attendance')
+                            .select('id')
+                            .eq('employee_id', s.employee_id)
                             .eq('session_id', s.session_id)
-                            .eq('employee_id', s.employee_id);
-                        staleFixed++;
+                            .maybeSingle();
+
+                        if (!any) {
+                            await supabase.from('attendance_sessions')
+                                .update({ is_active: false, clock_out_time: new Date().toISOString() })
+                                .eq('session_id', s.session_id)
+                                .eq('employee_id', s.employee_id);
+                            staleFixed++;
+                        }
                     }
+                    console.log(`✅ Stale session fix: ${staleFixed} fixed`);
+                } catch (err) {
+                    console.error('❌ Startup fix error:', err.message);
                 }
-                console.log(`✅ Stale session fix: ${staleFixed} fixed`);
-            } catch (err) {
-                console.error('❌ Startup fix error:', err.message);
-            }
-        }, 3000);
+            }, 3000);
+        }
     });
 
     process.on('SIGTERM', () => { console.log('\n🛑 Shutting down...'); process.exit(0); });
