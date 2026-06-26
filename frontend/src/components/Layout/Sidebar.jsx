@@ -76,7 +76,7 @@ const Sidebar = () => {
         setEmployeeDesignation(res.data.designation || '');
       }
     } catch {
-      setEmployeeName(user?.role === 'admin' ? 'Administrator' : 'Employee');
+      setEmployeeName(user?.role === 'admin' ? 'Administrator' : user?.role === 'desktop_support' ? 'Desktop Support' : 'Employee');
     }
   };
 
@@ -202,7 +202,7 @@ const Sidebar = () => {
             <div className="hrms-sidebar__logo-text">
               <div className="hrms-sidebar__logo-title">EMS Portal</div>
               <div className="hrms-sidebar__logo-sub">
-                {user?.role === 'admin' ? 'Admin Dashboard' : user?.role === 'manager' ? 'Manager Dashboard' : 'Employee Dashboard'}
+                {user?.role === 'admin' ? 'Admin Dashboard' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'manager' ? 'Manager Dashboard' : 'Employee Dashboard'}
               </div>
             </div>
           )}
@@ -231,6 +231,12 @@ const Sidebar = () => {
                 onClick={() => { setPendingCount(0); markNotificationsAsRead(); }}
               />
               <NavItem to="/admin/broadcast" icon={<FaBullhorn />} label="Broadcast" />
+            </>
+          ) : user?.role === 'desktop_support' ? (
+            <>
+              <Section label="Management" />
+              <NavItem to="/admin/employees" icon={<FaUsers />}      label="Employees" />
+              <NavItem to="/admin/teams"     icon={<FaLayerGroup />} label="Teams" />
             </>
           ) : user?.role === 'manager' ? (
             <>
@@ -269,7 +275,7 @@ const Sidebar = () => {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="hrms-sidebar__user-name">{employeeName}</div>
                 <div className="hrms-sidebar__user-role">
-                  {user?.role === 'admin' ? 'Administrator' : user?.role === 'manager' ? 'Manager' : `ID: ${user?.employeeId}`}
+                  {user?.role === 'admin' ? 'Administrator' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'manager' ? 'Manager' : `ID: ${user?.employeeId}`}
                 </div>
               </div>
               <button className="hrms-logout-btn" onClick={logout} title="Logout">
