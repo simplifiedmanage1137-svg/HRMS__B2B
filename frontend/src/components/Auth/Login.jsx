@@ -234,7 +234,7 @@ const Login = () => {
             </div>
 
             {/* Forgot password */}
-            <div style={{ textAlign: 'right', marginBottom: '24px' }}>
+            {/* <div style={{ textAlign: 'right', marginBottom: '24px' }}>
               <button
                 type="button"
                 onClick={() => { setShowForgotModal(true); setFpEmail(identifier.includes('@') ? identifier : ''); setFpError(''); setFpSuccess(''); }}
@@ -245,7 +245,7 @@ const Login = () => {
               >
                 Forgot password?
               </button>
-            </div>
+            </div> */}
 
             {/* Submit */}
             <button
