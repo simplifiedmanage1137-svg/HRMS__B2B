@@ -275,7 +275,7 @@ const EmployeeList = () => {
   };
 
   const handleEdit = (employee) => {
-    if (user?.role === 'admin') {
+    if (user?.role === 'admin' || user?.role === 'desktop_support') {
       navigate(`/admin/edit-employee/${employee.id}`);
     }
   };
@@ -324,7 +324,7 @@ const EmployeeList = () => {
       {/* Header - Responsive */}
       <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-4 gap-3">
         <h4 className="mb-0">Employee Management</h4>
-        {user?.role === 'admin' && (
+        {(user?.role === 'admin' || user?.role === 'desktop_support') && (
           <Button variant="dark" size="sm" onClick={() => navigate('/admin/add-employee')} className="ms-0 ms-sm-auto">
             <FaPlus className="me-2" size={12} /> Add Employee
           </Button>
@@ -467,7 +467,7 @@ const EmployeeList = () => {
                             onClick={() => handleViewDocuments(emp)}
                             title="View Documents"
                           />
-                          {user?.role === 'admin' && (
+                          {(user?.role === 'admin' || user?.role === 'desktop_support') && (
                             <FaEdit
                               size={14}
                               className="text-secondary"
@@ -508,7 +508,7 @@ const EmployeeList = () => {
                       ) : (
                         <>
                           <p className="text-muted small mb-3">No employees found</p>
-                          {user?.role === 'admin' && (
+                          {(user?.role === 'admin' || user?.role === 'desktop_support') && (
                             <Button
                               variant="outline-primary"
                               size="sm"

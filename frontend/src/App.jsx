@@ -192,7 +192,7 @@ function AppContent() {
             } />
 
             <Route path="/admin/edit-employee/:id" element={
-              <PrivateRoute allowedRoles={['admin']}>
+              <PrivateRoute allowedRoles={['admin', 'desktop_support']}>
                 <EditEmployee />
               </PrivateRoute>
             } />
