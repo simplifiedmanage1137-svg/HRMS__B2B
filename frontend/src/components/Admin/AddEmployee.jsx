@@ -909,17 +909,21 @@ const AddEmployee = () => {
                       <Form.Label className="small fw-semibold text-muted">
                         Department <span className="text-danger">*</span>
                       </Form.Label>
-                      <Form.Select
+                      <Form.Control
+                        type="text"
                         name="department"
                         value={tempPersonalData.department}
                         onChange={handlePersonalChange}
                         size="sm"
-                      >
-                        <option value="">Select Department</option>
+                        list="department-options-add"
+                        placeholder="Select or type department"
+                        autoComplete="off"
+                      />
+                      <datalist id="department-options-add">
                         {departments.map(dept => (
-                          <option key={dept} value={dept}>{dept}</option>
+                          <option key={dept} value={dept} />
                         ))}
-                      </Form.Select>
+                      </datalist>
                     </Form.Group>
                   </Col>
                 </Row>

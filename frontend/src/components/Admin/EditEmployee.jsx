@@ -746,18 +746,22 @@ const EditEmployee = () => {
                             <Col xs={12} md={4}>
                                 <Form.Group>
                                     <Form.Label className="fw-semibold small">Department <span className="text-danger">*</span></Form.Label>
-                                    <Form.Select
+                                    <Form.Control
+                                        type="text"
                                         name="department"
                                         value={formData.department}
                                         onChange={handleChange}
                                         required
                                         size="sm"
-                                    >
-                                        <option value="">Select Department</option>
+                                        list="department-options"
+                                        placeholder="Select or type department"
+                                        autoComplete="off"
+                                    />
+                                    <datalist id="department-options">
                                         {departments.map(dept => (
-                                            <option key={dept} value={dept}>{dept}</option>
+                                            <option key={dept} value={dept} />
                                         ))}
-                                    </Form.Select>
+                                    </datalist>
                                 </Form.Group>
                             </Col>
                             <Col xs={12} md={4}>
