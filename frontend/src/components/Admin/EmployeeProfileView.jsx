@@ -845,7 +845,7 @@ const EmployeeProfileView = () => {
             </Row>
 
             {[
-              { title: 'Manager Ratings', data: ratings.manager_ratings || [], color: '#6366f1' },
+              { title: 'TL Ratings', data: ratings.manager_ratings || [], color: '#6366f1' },
               { title: 'Admin Ratings',   data: ratings.admin_ratings   || [], color: '#22c55e' },
             ].map(({ title, data, color }) => (
               <Section key={title} title={title} icon={<FaStar />} color={color}>

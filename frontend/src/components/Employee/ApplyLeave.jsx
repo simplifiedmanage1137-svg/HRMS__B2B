@@ -779,7 +779,7 @@ const ApplyLeave = () => {
                     size="sm"
                     isInvalid={!!errors.reporting_manager}
                   >
-                    <option value="">-- Select Manager --</option>
+                    <option value="">-- Select TL --</option>
                     {managers.map(m => {
                       const fullName = `${m.first_name} ${m.last_name}`.trim();
                       return (

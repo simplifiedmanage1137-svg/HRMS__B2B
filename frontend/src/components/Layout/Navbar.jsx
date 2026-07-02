@@ -118,7 +118,7 @@ const Navbar = () => {
       if (res.data)
         setEmployeeName(`${res.data.first_name || ''} ${res.data.last_name || ''}`.trim() || 'Employee');
     } catch {
-      setEmployeeName(user?.role === 'admin' ? 'Administrator' : user?.role === 'sub_admin' ? 'Sub Admin' : 'Employee');
+      setEmployeeName(user?.role === 'admin' ? 'Administrator' : user?.role === 'sub_admin' ? 'Manager' : 'Employee');
     }
   };
 
@@ -234,7 +234,7 @@ const Navbar = () => {
           fontSize: '11px', fontWeight: 400, lineHeight: 1,
           color: activeNotice ? noticeColor : 'var(--text-muted)', opacity: 0.75,
         }}>
-          {user?.role === 'admin' ? 'Admin' : user?.role === 'sub_admin' ? 'Sub Admin' : user?.role === 'manager' ? 'Manager' : 'Employee'} Portal
+          {user?.role === 'admin' ? 'Admin' : user?.role === 'sub_admin' ? 'Manager' : user?.role === 'manager' ? 'TL' : 'Employee'} Portal
         </div>
         <div style={{
           fontSize: '15px', fontWeight: 700, lineHeight: 1.3, marginTop: '2px',
@@ -373,7 +373,7 @@ const Navbar = () => {
             <div className="hrms-profile-chip__info d-none d-md-block">
               <div className="hrms-profile-chip__name">{employeeName}</div>
               <div className="hrms-profile-chip__role">
-                {user?.role === 'admin' ? 'Administrator' : user?.role === 'sub_admin' ? 'Sub Admin' : user?.role === 'manager' ? 'Manager' : user?.employeeId}
+                {user?.role === 'admin' ? 'Admin' : user?.role === 'sub_admin' ? 'Manager' : user?.role === 'manager' ? 'TL' : user?.employeeId}
               </div>
             </div>
             <FaChevronDown size={9} style={{ color: 'var(--text-muted)', marginLeft: '2px' }} />
@@ -394,7 +394,7 @@ const Navbar = () => {
               </div>
               <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>{employeeName}</div>
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '1px' }}>
-                {user?.role === 'admin' ? 'Administrator' : user?.role === 'sub_admin' ? 'Sub Admin' : user?.role === 'manager' ? 'Manager' : user?.employeeId}
+                {user?.role === 'admin' ? 'Admin' : user?.role === 'sub_admin' ? 'Manager' : user?.role === 'manager' ? 'TL' : user?.employeeId}
               </div>
             </div>
 

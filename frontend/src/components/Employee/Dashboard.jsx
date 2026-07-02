@@ -1094,7 +1094,7 @@ const EmployeeDashboard = () => {
                   style={{ transition: 'all 0.2s' }}
                 >
                   <FaUserTie className="me-1" size={12} />
-                  Manager Rating
+                  TL Rating
                   <Badge bg={activeRatingTab === 'manager' ? 'primary' : 'secondary'} className="ms-1" pill style={{ fontSize: '10px' }}>
                     {managerRatings.length}
                   </Badge>
@@ -1601,7 +1601,7 @@ const EmployeeDashboard = () => {
                 onClick={() => setActiveRatingTab('manager')}
                 className="rounded-0"
               >
-                <FaUserTie className="me-1" /> Manager Ratings ({managerRatings.length})
+                <FaUserTie className="me-1" /> TL Ratings ({managerRatings.length})
               </Button>
               <Button
                 variant={activeRatingTab === 'admin' ? 'primary' : 'light'}
@@ -1636,7 +1636,7 @@ const EmployeeDashboard = () => {
                     <td className="small">
                       {rating.rater_name}
                       <Badge bg={rating.rater_role === 'Admin' ? 'success' : 'info'} pill className="ms-1">
-                        {rating.rater_role}
+                        {rating.rater_role === 'Manager' ? 'TL' : rating.rater_role}
                       </Badge>
                     </td>
                   </tr>
@@ -1645,7 +1645,7 @@ const EmployeeDashboard = () => {
                   <tr>
                     <td colSpan="4" className="text-center py-4">
                       <FaStar size={40} className="text-muted mb-2 opacity-50" />
-                      <p className="text-muted mb-0">No {activeRatingTab === 'manager' ? 'manager' : 'admin'} ratings found</p>
+                      <p className="text-muted mb-0">No {activeRatingTab === 'manager' ? 'TL' : 'admin'} ratings found</p>
                     </td>
                   </tr>
                 )}

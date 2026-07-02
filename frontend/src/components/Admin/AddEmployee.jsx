@@ -940,7 +940,7 @@ const AddEmployee = () => {
                         onChange={handlePersonalChange}
                         size="sm"
                       >
-                        <option value="">-- No Manager --</option>
+                        <option value="">-- No TL --</option>
                         {managers.map(m => {
                           const fullName = `${m.first_name} ${m.last_name}`.trim();
                           return (

@@ -480,7 +480,7 @@ const AdminRatings = ({ initialMonth, initialYear }) => {
                         <Card.Body className="p-2 p-md-3 text-center">
                             <FaUserTie className="text-info mb-2" size={20} />
                             <h6 className="mb-0 fw-bold">{stats.manager_ratings}</h6>
-                            <small className="text-muted">Manager Ratings</small>
+                            <small className="text-muted">TL Ratings</small>
                         </Card.Body>
                     </Card>
                 </Col>
@@ -574,7 +574,7 @@ const AdminRatings = ({ initialMonth, initialYear }) => {
                                 onChange={(e) => setFilterType(e.target.value)}
                             >
                                 <option value="all">All Ratings</option>
-                                <option value="manager">Manager Ratings Only</option>
+                                <option value="manager">TL Ratings Only</option>
                                 <option value="admin">Admin Ratings Only</option>
                             </Form.Select>
                         </Col>
@@ -786,7 +786,7 @@ const AdminRatings = ({ initialMonth, initialYear }) => {
                                             <td className="small">
                                                 <div className="fw-semibold">{rating.rater_name}</div>
                                                 <Badge bg={rating.rater_role === 'Admin' ? 'success' : 'info'} pill className="mt-1">
-                                                    {rating.rater_role}
+                                                    {rating.rater_role === 'Manager' ? 'TL' : rating.rater_role}
                                                 </Badge>
                                             </td>
                                             <td className="small d-none d-lg-table-cell">
@@ -952,7 +952,7 @@ const AdminRatings = ({ initialMonth, initialYear }) => {
                                     <div className="small text-muted">Rated By</div>
                                     <div className="fw-semibold">{selectedRating.rater_name}</div>
                                     <Badge bg={selectedRating.rater_role === 'Admin' ? 'success' : 'info'} pill className="mt-1">
-                                        {selectedRating.rater_role}
+                                        {selectedRating.rater_role === 'Manager' ? 'TL' : selectedRating.rater_role}
                                     </Badge>
                                 </Col>
                             </Row>

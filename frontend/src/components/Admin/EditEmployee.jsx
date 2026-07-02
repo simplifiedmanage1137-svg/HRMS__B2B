@@ -620,9 +620,9 @@ const EditEmployee = () => {
                                             size="sm"
                                         >
                                             <option value="employee">Employee</option>
-                                            <option value="manager">Manager</option>
+                                            <option value="manager">TL</option>
                                             <option value="admin">Admin</option>
-                                            <option value="sub_admin">Sub Admin</option>
+                                            <option value="sub_admin">Manager</option>
                                             <option value="desktop_support">Desktop Support</option>
                                         </Form.Select>
                                     </Form.Group>
@@ -817,7 +817,7 @@ const EditEmployee = () => {
                                         onChange={handleChange}
                                         size="sm"
                                     >
-                                        <option value="">-- No Manager --</option>
+                                        <option value="">-- No TL --</option>
                                         {managers.map(m => {
                                             const fullName = `${m.first_name} ${m.last_name}`.trim();
                                             return (

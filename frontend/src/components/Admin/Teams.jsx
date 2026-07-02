@@ -373,10 +373,10 @@ const Teams = () => {
                 <div className="d-flex align-items-center gap-1">
                     <FaFilter size={11} className="text-muted" />
                     <Form.Select size="sm" value={filter} onChange={e => setFilter(e.target.value)} style={{ width: 'auto' }}>
-                        <option value="all">All Managers</option>
-                        <option value="active">Active Managers</option>
+                        <option value="all">All TLs</option>
+                        <option value="active">Active TLs</option>
                         <option value="no_employees">No Employees Assigned</option>
-                        <option value="no_manager">Employees Without Manager</option>
+                        <option value="no_manager">Employees Without TL</option>
                     </Form.Select>
                 </div>
             </div>
@@ -389,9 +389,9 @@ const Teams = () => {
                     {/* Stats row */}
                     <div className="d-flex gap-3 flex-wrap mb-4">
                         {[
-                            { label: 'Total Managers', value: hierarchy.length, color: '#3b82f6' },
+                            { label: 'Total TLs', value: hierarchy.length, color: '#3b82f6' },
                             { label: 'Total Employees', value: hierarchy.reduce((s, m) => s + m.total_employees, 0), color: '#10b981' },
-                            { label: 'Without Manager', value: unassigned.length, color: '#f59e0b' },
+                            { label: 'Without TL', value: unassigned.length, color: '#f59e0b' },
                         ].map(s => (
                             <div key={s.label} className="px-3 py-2 rounded"
                                 style={{ background: `${s.color}12`, border: `1px solid ${s.color}30`, minWidth: 130 }}>
@@ -429,7 +429,7 @@ const Teams = () => {
                             <div className="p-3" style={{ background: '#f59e0b0d', borderRadius: '0.375rem 0.375rem 0 0' }}>
                                 <div className="d-flex align-items-center gap-2 flex-wrap">
                                     <FaTimesCircle size={15} className="text-warning" />
-                                    <span className="fw-semibold">Employees Without Manager</span>
+                                    <span className="fw-semibold">Employees Without TL</span>
                                     <Badge bg="warning" text="dark" pill>{unassigned.length}</Badge>
                                 </div>
                             </div>
@@ -488,7 +488,7 @@ const Teams = () => {
                     <Form.Group>
                         <Form.Label className="small fw-semibold">Reporting Manager</Form.Label>
                         <Form.Select size="sm" value={newMgrId} onChange={e => setNewMgrId(e.target.value)}>
-                            <option value="">-- Select Manager --</option>
+                            <option value="">-- Select TL --</option>
                             {managers.map(m => (
                                 <option key={m.employee_id} value={m.employee_id}>
                                     {m.first_name} {m.last_name}{m.designation ? ` (${m.designation})` : ''}

@@ -76,7 +76,7 @@ const Sidebar = () => {
         setEmployeeDesignation(res.data.designation || '');
       }
     } catch {
-      setEmployeeName(user?.role === 'admin' ? 'Administrator' : user?.role === 'sub_admin' ? 'Sub Admin' : user?.role === 'desktop_support' ? 'Desktop Support' : 'Employee');
+      setEmployeeName(user?.role === 'admin' ? 'Administrator' : user?.role === 'sub_admin' ? 'Manager' : user?.role === 'desktop_support' ? 'Desktop Support' : 'Employee');
     }
   };
 
@@ -202,7 +202,7 @@ const Sidebar = () => {
             <div className="hrms-sidebar__logo-text">
               <div className="hrms-sidebar__logo-title">EMS Portal</div>
               <div className="hrms-sidebar__logo-sub">
-                {user?.role === 'admin' ? 'Admin Dashboard' : user?.role === 'sub_admin' ? 'Sub Admin Dashboard' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'manager' ? 'Manager Dashboard' : 'Employee Dashboard'}
+                {user?.role === 'admin' ? 'Admin Dashboard' : user?.role === 'sub_admin' ? 'Manager Dashboard' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'manager' ? 'TL Dashboard' : 'Employee Dashboard'}
               </div>
             </div>
           )}
@@ -305,7 +305,7 @@ const Sidebar = () => {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="hrms-sidebar__user-name">{employeeName}</div>
                 <div className="hrms-sidebar__user-role">
-                  {user?.role === 'admin' ? 'Administrator' : user?.role === 'sub_admin' ? 'Sub Admin' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'manager' ? 'Manager' : `ID: ${user?.employeeId}`}
+                  {user?.role === 'admin' ? 'Admin' : user?.role === 'sub_admin' ? 'Manager' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'manager' ? 'TL' : `ID: ${user?.employeeId}`}
                 </div>
               </div>
               <button className="hrms-logout-btn" onClick={logout} title="Logout">
