@@ -847,10 +847,14 @@ const AdminDashboard = () => {
   const [subAdminClockLoading, setSubAdminClockLoading] = useState(false);
   const [subAdminClockMessage, setSubAdminClockMessage] = useState({ type: '', text: '' });
   const [subAdminCurrentTime, setSubAdminCurrentTime] = useState(new Date());
+  const [perfAnalytics, setPerfAnalytics] = useState(null);
 
   useEffect(() => {
     fetchDashboardData();
     fetchTodayEvents();
+    axios.get(API_ENDPOINTS.PERFORMANCE_ANALYTICS)
+      .then(r => { if (r.data.success) setPerfAnalytics(r.data.analytics); })
+      .catch(() => {});
   }, []);
 
   // Sub-admin: live clock ticker
@@ -2205,6 +2209,34 @@ const AdminDashboard = () => {
                       <small className="text-muted">{stats.late} late arrivals</small>
                     </div>
                     <FaUserTimes size={30} className="text-secondary opacity-50" />
+                  </div>
+                </Card.Body>
+              </Card>
+            </Col>
+            <Col xs={12} sm={6} lg={3}>
+              <Card className="border-0 shadow-sm bg-white h-100">
+                <Card.Body>
+                  <div className="d-flex justify-content-between align-items-center">
+                    <div>
+                      <h6 className="text-secondary mb-2 small">Total Reviews (This Month)</h6>
+                      <h4 className="mb-0 fw-bold">{perfAnalytics?.total_reviews ?? '—'}</h4>
+                      <small className="text-muted">Pending: {perfAnalytics?.pending_reviews ?? '—'}</small>
+                    </div>
+                    <FaStar size={30} className="text-secondary opacity-50" />
+                  </div>
+                </Card.Body>
+              </Card>
+            </Col>
+            <Col xs={12} sm={6} lg={3}>
+              <Card className="border-0 shadow-sm bg-white h-100">
+                <Card.Body>
+                  <div className="d-flex justify-content-between align-items-center">
+                    <div>
+                      <h6 className="text-secondary mb-2 small">Avg Performance Rating</h6>
+                      <h4 className="mb-0 fw-bold">{perfAnalytics?.avg_rating ? `${Number(perfAnalytics.avg_rating).toFixed(1)}/5` : '—'}</h4>
+                      <small className="text-muted">Company-wide this month</small>
+                    </div>
+                    <FaMedal size={30} className="text-secondary opacity-50" />
                   </div>
                 </Card.Body>
               </Card>

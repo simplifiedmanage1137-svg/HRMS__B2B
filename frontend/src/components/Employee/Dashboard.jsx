@@ -29,7 +29,6 @@ import {
   FaMapMarkerAlt,
   FaExclamationTriangle,
   FaUserTie,
-  FaUserCog,
   FaSignInAlt,
   FaSignOutAlt
 } from 'react-icons/fa';
@@ -287,11 +286,12 @@ const EmployeeDashboard = () => {
 
   // Rating states - Separate for Manager and Admin
   const [managerRatings, setManagerRatings] = useState([]);
-  const [adminRatings, setAdminRatings] = useState([]);
   const [managerAverage, setManagerAverage] = useState(null);
-  const [adminAverage, setAdminAverage] = useState(null);
   const [showRatingHistory, setShowRatingHistory] = useState(false);
   const [activeRatingTab, setActiveRatingTab] = useState('manager');
+
+  // Performance review (new hierarchical system)
+  const [perfReview, setPerfReview] = useState(null);
 
   // Chart view toggle: 'weekly' | 'monthly'
   const [chartView, setChartView] = useState('weekly');
@@ -377,6 +377,7 @@ const EmployeeDashboard = () => {
     if (user?.employeeId) {
       loadDashboardData();
       fetchEmployeeRatings();
+      fetchPerfReview();
     }
   }, [user]);
 
@@ -385,13 +386,18 @@ const EmployeeDashboard = () => {
       const response = await axios.get(`${API_ENDPOINTS.RATINGS}/employee/${user.employeeId}/history`);
       if (response.data.success) {
         setManagerRatings(response.data.manager_ratings || []);
-        setAdminRatings(response.data.admin_ratings || []);
         setManagerAverage(response.data.manager_average);
-        setAdminAverage(response.data.admin_average);
       }
     } catch (error) {
       console.error('Error fetching ratings:', error);
     }
+  };
+
+  const fetchPerfReview = async () => {
+    try {
+      const res = await axios.get(API_ENDPOINTS.PERFORMANCE_MY_LATEST);
+      if (res.data.success) setPerfReview(res.data.review);
+    } catch (_) { /* silent */ }
   };
 
   const recalculateAttendanceStats = () => {
@@ -859,34 +865,40 @@ const EmployeeDashboard = () => {
                 </div>
               </Col>
 
-              {/* Clock In / Out Times */}
+              {/* Clock In / Out Times + Stars */}
               <Col xs={12} md={4}>
-                <div className="d-flex gap-3 justify-content-center">
-                  <div className="text-center">
-                    <small className="text-white d-block mb-1" style={{ fontSize: '10px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>In</small>
-                    <div className={`text-white fw-bold ${attendance?.clock_in ? 'text-success' : 'text-white'}`} style={{ fontSize: '15px' }}>
-                      {attendance?.clock_in
-                        ? (attendance.clock_in_display || formatTimeIST(attendance.clock_in_ist || attendance.clock_in))
-                        : '--:--'}
+                <div className="d-flex flex-column align-items-center gap-2">
+                  <div className="d-flex gap-3 justify-content-center">
+                    <div className="text-center">
+                      <small className="text-white d-block mb-1" style={{ fontSize: '10px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>In</small>
+                      <div className={`text-white fw-bold ${attendance?.clock_in ? 'text-success' : 'text-white'}`} style={{ fontSize: '15px' }}>
+                        {attendance?.clock_in
+                          ? (attendance.clock_in_display || formatTimeIST(attendance.clock_in_ist || attendance.clock_in))
+                          : '--:--'}
+                      </div>
+                      {attendance?.late_display && attendance?.late_minutes > 0 && (
+                        <small className="text-danger d-block" style={{ fontSize: '9px' }}>
+                          <FaExclamationTriangle size={7} className="me-1" />
+                          Late {attendance.late_display}
+                        </small>
+                      )}
                     </div>
-                    {attendance?.late_display && attendance?.late_minutes > 0 && (
-                      <small className="text-danger d-block" style={{ fontSize: '9px' }}>
-                        <FaExclamationTriangle size={7} className="me-1" />
-                        Late {attendance.late_display}
-                      </small>
-                    )}
+                    <div style={{ width: '1px', background: 'rgba(244, 244, 244, 0.15)', margin: '4px 0' }} />
+                    <div className="text-center">
+                      <small className="text-white d-block mb-1" style={{ fontSize: '10px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Out</small>
+                      <div className={`text-white fw-bold ${attendance?.clock_out ? 'text-warning' : 'text-white'}`} style={{ fontSize: '15px' }}>
+                        {attendance?.clock_out
+                          ? (attendance.clock_out_display || formatTimeIST(attendance.clock_out_ist || attendance.clock_out))
+                          : '--:--'}
+                      </div>
+                      {attendance?.total_hours_display && (
+                        <small className=" text-white text-success d-block" style={{ fontSize: '9px' }}>{attendance.total_hours_display}</small>
+                      )}
+                    </div>
                   </div>
-                  <div style={{ width: '1px', background: 'rgba(244, 244, 244, 0.15)', margin: '4px 0' }} />
-                  <div className="text-center">
-                    <small className="text-white d-block mb-1" style={{ fontSize: '10px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Out</small>
-                    <div className={`text-white fw-bold ${attendance?.clock_out ? 'text-warning' : 'text-white'}`} style={{ fontSize: '15px' }}>
-                      {attendance?.clock_out
-                        ? (attendance.clock_out_display || formatTimeIST(attendance.clock_out_ist || attendance.clock_out))
-                        : '--:--'}
-                    </div>
-                    {attendance?.total_hours_display && (
-                      <small className=" text-white text-success d-block" style={{ fontSize: '9px' }}>{attendance.total_hours_display}</small>
-                    )}
+                  {/* Performance Stars */}
+                  <div style={{ display: 'flex' }}>
+                    {renderStars(managerAverage ? parseFloat(managerAverage) : 0)}
                   </div>
                 </div>
               </Col>
@@ -1081,6 +1093,57 @@ const EmployeeDashboard = () => {
         </Col>
       </Row>
 
+      {/* ── Performance Review Card ── */}
+      <Row className="mb-4">
+        <Col xs={12} md={6}>
+          <Card className="border-0 shadow-sm h-100" style={{ borderRadius: 14, overflow: 'hidden' }}>
+            <Card.Body className="p-0">
+              {perfReview ? (() => {
+                const colors = { 5: '#22c55e', 4: '#4ade80', 3: '#eab308', 2: '#f97316', 1: '#ef4444' };
+                const labels = { 5: 'Excellent Performer', 4: 'Very Good Performer', 3: 'Meets Expectations', 2: 'Performance Improvement Plan (PIP)', 1: 'Termination Recommended' };
+                const c = colors[perfReview.rating] || '#6366f1';
+                return (
+                  <div style={{ padding: '18px 20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <FaStar size={14} style={{ color: '#eab308' }} />
+                        <span style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>Performance Rating</span>
+                      </div>
+                      <span style={{ fontSize: 11, color: '#64748b', background: '#f1f5f9', borderRadius: 20, padding: '2px 10px' }}>
+                        {perfReview.month_name} {perfReview.review_year}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 2, marginBottom: 6 }}>
+                      {[1,2,3,4,5].map(n => (
+                        <FaStar key={n} size={20} style={{ color: n <= perfReview.rating ? c : '#e2e8f0' }} />
+                      ))}
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: c, marginBottom: 8 }}>
+                      {labels[perfReview.rating]}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginBottom: perfReview.remarks ? 10 : 0 }}>
+                      Overall <strong style={{ color: '#0f172a' }}>{perfReview.rating} / 5</strong>
+                      &nbsp;·&nbsp;By <strong style={{ color: '#0f172a' }}>{perfReview.reviewer_name}</strong>
+                    </div>
+                    {perfReview.remarks && (
+                      <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', background: '#f8fafc', borderRadius: 8, padding: '8px 12px', borderLeft: `3px solid ${c}` }}>
+                        "{perfReview.remarks}"
+                      </div>
+                    )}
+                  </div>
+                );
+              })() : (
+                <div style={{ padding: '28px 20px', textAlign: 'center' }}>
+                  <FaStar size={32} style={{ color: '#e2e8f0', marginBottom: 10 }} />
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#64748b' }}>Performance Rating</div>
+                  <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>No Performance Review Available Yet</div>
+                </div>
+              )}
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
+
       {/* Ratings Card - Second Row */}
       {/* Ratings Card - Second Row */}
       <Row className="mb-4">
@@ -1099,23 +1162,10 @@ const EmployeeDashboard = () => {
                     {managerRatings.length}
                   </Badge>
                 </button>
-                <button
-                  className={`flex-grow-1 py-2 px-3 border-0 bg-transparent fw-semibold small ${activeRatingTab === 'admin' ? 'text-primary border-bottom border-primary border-2' : 'text-muted'}`}
-                  onClick={() => setActiveRatingTab('admin')}
-                  style={{ transition: 'all 0.2s' }}
-                >
-                  <FaUserCog className="me-1" size={12} />
-                  Admin Rating
-                  <Badge bg={activeRatingTab === 'admin' ? 'primary' : 'secondary'} className="ms-1" pill style={{ fontSize: '10px' }}>
-                    {adminRatings.length}
-                  </Badge>
-                </button>
               </div>
             </Card.Header>
             <Card.Body className="p-3">
-              {activeRatingTab === 'manager' ? (
-                // Manager Rating Content
-                managerRatings.length > 0 ? (
+              {managerRatings.length > 0 ? (
                   <>
                     <div className="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
                       <div className="d-flex align-items-center gap-3">
@@ -1172,66 +1222,7 @@ const EmployeeDashboard = () => {
                     <p className="text-muted small mb-0">No manager ratings yet</p>
                   </div>
                 )
-              ) : (
-                // Admin Rating Content
-                adminRatings.length > 0 ? (
-                  <>
-                    <div className="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
-                      <div className="d-flex align-items-center gap-3">
-                        <div className="text-center">
-                          <div className="display-6 fw-bold text-success mb-0">
-                            {adminAverage ? `${adminAverage}` : '0'}
-                          </div>
-                          <div className="d-flex justify-content-center" style={{ fontSize: '10px' }}>
-                            {adminAverage && renderStars(parseFloat(adminAverage))}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="small text-muted">Overall Rating</div>
-                          <div className="small fw-semibold">Based on {adminRatings.length} review(s)</div>
-                        </div>
-                      </div>
-                      <Button
-                        variant="link"
-                        size="sm"
-                        className="p-0 text-decoration-none small"
-                        onClick={() => setShowRatingHistory(true)}
-                      >
-                        View All <FaArrowRight size={10} />
-                      </Button>
-                    </div>
-
-                    <div className="table-responsive">
-                      <table className="table table-sm table-borderless mb-0">
-                        <tbody>
-                          {adminRatings.slice(0, 3).map((rating, index) => (
-                            <tr key={index} className="border-bottom">
-                              <td style={{ width: '30%' }} className="py-2">
-                                <small className="text-muted">{rating.month_name} {rating.year}</small>
-                              </td>
-                              <td style={{ width: '35%' }} className="py-2">
-                                <div style={{ fontSize: '10px' }}>
-                                  {renderStars(rating.rating)}
-                                </div>
-                              </td>
-                              <td style={{ width: '35%' }} className="py-2">
-                                <Badge bg={getRatingColor(rating.rating)} pill style={{ fontSize: '10px' }}>
-                                  {rating.rating_label}
-                                </Badge>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-center py-3">
-                    <FaUserCog size={30} className="text-muted mb-2 opacity-25" />
-                    <p className="text-muted small mb-0">No admin ratings yet</p>
-                  </div>
-                )
-              )}
+              }
             </Card.Body>
           </Card>
         </Col>
@@ -1594,24 +1585,6 @@ const EmployeeDashboard = () => {
           </Modal.Title>
         </Modal.Header>
         <Modal.Body className="p-0">
-          <div className="border-bottom">
-            <ButtonGroup className="w-100" size="sm">
-              <Button
-                variant={activeRatingTab === 'manager' ? 'primary' : 'light'}
-                onClick={() => setActiveRatingTab('manager')}
-                className="rounded-0"
-              >
-                <FaUserTie className="me-1" /> TL Ratings ({managerRatings.length})
-              </Button>
-              <Button
-                variant={activeRatingTab === 'admin' ? 'primary' : 'light'}
-                onClick={() => setActiveRatingTab('admin')}
-                className="rounded-0"
-              >
-                <FaUserCog className="me-1" /> Admin Ratings ({adminRatings.length})
-              </Button>
-            </ButtonGroup>
-          </div>
           <div className="table-responsive">
             <Table hover className="mb-0">
               <thead className="bg-light">
@@ -1623,7 +1596,7 @@ const EmployeeDashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {(activeRatingTab === 'manager' ? managerRatings : adminRatings).map((rating, index) => (
+                {managerRatings.map((rating, index) => (
                   <tr key={index}>
                     <td className="small">{rating.month_name} {rating.year}</td>
                     <td className="small">
@@ -1635,17 +1608,15 @@ const EmployeeDashboard = () => {
                     <td className="small">{rating.comments || '-'}</td>
                     <td className="small">
                       {rating.rater_name}
-                      <Badge bg={rating.rater_role === 'Admin' ? 'success' : 'info'} pill className="ms-1">
-                        {rating.rater_role === 'Manager' ? 'TL' : rating.rater_role}
-                      </Badge>
+                      <Badge bg="info" pill className="ms-1">TL</Badge>
                     </td>
                   </tr>
                 ))}
-                {(activeRatingTab === 'manager' ? managerRatings.length === 0 : adminRatings.length === 0) && (
+                {managerRatings.length === 0 && (
                   <tr>
                     <td colSpan="4" className="text-center py-4">
                       <FaStar size={40} className="text-muted mb-2 opacity-50" />
-                      <p className="text-muted mb-0">No {activeRatingTab === 'manager' ? 'TL' : 'admin'} ratings found</p>
+                      <p className="text-muted mb-0">No TL ratings found</p>
                     </td>
                   </tr>
                 )}

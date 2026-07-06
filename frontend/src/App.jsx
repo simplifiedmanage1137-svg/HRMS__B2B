@@ -39,6 +39,10 @@ const PayrollAdjustment   = lazy(() => import('./components/Admin/PayrollAdjustm
 // Manager — lazy loaded
 const ManagerDashboard = lazy(() => import('./components/Manager/Dashboard'));
 
+// Performance — lazy loaded
+const PerformanceReviews = lazy(() => import('./components/Performance/PerformanceReviews'));
+const PerformanceHistory = lazy(() => import('./components/Performance/PerformanceHistory'));
+
 // Employee — lazy loaded
 const EmployeeDashboard      = lazy(() => import('./components/Employee/Dashboard'));
 const Profile                = lazy(() => import('./components/Employee/Profile'));
@@ -338,6 +342,18 @@ function AppContent() {
             <Route path="/manager/leave-requests" element={<Navigate to="/manager/panel" replace />} />
             <Route path="/manager/shift-update" element={<Navigate to="/manager/panel" replace />} />
             <Route path="/manager/send-notice" element={<Navigate to="/manager/panel" replace />} />
+
+            {/* Performance Routes */}
+            <Route path="/performance/reviews" element={
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager']}>
+                <PerformanceReviews />
+              </PrivateRoute>
+            } />
+            <Route path="/performance/history" element={
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'employee']}>
+                <PerformanceHistory />
+              </PrivateRoute>
+            } />
 
             {/* Redirect for any unknown routes */}
             <Route path="*" element={<Navigate to="/" replace />} />

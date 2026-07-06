@@ -200,6 +200,16 @@ export const API_ENDPOINTS = {
   GEOFENCE_DELETE: (id) => ep(`/api/geofence/${id}`),
   GEOFENCE_GET:    (id) => ep(`/api/geofence/${id}`),
   GEOFENCE_CHECK:  ep('/api/geofence/check'),
+
+  // Performance Reviews
+  PERFORMANCE_REVIEWABLE:       ep('/api/performance/reviewable'),
+  PERFORMANCE_SUBMIT:           ep('/api/performance/submit'),
+  PERFORMANCE_MY_LATEST:        ep('/api/performance/my-latest'),
+  PERFORMANCE_MY_HISTORY:       ep('/api/performance/my-history'),
+  PERFORMANCE_EMPLOYEE_REVIEWS: (employeeId) => ep(`/api/performance/employee/${employeeId}`),
+  PERFORMANCE_TEAM_STATS:       ep('/api/performance/team-stats'),
+  PERFORMANCE_ANALYTICS:        ep('/api/performance/analytics'),
+  PERFORMANCE_ALL:              ep('/api/performance/all'),
 };
 
 export default API_ENDPOINTS;

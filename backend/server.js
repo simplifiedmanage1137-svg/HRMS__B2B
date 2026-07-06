@@ -35,6 +35,7 @@ const updateResponseRoutes = require('./routes/updateResponseRoutes');
 const noticeRoutes        = require('./routes/noticeRoutes');
 const announcementRoutes  = require('./routes/announcementRoutes');
 const ratingRoutes        = require('./routes/ratingRoutes');
+const performanceRoutes   = require('./routes/performanceRoutes');
 const loginFeedRoutes     = require('./routes/loginFeedRoutes');
 const noticeBoardRoutes   = require('./routes/noticeBoardRoutes');
 const teamRoutes          = require('./routes/teamRoutes');
@@ -213,6 +214,7 @@ app.use('/api/notices',          authenticateToken, noticeRoutes);
 app.use('/api/notice-board',     authenticateToken, noticeBoardRoutes);
 app.use('/api/announcements',    authenticateToken, announcementRoutes);
 app.use('/api/ratings',          ratingRoutes(authenticateToken, requireAdmin));
+app.use('/api/performance',      performanceRoutes(authenticateToken));
 app.use('/api/teams',            authenticateToken, teamRoutes);
 
 // ─── Utility endpoints ────────────────────────────────────────────────────────

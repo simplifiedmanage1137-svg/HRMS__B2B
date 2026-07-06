@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   FaUsers, FaCalendarAlt, FaClock, FaUserTie, FaArrowRight,
   FaSyncAlt, FaCheckCircle, FaTimesCircle, FaHourglassHalf,
-  FaChartPie, FaChartBar, FaSignInAlt, FaSignOutAlt, FaExclamationTriangle,
+  FaChartPie, FaChartBar, FaSignInAlt, FaSignOutAlt, FaExclamationTriangle, FaStar, FaRegStar, FaStarHalfAlt,
 } from 'react-icons/fa';
 import { Doughnut, Bar } from 'react-chartjs-2';
 import {
@@ -33,17 +33,24 @@ const STAT_PALETTES = {
 
 const DESIG_COLORS = ['#3B82F6','#8B5CF6','#22C55E','#F97316','#EF4444','#0EA5E9','#EC4899','#14B8A6'];
 
-const StatCard = ({ label, value, icon, pal, loading }) => (
-  <div style={{
-    background: '#fff',
-    borderRadius: 12,
-    boxShadow: '0 1px 3px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.05)',
-    padding: '20px 22px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 16,
-    height: '100%',
-  }}>
+const StatCard = ({ label, value, icon, pal, loading, onClick }) => (
+  <div
+    onClick={onClick}
+    style={{
+      background: '#fff',
+      borderRadius: 12,
+      boxShadow: '0 1px 3px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.05)',
+      padding: '20px 22px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 16,
+      height: '100%',
+      cursor: onClick ? 'pointer' : 'default',
+      transition: 'box-shadow 0.15s, transform 0.15s',
+    }}
+    onMouseEnter={e => { if (onClick) { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,.12)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}}
+    onMouseLeave={e => { if (onClick) { e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.05)'; e.currentTarget.style.transform = 'translateY(0)'; }}}
+  >
     <div style={{
       width: 46, height: 46, borderRadius: 12,
       background: pal.shadow,
@@ -114,6 +121,8 @@ const ManagerDashboard = () => {
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [perfStats, setPerfStats] = useState(null);
+  const [myRatingAvg, setMyRatingAvg] = useState(null);
   const [hoveredAction, setHoveredAction] = useState(null);
 
   // Clock in/out state
@@ -255,7 +264,27 @@ const ManagerDashboard = () => {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchData(); fetchTodayAttendance(); }, []);
+  useEffect(() => {
+    fetchData();
+    fetchTodayAttendance();
+    axios.get(API_ENDPOINTS.PERFORMANCE_TEAM_STATS)
+      .then(r => { if (r.data.success) setPerfStats(r.data.stats); })
+      .catch(() => {});
+    if (user?.employeeId) {
+      axios.get(`${API_ENDPOINTS.RATINGS}/employee/${user.employeeId}/history`)
+        .then(r => {
+          if (!r.data.success) return;
+          const aC = r.data.total_admin_ratings   || 0;
+          const mC = r.data.total_manager_ratings || 0;
+          const aA = parseFloat(r.data.admin_average   || 0);
+          const mA = parseFloat(r.data.manager_average || 0);
+          if (aC + mC === 0) return;
+          const overall = ((aA * aC) + (mA * mC)) / (aC + mC);
+          setMyRatingAvg(overall.toFixed(1));
+        })
+        .catch(() => {});
+    }
+  }, []);
 
   const pendingLeaves  = leaveRequests.filter(l => l.status === 'pending');
   const approvedLeaves = leaveRequests.filter(l => l.status === 'approved');
@@ -273,6 +302,16 @@ const ManagerDashboard = () => {
     { label: 'Approved', value: approvedLeaves.length, color: '#22C55E', bg: '#F0FDF4', border: '#BBF7D0' },
     { label: 'Rejected', value: rejectedLeaves.length, color: '#EF4444', bg: '#FEF2F2', border: '#FECACA' },
   ];
+
+  const renderStars = (rating) => {
+    const full = Math.floor(rating);
+    const half = rating % 1 >= 0.5;
+    return [1,2,3,4,5].map(i => {
+      if (i <= full) return <FaStar key={i} size={14} className="me-1 text-warning" />;
+      if (i === full + 1 && half) return <FaStarHalfAlt key={i} size={14} className="me-1 text-warning" />;
+      return <FaRegStar key={i} size={14} className="me-1 text-secondary" />;
+    });
+  };
 
   const leavePct = (v) => totalLeaves > 0 ? ((v / totalLeaves) * 100).toFixed(1) : '0.0';
   const desigPct = (v) => desigTotal  > 0 ? ((v / desigTotal)  * 100).toFixed(0) : '0';
@@ -455,6 +494,11 @@ const ManagerDashboard = () => {
             <span style={{ fontSize: 11, color: 'rgba(255,255,255,.35)' }}>Not clocked in today</span>
           )}
 
+          {/* My Rating Stars */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginLeft: 'auto' }}>
+            {renderStars(myRatingAvg ? parseFloat(myRatingAvg) : 0)}
+          </div>
+
           {/* Message feedback */}
           {clockMessage.text && (
             <div style={{
@@ -487,10 +531,13 @@ const ManagerDashboard = () => {
 
       {/* Stat Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16, marginBottom: 28 }}>
-        <StatCard label="Team Members"    value={team.length}           icon={<FaUsers />}         pal={STAT_PALETTES.blue}  loading={loading} />
-        <StatCard label="Pending Leaves"  value={pendingLeaves.length}  icon={<FaHourglassHalf />} pal={STAT_PALETTES.amber} loading={loading} />
-        <StatCard label="Approved Leaves" value={approvedLeaves.length} icon={<FaCheckCircle />}   pal={STAT_PALETTES.green} loading={loading} />
-        <StatCard label="Rejected Leaves" value={rejectedLeaves.length} icon={<FaTimesCircle />}   pal={STAT_PALETTES.red}   loading={loading} />
+        <StatCard label="Team Members"    value={team.length}           icon={<FaUsers />}         pal={STAT_PALETTES.blue}  loading={loading} onClick={() => navigate('/manager/panel')} />
+        <StatCard label="Pending Leaves"  value={pendingLeaves.length}  icon={<FaHourglassHalf />} pal={STAT_PALETTES.amber} loading={loading} onClick={() => navigate('/manager/panel')} />
+        <StatCard label="Approved Leaves" value={approvedLeaves.length} icon={<FaCheckCircle />}   pal={STAT_PALETTES.green} loading={loading} onClick={() => navigate('/manager/panel')} />
+        <StatCard label="Rejected Leaves" value={rejectedLeaves.length} icon={<FaTimesCircle />}   pal={STAT_PALETTES.red}   loading={loading} onClick={() => navigate('/manager/panel')} />
+        <StatCard label="Pending Reviews" value={perfStats?.pending ?? '—'}  icon={<FaStar />}        pal={STAT_PALETTES.amber} loading={loading} onClick={() => navigate('/performance/reviews')} />
+        {/* <StatCard label="Reviews Done"    value={perfStats?.reviewed ?? '—'} icon={<FaCheckCircle />} pal={STAT_PALETTES.green} loading={loading} onClick={() => navigate('/performance/reviews')} /> */}
+        <StatCard label="Avg Team Rating" value={perfStats?.avg_rating ? `${Number(perfStats.avg_rating).toFixed(1)}/5` : '—'} icon={<FaStar />} pal={STAT_PALETTES.blue} loading={loading} onClick={() => navigate('/performance/reviews')} />
       </div>
 
       {/* Charts Row */}
