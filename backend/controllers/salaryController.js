@@ -129,7 +129,7 @@ const getEmployeeDetails = async (employeeId) => {
 const getAttendanceRecords = async (employeeId, startDateStr, endDateStr) => {
     const { data: attendance, error } = await supabase
         .from('attendance')
-        .select('attendance_date, clock_in, clock_out, status, total_minutes, late_minutes, overtime_hours, overtime_amount')
+        .select('attendance_date, clock_in, clock_out, status, total_minutes, late_minutes, overtime_hours, overtime_amount, is_holiday, holiday_name')
         .eq('employee_id', employeeId)
         .gte('attendance_date', startDateStr)
         .lte('attendance_date', endDateStr)
@@ -153,18 +153,23 @@ const getAttendanceRecords = async (employeeId, startDateStr, endDateStr) => {
         const recStatus = (rec.status || '').toLowerCase();
         const existingStatus = (existing.status || '').toLowerCase();
 
-        // Admin explicitly set absent (total_minutes forced to 0) — keep absent over present
-        const recIsAdminAbsent = recStatus === 'absent' && (rec.total_minutes || 0) === 0;
-        const existingIsAdminAbsent = existingStatus === 'absent' && (existing.total_minutes || 0) === 0;
-        if (recIsAdminAbsent && !existingIsAdminAbsent) {
+        // Admin-absent = status 'absent' with total_minutes=0 AND no clock_in
+        // (clock_in present means it's a genuine clock-in record that was later updated, not a pure admin mark)
+        // Admin-absent should beat a genuine clock-in record, but NOT an admin-present record (total_minutes=540).
+        const recIsAdminAbsent = recStatus === 'absent' && (rec.total_minutes || 0) === 0 && !rec.clock_in;
+        const existingIsAdminAbsent = existingStatus === 'absent' && (existing.total_minutes || 0) === 0 && !existing.clock_in;
+
+        if (recIsAdminAbsent && existing.clock_in) {
+            // Admin explicitly marked absent; existing is a genuine clock-in → admin wins
             bestPerDay[dateKey] = rec;
             continue;
         }
-        if (existingIsAdminAbsent && !recIsAdminAbsent) {
-            continue; // keep existing admin-absent record
+        if (existingIsAdminAbsent && rec.clock_in) {
+            // Existing is admin-absent; new rec is a genuine clock-in → keep admin-absent
+            continue;
         }
 
-        // Both admin-absent or neither — prefer higher total_minutes (more worked time)
+        // Otherwise: prefer higher total_minutes (admin-present = 540, genuine work hours, etc.)
         if ((rec.total_minutes || 0) > (existing.total_minutes || 0)) {
             bestPerDay[dateKey] = rec;
         } else if ((rec.total_minutes || 0) === (existing.total_minutes || 0)) {
@@ -275,7 +280,12 @@ const calculateAttendanceSummary = (attendanceRecords, leaves, startDateStr, end
                 halfDays++;
                 presentDays += 0.5;
             } else if (dbStatus === 'absent') {
-                absentDays++;
+                // Admin-marked week_off or holiday (is_holiday=true) → paid, no deduction
+                if (attendance.is_holiday) {
+                    presentDays++;
+                } else {
+                    absentDays++;
+                }
             } else if (attendance.clock_in && !attendance.clock_out) {
                 // Still working — count as present for salary
                 presentDays++;
@@ -339,15 +349,25 @@ exports.generateSalarySlip = async (req, res) => {
         // Get cycle dates
         const cycle = getCycleDates(parseInt(month), parseInt(year));
 
-        // Check if salary slip already exists — always delete and regenerate fresh
-        const { data: existingSlip } = await supabase
-            .from('salary_slips').select('id')
+        // Check if salary slip already exists
+        // Preserve any manually-set OT (from Payroll Adjustment) before deleting
+        // Use limit(1) instead of maybeSingle() to avoid errors when duplicate rows exist
+        const { data: slipList } = await supabase
+            .from('salary_slips').select('id, overtime_amount')
             .eq('employee_id', employee_id).eq('month', month).eq('year', year)
-            .maybeSingle();
+            .order('generated_date', { ascending: false })
+            .limit(1);
+        const existingSlip = slipList?.[0] || null;
 
-        if (existingSlip) {
-            await supabase.from('salary_slips').delete().eq('id', existingSlip.id);
-        }
+        // null = no prior slip → use attendance OT for first-time generation.
+        // number (even 0) = prior slip had this OT → use exactly, so admin setting 0 is respected.
+        const preservedOtAmount = existingSlip !== null
+            ? parseFloat(existingSlip.overtime_amount ?? 0)
+            : null;
+
+        // Delete ALL rows for this month to prevent duplicates accumulating
+        await supabase.from('salary_slips').delete()
+            .eq('employee_id', employee_id).eq('month', month).eq('year', year);
 
         const monthlySalary = parseFloat(employee.in_hand_salary || employee.gross_salary || employee.salary || 0);
         const joiningDate   = employee.joining_date ? new Date(employee.joining_date) : null;
@@ -398,9 +418,16 @@ exports.generateSalarySlip = async (req, res) => {
         const absentAlreadyExcluded = totalPaidDays < totalWorkingDays;
         const effectiveUnpaidDeduction = absentAlreadyExcluded ? 0 : unpaidDeduction;
 
-        // OT from attendance records
-        const overtimeHours  = parseFloat((summary.totalOvertimeHours  || 0).toFixed(2));
-        const overtimeAmount = parseFloat((summary.totalOvertimeAmount || 0).toFixed(2));
+        // OT: if a prior slip exists, use its overtime_amount exactly (including 0 to respect admin override).
+        // For first-time generation (no existing slip), derive OT from attendance records.
+        const attendanceOtAmount = parseFloat((summary.totalOvertimeAmount || 0).toFixed(2));
+        const attendanceOtHours  = parseFloat((summary.totalOvertimeHours  || 0).toFixed(2));
+        const overtimeAmount     = parseFloat(
+            (preservedOtAmount !== null ? preservedOtAmount : attendanceOtAmount).toFixed(2)
+        );
+        const overtimeHours      = overtimeAmount === attendanceOtAmount
+            ? attendanceOtHours
+            : parseFloat((overtimeAmount / 150).toFixed(2));
 
         // Fixed deduction: DT ₹200 up to May 2026; PFPT ₹2000 (PF ₹1800 + PT ₹200) from June 2026
         const isAfterMay2026 = parseInt(year) > 2026 || (parseInt(year) === 2026 && parseInt(month) >= 6);
@@ -465,14 +492,24 @@ exports.getEmployeeSalarySlips = async (req, res) => {
     try {
         const { employee_id } = req.params;
 
-        const { data: salarySlips, error } = await supabase
+        const { data: allSlips, error } = await supabase
             .from('salary_slips')
             .select('*')
             .eq('employee_id', employee_id)
             .order('year', { ascending: false })
-            .order('month', { ascending: false });
+            .order('month', { ascending: false })
+            .order('generated_date', { ascending: false });
 
         if (error) throw error;
+
+        // Deduplicate: keep only the most-recently-generated slip per month/year
+        const seen = new Set();
+        const salarySlips = (allSlips || []).filter(s => {
+            const key = `${s.year}-${s.month}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
 
         // Get employee joining info
         const { data: employee, error: empError } = await supabase
@@ -497,7 +534,7 @@ exports.getEmployeeSalarySlips = async (req, res) => {
 
         res.json({
             success: true,
-            salarySlips: salarySlips || [],
+            salarySlips,
             joiningInfo
         });
 
@@ -876,13 +913,16 @@ exports.saveSalaryAdjustment = async (req, res) => {
             const isAfterMay2026OT = parseInt(year) > 2026 || (parseInt(year) === 2026 && parseInt(month) >= 6);
             const dt = monthlySalary > 0 ? (isAfterMay2026OT ? 2000 : 200) : 0;
 
-            const { data: existingSlip } = await supabase
+            // Use limit(1) to avoid maybeSingle() error when duplicate rows exist
+            const { data: slipRows } = await supabase
                 .from('salary_slips')
                 .select('id, basic_salary, net_salary')
                 .eq('employee_id', employee_id)
                 .eq('month', parseInt(month))
                 .eq('year',  parseInt(year))
-                .maybeSingle();
+                .order('generated_date', { ascending: false })
+                .limit(1);
+            const existingSlip = slipRows?.[0] || null;
 
             const basicSalary = parseFloat(existingSlip?.basic_salary || 0);
             const netSalary   = parseFloat(Math.max(0, basicSalary + otAmount - dt).toFixed(2));

@@ -2460,12 +2460,19 @@ exports.getEmployeeAttendanceReport = async (req, res) => {
             .order('attendance_date', { ascending: false })
             .order('clock_in', { ascending: false, nullsFirst: false });
 
-        // Deduplicate per date: Excel imports can create ghost records with null clock_in
-        // alongside real clock-in records for the same date. Keep the one with clock_in.
+        // Deduplicate per date: prefer (1) real clock-in records over ghost import records,
+        // then (2) higher total_minutes — admin-present import sets 540, old absent sets 0.
         const dedupedByDate = {};
         (attendance || []).forEach(record => {
             const date = record.attendance_date;
-            if (!dedupedByDate[date] || (!dedupedByDate[date].clock_in && record.clock_in)) {
+            const existing = dedupedByDate[date];
+            if (!existing) { dedupedByDate[date] = record; return; }
+            const existingHasClock = !!existing.clock_in;
+            const recHasClock      = !!record.clock_in;
+            if (recHasClock && !existingHasClock) { dedupedByDate[date] = record; return; }
+            if (existingHasClock && !recHasClock) return;
+            // Same clock_in presence → prefer higher total_minutes (admin-present=540 beats absent=0)
+            if ((record.total_minutes || 0) > (existing.total_minutes || 0)) {
                 dedupedByDate[date] = record;
             }
         });
@@ -3596,17 +3603,23 @@ exports.importAttendance = async (req, res) => {
         const m = parseInt(month);
         const y = parseInt(year);
 
-        // Pre-query existing records for the full salary cycle so we know their PKs
+        // Pre-query existing records for the full salary cycle so we know their PKs.
+        // IMPORTANT: filter by the specific employee IDs in this import to avoid
+        // Supabase's default 1000-row query limit truncating results when there are many employees.
         const prevM = m === 1 ? 12 : m - 1;
         const prevY = m === 1 ? y - 1 : y;
         const startDate = `${prevY}-${String(prevM).padStart(2, '0')}-26`;
         const endDate   = `${y}-${String(m).padStart(2, '0')}-${new Date(y, m, 0).getDate()}`;
 
+        const employeeIdsInRequest = [...new Set(records.map(r => r.employee_id).filter(Boolean))];
+
         const { data: existing } = await supabase
             .from('attendance')
             .select('id, employee_id, attendance_date')
+            .in('employee_id', employeeIdsInRequest)
             .gte('attendance_date', startDate)
-            .lte('attendance_date', endDate);
+            .lte('attendance_date', endDate)
+            .limit(10000);
 
         // Collect ALL record IDs per employee+date — duplicate records exist when imports
         // created ghost records alongside real clock-in records. Admin must override ALL of them.
@@ -3627,19 +3640,23 @@ exports.importAttendance = async (req, res) => {
                 const code = String(rawCode).toUpperCase();
                 if (!VALID_CODES.has(code)) continue;
 
-                const status = CODE_TO_STATUS[code];
                 const isHol = code === 'H';
                 const isWO  = code === 'WO';
+                const isLeave = code === 'L';
                 const isPaidFullDay = code === 'P' || code === 'CO';
                 const totalHours   = isPaidFullDay ? 9 : code === 'HD' ? 4.5 : 0;
                 const totalMinutes = isPaidFullDay ? 540 : code === 'HD' ? 270 : 0;
+
+                // WO/H/L use 'absent' status (DB constraint only allows present/absent/half_day/working/on_leave).
+                // is_holiday=true flags week_off/holiday as paid days; salary calc respects this.
+                const status = (isWO || isHol) ? 'absent' : isLeave ? 'absent' : CODE_TO_STATUS[code];
 
                 const payload = {
                     employee_id,
                     attendance_date: date,
                     status,
                     is_holiday:    isHol || isWO,
-                    holiday_name:  isHol ? 'Holiday' : isWO ? 'Week Off' : null,
+                    holiday_name:  isHol ? 'Holiday' : isWO ? 'Week Off' : isLeave ? 'Leave' : null,
                     total_hours:   totalHours,
                     total_minutes: totalMinutes,
                     late_minutes:  0,  // Excel is source of truth — no late marks on import

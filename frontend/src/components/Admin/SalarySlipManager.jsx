@@ -233,7 +233,7 @@ const fmtOTHours = (amount) => {
   return `${h} hr ${m} min`;
 };
 
-const SalarySlipManager = ({ employee }) => {
+const SalarySlipManager = ({ employee, refreshKey }) => {
   const { showNotification } = useNotification();
 
   const [slips, setSlips]               = useState([]);
@@ -284,14 +284,12 @@ const SalarySlipManager = ({ employee }) => {
       const res = await axios.get(API_ENDPOINTS.SALARY_EMPLOYEE(employee.employee_id));
       const data = res.data.salarySlips || res.data.data || [];
       setSlips(data);
-      // Seed OT inputs from saved overtime_amount
+      // Sync OT inputs from DB on every fetch so card always reflects saved overtime_amount
       setOtInputs(prev => {
         const next = { ...prev };
         data.forEach(s => {
           const k = `${s.year}-${s.month}`;
-          if (next[k] === undefined) {
-            next[k] = Number(s.overtime_amount) || 0;
-          }
+          next[k] = Number(s.overtime_amount) || 0;
         });
         return next;
       });
@@ -300,16 +298,16 @@ const SalarySlipManager = ({ employee }) => {
     }
   }, [employee?.employee_id]);
 
-  useEffect(() => { fetchSlips(); }, [fetchSlips]);
+  useEffect(() => { fetchSlips(); }, [fetchSlips, refreshKey]);
 
-  // Submit OT amount — saves directly at ₹150/hr, refreshes slips
+  // Submit OT — SALARY_ADJUSTMENT updates overtime_amount + net_salary directly (no regeneration needed)
   const handleSubmitOT = async (month, year) => {
     const key = `${year}-${month}`;
-    const amount = Number(otInputs[key]) || 0;
+    const amount = Number(otInputs[key] ?? 0);
     setOtSubmitting(key);
     try {
       await axios.post(API_ENDPOINTS.SALARY_ADJUSTMENT, {
-        employee_id:    employee.employee_id,
+        employee_id:     employee.employee_id,
         month,
         year,
         overtime_amount: amount,
@@ -651,14 +649,22 @@ const SalarySlipManager = ({ employee }) => {
                             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                           }}
                         >−</button>
-                        <div style={{
-                          flex: 1, textAlign: 'center', fontWeight: 800, fontSize: 13,
-                          color: otAmount > 0 ? '#1e3a5f' : '#94a3b8',
-                          background: '#fff', border: '1.5px solid #e2e8f0',
-                          borderRadius: 7, padding: '3px 0',
-                        }}>
-                          {otAmount > 0 ? `₹${otAmount}` : '₹0'}
-                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          value={otInputs[genKey] ?? 0}
+                          onChange={e => {
+                            const val = Math.max(0, Number(e.target.value) || 0);
+                            setOtInputs(prev => ({ ...prev, [genKey]: val }));
+                          }}
+                          style={{
+                            flex: 1, textAlign: 'center', fontWeight: 800, fontSize: 13,
+                            color: otAmount > 0 ? '#1e3a5f' : '#94a3b8',
+                            background: '#fff', border: '1.5px solid #e2e8f0',
+                            borderRadius: 7, padding: '3px 2px', width: 0,
+                            outline: 'none', WebkitAppearance: 'none', MozAppearance: 'textfield',
+                          }}
+                        />
                         <button
                           onClick={() => setOtInputs(prev => ({ ...prev, [genKey]: (Number(prev[genKey]) || 0) + OT_STEP }))}
                           style={{

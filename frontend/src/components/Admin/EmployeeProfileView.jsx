@@ -182,6 +182,9 @@ const EmployeeProfileView = () => {
   const [overtimeData, setOvertimeData] = useState({ total: 0, monthly: [] });
   const [performanceTrend, setPerformanceTrend] = useState([]);
 
+  // salary slip refresh key — incremented after attendance is saved to trigger regeneration
+  const [salaryRefreshKey, setSalaryRefreshKey] = useState(0);
+
   // ── load employee profile ───────────────────────────────────────────────────
   useEffect(() => {
     if (!employeeId) return;
@@ -479,6 +482,19 @@ const EmployeeProfileView = () => {
     XLSX.utils.book_append_sheet(wb, ws, 'Summary');
     XLSX.writeFile(wb, `employee_summary_${employee?.employee_id}.xlsx`);
   };
+
+  // After attendance is saved via calendar, regenerate the salary slip so counts stay in sync
+  const handleAttendanceSaved = useCallback(async (month, year) => {
+    if (!employee?.employee_id) return;
+    try {
+      await axios.post(API_ENDPOINTS.SALARY_GENERATE, {
+        employee_id: employee.employee_id, month, year,
+      });
+      setSalaryRefreshKey(k => k + 1);
+    } catch {
+      // Non-fatal — salary slip regeneration failed; admin can still click Generate manually
+    }
+  }, [employee?.employee_id]);
 
   // ── loading / error states ─────────────────────────────────────────────────
   if (loading) return (
@@ -829,8 +845,8 @@ const EmployeeProfileView = () => {
                 { label: 'In-Hand Salary', value: fmtCurrency(employee.in_hand_salary), color: '#6366f1', icon: <FaCreditCard /> },
               ].map(s => <Col xs={12} md={6} key={s.label}><StatCard {...s} /></Col>)}
             </Row>
-            <SalarySlipManager employee={employee} />
-            <AttendanceCalendar employee={employee} />
+            <SalarySlipManager employee={employee} refreshKey={salaryRefreshKey} />
+            <AttendanceCalendar employee={employee} onAttendanceSaved={handleAttendanceSaved} />
           </>
         )}
 

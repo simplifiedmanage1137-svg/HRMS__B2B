@@ -68,7 +68,7 @@ const Skeleton = ({ w = '100%', h = 16, r = 6, mb = 0 }) => (
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════════
-const AttendanceCalendar = ({ employee }) => {
+const AttendanceCalendar = ({ employee, onAttendanceSaved }) => {
   const { showNotification } = useNotification();
   const today = new Date();
 
@@ -145,6 +145,7 @@ const AttendanceCalendar = ({ employee }) => {
       setAttendanceMap(m => ({ ...m, [dateStr]: code }));
       setUnsaved(u => { const n = { ...u }; delete n[dateStr]; return n; });
       showNotification(`✅ ${dateStr} updated to ${st.label}`, 'success');
+      if (onAttendanceSaved) onAttendanceSaved(selMonth + 1, selYear);
     } catch {
       showNotification(`Failed to save ${dateStr}`, 'danger');
     } finally {
@@ -168,6 +169,7 @@ const AttendanceCalendar = ({ employee }) => {
       setAttendanceMap(m => ({ ...m, ...unsaved }));
       setUnsaved({});
       showNotification(`✅ ${Object.keys(dates).length} day(s) saved successfully`, 'success');
+      if (onAttendanceSaved) onAttendanceSaved(selMonth + 1, selYear);
     } catch {
       showNotification('Failed to save changes', 'danger');
     } finally {
