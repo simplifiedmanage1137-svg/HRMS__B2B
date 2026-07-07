@@ -186,20 +186,19 @@ const AttendanceReports = () => {
     fetchAllEmployees();
   }, []);
 
-  useEffect(() => {
-    const days = new Date(selectedYear, selectedMonth, 0).getDate();
-    setDaysInMonth(days);
-  }, [selectedMonth, selectedYear]);
-
+  // Daily view: fetch when date or view changes — NOT dependent on allEmployees
   useEffect(() => {
     if (activeView === 'daily') {
       fetchDailyAttendance();
-    } else {
-      if (allEmployees.length > 0) {
-        fetchMonthlyAttendance();
-      }
     }
-  }, [activeView, selectedDate, selectedMonth, selectedYear, department, allEmployees, refreshKey]);
+  }, [activeView, selectedDate]);
+
+  // Monthly view: fetch when month/year/dept/refreshKey changes, but only once employees are loaded
+  useEffect(() => {
+    if (activeView === 'monthly' && allEmployees.length > 0) {
+      fetchMonthlyAttendance();
+    }
+  }, [activeView, selectedMonth, selectedYear, department, allEmployees, refreshKey]);
 
   const fetchAllEmployees = async () => {
     try {
@@ -287,9 +286,6 @@ const AttendanceReports = () => {
           record.total_minutes = totalMinutes;
           record.total_hours_display = totalHoursDisplay;
           record.status = 'working';
-
-          // Add debug log
-          console.log(`🔄 Real-time update for ${record.employee_id}: ${totalHoursDisplay}`);
         } else if (record.total_minutes) {
           // Already clocked out - use stored values
           const hrs = Math.floor(record.total_minutes / 60);
