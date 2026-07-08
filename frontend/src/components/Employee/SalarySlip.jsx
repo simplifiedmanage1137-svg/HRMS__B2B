@@ -715,6 +715,12 @@ const SalarySlip = () => {
             <FaHistory className="me-2" size={12} />
             Total Slips: {allSalarySlips.length}
           </Badge>
+          <button
+            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+            onClick={() => navigate(-1)}
+          >
+            <FaArrowLeft size={12} /> Back
+          </button>
         </div>
       </div>
 

@@ -117,14 +117,22 @@ const AdminUpdateApprovals = () => {
       {/* Header - Responsive */}
       <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-4 gap-3">
         <h4 className="mb-0">Pending Update Approvals</h4>
-        <button 
-          className="btn btn-sm btn-outline-primary ms-0 ms-sm-auto"
-          onClick={fetchCompletedRequests}
-          disabled={loading}
-        >
-          <i className="bi bi-arrow-repeat me-1"></i>
-          Refresh
-        </button>
+        <div className="d-flex gap-2 ms-0 ms-sm-auto">
+          <button
+            className="btn btn-sm btn-outline-primary"
+            onClick={fetchCompletedRequests}
+            disabled={loading}
+          >
+            <i className="bi bi-arrow-repeat me-1"></i>
+            Refresh
+          </button>
+          <button
+            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+            onClick={() => navigate(-1)}
+          >
+            <FaArrowLeft size={12} /> Back
+          </button>
+        </div>
       </div>
 
       {message && (

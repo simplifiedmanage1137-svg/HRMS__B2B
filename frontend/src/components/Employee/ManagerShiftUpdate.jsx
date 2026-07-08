@@ -144,9 +144,19 @@ const ManagerShiftUpdate = ({ embedded = false }) => {
             <FaClock className="me-2 text-primary" /> Upload Time
           </h5>
         )}
-        <Button variant="outline-primary" size="sm" onClick={fetchTeam} className={embedded ? 'ms-auto' : ''}>
-          <FaSyncAlt className="me-1" size={12} /> Refresh
-        </Button>
+        <div className={`d-flex gap-2 ${embedded ? 'ms-auto' : ''}`}>
+          <Button variant="outline-primary" size="sm" onClick={fetchTeam}>
+            <FaSyncAlt className="me-1" size={12} /> Refresh
+          </Button>
+          {!embedded && (
+            <button
+              className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+              onClick={() => navigate(-1)}
+            >
+              <FaArrowLeft size={12} /> Back
+            </button>
+          )}
+        </div>
       </div>
 
       {message.text && (

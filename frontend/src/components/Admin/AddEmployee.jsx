@@ -674,15 +674,22 @@ const AddEmployee = () => {
           <FaUserPlus className="me-2 text-primary" size={20} />
           Add New Employee
         </h5>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => navigate('/admin/employees')}
-          className="ms-0 ms-sm-auto"
-        >
-          <FaTimes className="me-2" size={12} />
-          Cancel
-        </Button>
+        <div className="d-flex gap-2 ms-0 ms-sm-auto">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => navigate('/admin/employees')}
+          >
+            <FaTimes className="me-2" size={12} />
+            Cancel
+          </Button>
+          <button
+            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+            onClick={() => navigate(-1)}
+          >
+            <FaArrowLeft size={12} /> Back
+          </button>
+        </div>
       </div>
 
       {/* Progress Indicators - Responsive */}

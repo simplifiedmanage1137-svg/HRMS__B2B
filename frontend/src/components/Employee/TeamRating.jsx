@@ -205,6 +205,12 @@ const TeamRating = () => {
           <Badge bg="warning" pill className="px-3 py-2">
             Avg Rating: {averageRating} ★
           </Badge>
+          <button
+            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+            onClick={() => navigate(-1)}
+          >
+            <FaArrowLeft size={12} /> Back
+          </button>
         </div>
       </div>
 

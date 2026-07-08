@@ -223,14 +223,22 @@ const ManagerRegularizationRequests = ({ embedded = false }) => {
               Team Regularization Requests
             </h5>
             <small className="text-muted">
-              {pendingCount > 0 
+              {pendingCount > 0
                 ? `You have ${pendingCount} pending request${pendingCount > 1 ? 's' : ''} awaiting your action`
                 : 'No pending requests from your team members'}
             </small>
           </div>
-          <Button variant="outline-primary" size="sm" onClick={fetchRequests}>
-            <FaSyncAlt className="me-1" size={12} /> Refresh
-          </Button>
+          <div className="d-flex gap-2">
+            <Button variant="outline-primary" size="sm" onClick={fetchRequests}>
+              <FaSyncAlt className="me-1" size={12} /> Refresh
+            </Button>
+            <button
+              className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+              onClick={() => navigate(-1)}
+            >
+              <FaArrowLeft size={12} /> Back
+            </button>
+          </div>
         </div>
       )}
 

@@ -161,9 +161,17 @@ const GeofenceSettings = () => {
           <FaMapMarkerAlt className="me-2 text-primary" />
           Geofence Settings
         </h5>
-        <Badge bg="secondary" pill className="px-3 py-2 ms-0 ms-md-auto">
-          Total: {geofences.length} Locations
-        </Badge>
+        <div className="d-flex align-items-center gap-2 ms-0 ms-md-auto">
+          <Badge bg="secondary" pill className="px-3 py-2">
+            Total: {geofences.length} Locations
+          </Badge>
+          <button
+            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+            onClick={() => navigate(-1)}
+          >
+            <FaArrowLeft size={12} /> Back
+          </button>
+        </div>
       </div>
 
       {/* Message Alert */}

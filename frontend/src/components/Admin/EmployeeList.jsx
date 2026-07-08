@@ -324,11 +324,19 @@ const EmployeeList = () => {
       {/* Header - Responsive */}
       <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-4 gap-3">
         <h4 className="mb-0">Employee Management</h4>
-        {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'desktop_support') && (
-          <Button variant="dark" size="sm" onClick={() => navigate('/admin/add-employee')} className="ms-0 ms-sm-auto">
-            <FaPlus className="me-2" size={12} /> Add Employee
-          </Button>
-        )}
+        <div className="d-flex gap-2 ms-0 ms-sm-auto">
+          {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'desktop_support') && (
+            <Button variant="dark" size="sm" onClick={() => navigate('/admin/add-employee')}>
+              <FaPlus className="me-2" size={12} /> Add Employee
+            </Button>
+          )}
+          <button
+            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+            onClick={() => navigate(-1)}
+          >
+            <FaArrowLeft size={12} /> Back
+          </button>
+        </div>
       </div>
 
       {error && (

@@ -485,10 +485,10 @@ const EditEmployee = () => {
                     <Button
                         variant="outline-secondary"
                         size="sm"
-                        onClick={() => navigate('/admin/employees')}
-                        className="me-2"
+                        onClick={() => navigate(-1)}
+                        className="me-2 d-flex align-items-center gap-1"
                     >
-                        <FaArrowLeft className="me-2" /> <span className="d-none d-sm-inline">Back</span>
+                        <FaArrowLeft size={12} /> <span className="d-none d-sm-inline">Back</span>
                     </Button>
                     <h5 className="d-inline-block mb-0">
                         Edit Employee: {formData.first_name} {formData.last_name}

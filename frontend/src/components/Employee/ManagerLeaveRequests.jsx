@@ -171,9 +171,17 @@ const ManagerLeaveRequests = ({ embedded = false }) => {
             <FaCalendarAlt className="me-2 text-primary" />
             Team Leave Requests
           </h5>
-          <Button variant="outline-primary" size="sm" onClick={fetchLeaveRequests}>
-            <FaSyncAlt className="me-1" size={12} /> Refresh
-          </Button>
+          <div className="d-flex gap-2">
+            <Button variant="outline-primary" size="sm" onClick={fetchLeaveRequests}>
+              <FaSyncAlt className="me-1" size={12} /> Refresh
+            </Button>
+            <button
+              className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+              onClick={() => navigate(-1)}
+            >
+              <FaArrowLeft size={12} /> Back
+            </button>
+          </div>
         </div>
       )}
       {embedded && (

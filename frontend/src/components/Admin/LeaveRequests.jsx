@@ -310,14 +310,22 @@ const LeaveRequests = () => {
           <FaCalendarAlt className="me-2 text-dark" />
           Leave Requests List
         </h2>
-        <Button
-          variant="dark"
-          onClick={handleGoToReports}
-          className="d-flex align-items-center ms-0 ms-sm-auto"
-        >
-          <FaChartBar className="me-2" />
-          Leave Reports
-        </Button>
+        <div className="d-flex gap-2 ms-0 ms-sm-auto">
+          <Button
+            variant="dark"
+            onClick={handleGoToReports}
+            className="d-flex align-items-center"
+          >
+            <FaChartBar className="me-2" />
+            Leave Reports
+          </Button>
+          <button
+            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+            onClick={() => navigate(-1)}
+          >
+            <FaArrowLeft size={12} /> Back
+          </button>
+        </div>
       </div>
 
       {/* Message Alert */}

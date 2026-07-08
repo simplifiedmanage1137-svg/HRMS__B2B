@@ -129,10 +129,18 @@ const Announcements = ({ embedded = false }) => {
   return (
     <div className={embedded ? '' : 'p-2 p-md-3 p-lg-4'} style={embedded ? {} : { backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
       {!embedded && (
-        <h5 className="mb-4 d-flex align-items-center">
-          <FaBullhorn className="me-2 text-primary" />
-          Announcements & Broadcasts
-        </h5>
+        <div className="d-flex align-items-center justify-content-between mb-4">
+          <h5 className="mb-0 d-flex align-items-center">
+            <FaBullhorn className="me-2 text-primary" />
+            Announcements & Broadcasts
+          </h5>
+          <button
+            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+            onClick={() => navigate(-1)}
+          >
+            <FaArrowLeft size={12} /> Back
+          </button>
+        </div>
       )}
 
       {message.text && (

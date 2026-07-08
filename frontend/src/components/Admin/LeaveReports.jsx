@@ -273,10 +273,18 @@ const LeaveReports = () => {
 
   return (
     <div className="p-4">
-      <h5 className="mb-4 h4">
-        <FaChartPie className="me-2 text-dark" />
-        Leave Reports
-      </h5>
+      <div className="d-flex align-items-center justify-content-between mb-4">
+        <h5 className="mb-0 h4">
+          <FaChartPie className="me-2 text-dark" />
+          Leave Reports
+        </h5>
+        <button
+          className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+          onClick={() => navigate(-1)}
+        >
+          <FaArrowLeft size={12} /> Back
+        </button>
+      </div>
 
       {/* Message Alert */}
       {message.text && (

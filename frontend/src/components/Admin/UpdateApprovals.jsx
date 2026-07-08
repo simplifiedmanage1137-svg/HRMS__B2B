@@ -229,6 +229,12 @@ const UpdateApprovals = () => {
             <FaExclamationTriangle className="me-2" size={12} />
             Refresh
           </Button>
+          <button
+            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+            onClick={() => navigate(-1)}
+          >
+            <FaArrowLeft size={12} /> Back
+          </button>
         </div>
       </div>
 

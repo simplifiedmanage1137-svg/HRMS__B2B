@@ -3,8 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Badge, Spinner, Alert } from 'react-bootstrap';
 import {
   FaStar, FaRegStar, FaChartLine, FaCalendarAlt,
-  FaUserTie, FaHistory, FaInfoCircle,
+  FaUserTie, FaHistory, FaInfoCircle, FaArrowLeft,
 } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
@@ -40,6 +41,7 @@ const Stars = ({ rating, size = 18 }) => (
 
 const PerformanceHistory = () => {
   const { user }                      = useAuth();
+  const navigate                      = useNavigate();
   const [reviews,  setReviews]        = useState([]);
   const [loading,  setLoading]        = useState(true);
   const [error,    setError]          = useState('');
@@ -119,21 +121,29 @@ const PerformanceHistory = () => {
       <div style={{
         background: 'linear-gradient(135deg,#1e2a3e,#2d3f5e)',
         borderRadius: 14, padding: '24px 28px', marginBottom: 24,
-        display: 'flex', alignItems: 'center', gap: 16,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
       }}>
-        <div style={{
-          width: 48, height: 48, borderRadius: 12,
-          background: 'rgba(255,255,255,0.15)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <FaChartLine size={22} color="#fff" />
-        </div>
-        <div>
-          <h4 style={{ color: '#fff', margin: 0, fontWeight: 700, fontSize: 20 }}>My Performance</h4>
-          <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, marginTop: 2 }}>
-            {user?.name || user?.employeeId} · {reviews.length} review{reviews.length !== 1 ? 's' : ''}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{
+            width: 48, height: 48, borderRadius: 12,
+            background: 'rgba(255,255,255,0.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <FaChartLine size={22} color="#fff" />
+          </div>
+          <div>
+            <h4 style={{ color: '#fff', margin: 0, fontWeight: 700, fontSize: 20 }}>My Performance</h4>
+            <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, marginTop: 2 }}>
+              {user?.name || user?.employeeId} · {reviews.length} review{reviews.length !== 1 ? 's' : ''}
+            </div>
           </div>
         </div>
+        <button
+          className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+          onClick={() => navigate(-1)}
+        >
+          <FaArrowLeft size={12} /> Back
+        </button>
       </div>
 
       {error && <Alert variant="danger">{error}</Alert>}

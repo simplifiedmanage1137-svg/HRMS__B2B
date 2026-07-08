@@ -453,10 +453,18 @@ const AdminBroadcast = () => {
 
   return (
     <div className="p-2 p-md-3 p-lg-4" style={{ backgroundColor: 'var(--body-bg)', minHeight: '100vh' }}>
-      <h5 className="mb-3 d-flex align-items-center" style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-primary)' }}>
-        <FaBullhorn className="me-2" style={{ color: 'var(--primary)' }} />
-        Broadcast Center
-      </h5>
+      <div className="d-flex align-items-center justify-content-between mb-3">
+        <h5 className="mb-0 d-flex align-items-center" style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-primary)' }}>
+          <FaBullhorn className="me-2" style={{ color: 'var(--primary)' }} />
+          Broadcast Center
+        </h5>
+        <button
+          className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+          onClick={() => navigate(-1)}
+        >
+          <FaArrowLeft size={12} /> Back
+        </button>
+      </div>
 
       {/* Tab Bar */}
       <div style={{ display: 'flex', borderBottom: '2px solid var(--border)', marginBottom: '24px', gap: '2px' }}>

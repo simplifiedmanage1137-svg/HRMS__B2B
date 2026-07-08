@@ -202,12 +202,20 @@ const SendUpdateRequest = () => {
           <FaPaperPlane className="me-2 text-primary" />
           Send Update Request
         </h5>
-        {selectedIds.size > 0 && (
-          <Badge bg="primary" pill className="px-3 py-2">
-            <FaUsers className="me-1" size={12} />
-            {selectedIds.size} selected
-          </Badge>
-        )}
+        <div className="d-flex align-items-center gap-2">
+          {selectedIds.size > 0 && (
+            <Badge bg="primary" pill className="px-3 py-2">
+              <FaUsers className="me-1" size={12} />
+              {selectedIds.size} selected
+            </Badge>
+          )}
+          <button
+            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+            onClick={() => navigate(-1)}
+          >
+            <FaArrowLeft size={12} /> Back
+          </button>
+        </div>
       </div>
 
       {message.text && (

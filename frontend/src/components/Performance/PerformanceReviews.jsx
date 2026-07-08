@@ -7,7 +7,9 @@ import {
 import {
   FaStar, FaRegStar, FaUserTie, FaCheckCircle,
   FaClock, FaChartLine, FaUsers, FaExclamationTriangle,
+  FaArrowLeft,
 } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
@@ -60,6 +62,7 @@ const Stars = ({ rating, size = 18, interactive = false, onSelect }) => (
 // ── Main component ────────────────────────────────────────────────────────────
 const PerformanceReviews = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const role     = user?.role;
 
   const [employees,   setEmployees]   = useState([]);
@@ -168,9 +171,15 @@ const PerformanceReviews = () => {
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <StatPill label="Pending"   value={pending.length}   color="#f97316" />
           <StatPill label="Completed" value={completed.length} color="#22c55e" />
+          <button
+            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+            onClick={() => navigate(-1)}
+          >
+            <FaArrowLeft size={12} /> Back
+          </button>
         </div>
       </div>
 

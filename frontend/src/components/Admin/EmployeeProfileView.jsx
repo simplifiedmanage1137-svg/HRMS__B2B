@@ -534,10 +534,10 @@ const EmployeeProfileView = () => {
       {/* ── Hero Header ─────────────────────────────────────────────────────── */}
       <div style={{ borderRadius: 12,background: 'linear-gradient(135deg,#1e1b4b 0%,#312e81 60%,#4338ca 100%)', padding: '28px 28px 80px', position: 'relative' }}>
         <button
-          onClick={() => navigate('/admin/employees')}
+          onClick={() => navigate(-1)}
           style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 20 }}
         >
-          <FaArrowLeft size={10} /> Back to Employees
+          <FaArrowLeft size={10} /> Back
         </button>
 
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 20, flexWrap: 'wrap' }}>

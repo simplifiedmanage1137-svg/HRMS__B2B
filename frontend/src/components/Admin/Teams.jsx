@@ -356,10 +356,18 @@ const Teams = () => {
                     <h5 className="mb-0">Manager Hierarchy</h5>
                     <Badge bg="light" text="dark" className="ms-1">{hierarchy.length} managers</Badge>
                 </div>
-                <Button variant="outline-secondary" size="sm" onClick={fetchHierarchy}
-                    className="d-flex align-items-center gap-1">
-                    <FaSyncAlt size={11} /> Refresh
-                </Button>
+                <div className="d-flex gap-2">
+                    <Button variant="outline-secondary" size="sm" onClick={fetchHierarchy}
+                        className="d-flex align-items-center gap-1">
+                        <FaSyncAlt size={11} /> Refresh
+                    </Button>
+                    <button
+                        className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+                        onClick={() => navigate(-1)}
+                    >
+                        <FaArrowLeft size={12} /> Back
+                    </button>
+                </div>
             </div>
 
             {/* Search & Filter bar */}

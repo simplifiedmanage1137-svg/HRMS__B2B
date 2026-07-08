@@ -218,9 +218,17 @@ const SendNotice = ({ embedded = false }) => {
             <FaExclamationTriangle className="me-2 text-warning" />
             Send Notice / Warning (Bulk)
           </h5>
-          <Badge bg="primary" pill className="px-3 py-2">
-            <FaUsers className="me-1" /> {selectedIds.size} Selected
-          </Badge>
+          <div className="d-flex align-items-center gap-2">
+            <Badge bg="primary" pill className="px-3 py-2">
+              <FaUsers className="me-1" /> {selectedIds.size} Selected
+            </Badge>
+            <button
+              className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+              onClick={() => navigate(-1)}
+            >
+              <FaArrowLeft size={12} /> Back
+            </button>
+          </div>
         </div>
       )}
 

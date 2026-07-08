@@ -534,15 +534,23 @@ const ApplyLeave = () => {
                 : 'During probation, only Unpaid Leave is available'}
           </p>
         </div>
-        <Button
-          variant="outline-secondary"
-          size="sm"
-          onClick={handleCancel}
-          className="d-inline-flex align-items-center ms-0 ms-md-auto"
-        >
-          <FaTimes className="me-2" size={12} />
-          Cancel
-        </Button>
+        <div className="d-flex gap-2 ms-0 ms-md-auto">
+          <Button
+            variant="outline-secondary"
+            size="sm"
+            onClick={handleCancel}
+            className="d-inline-flex align-items-center"
+          >
+            <FaTimes className="me-2" size={12} />
+            Cancel
+          </Button>
+          <button
+            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+            onClick={() => navigate(-1)}
+          >
+            <FaArrowLeft size={12} /> Back
+          </button>
+        </div>
       </div>
 
       <Row className="g-3">

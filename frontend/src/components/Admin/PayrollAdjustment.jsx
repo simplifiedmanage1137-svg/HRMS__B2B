@@ -200,11 +200,19 @@ const PayrollAdjustment = () => {
 
       {/* ── Page Header ──────────────────────────────────────────────────────── */}
       <div style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <FaMoneyBillWave size={16} color="#6366f1" />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <FaMoneyBillWave size={16} color="#6366f1" />
+            </div>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#1e293b' }}>Payroll Adjustment</h1>
           </div>
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#1e293b' }}>Payroll Adjustment</h1>
+          <button
+            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+            onClick={() => navigate(-1)}
+          >
+            <FaArrowLeft size={12} /> Back
+          </button>
         </div>
         <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>
           Set actual salary earned per employee. Overtime and deductions are calculated automatically.

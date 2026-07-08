@@ -14,9 +14,11 @@ import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const RegularizationRequests = ({ onRequestCountChange, onRegularizationApproved }) => {
     const { user } = useAuth();
+    const navigate = useNavigate();
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedRequest, setSelectedRequest] = useState(null);
@@ -325,6 +327,18 @@ const RegularizationRequests = ({ onRequestCountChange, onRegularizationApproved
     return (
         <>
             <div>
+            <div className="d-flex align-items-center justify-content-between mb-3">
+                <h5 className="mb-0 d-flex align-items-center">
+                    <FaClock className="me-2 text-primary" />
+                    Regularization Requests
+                </h5>
+                <button
+                    className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+                    onClick={() => navigate(-1)}
+                >
+                    <FaArrowLeft size={12} /> Back
+                </button>
+            </div>
             {message.text && (
                 <Alert
                     variant={message.type}

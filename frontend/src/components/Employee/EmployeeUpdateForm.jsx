@@ -206,15 +206,12 @@ const fieldGroups = {
             <h5 className="mb-0 small">Update Your Information</h5>
             <small className="d-block">Request #{requestId}</small>
           </div>
-          <Button
-            variant="light"
-            size="sm"
-            onClick={() => navigate('/employee/update-requests')}
-            className="d-inline-flex align-items-center ms-0 ms-md-auto"
+          <button
+            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1 ms-0 ms-md-auto"
+            onClick={() => navigate(-1)}
           >
-            <FaArrowLeft className="me-2" size={12} />
-            Back to Requests
-          </Button>
+            <FaArrowLeft size={12} /> Back
+          </button>
         </Card.Header>
         <Card.Body className="p-2 p-md-3 p-lg-4">
           {message && (

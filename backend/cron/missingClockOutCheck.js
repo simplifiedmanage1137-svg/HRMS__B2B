@@ -35,7 +35,7 @@ const MISSING_THRESHOLD_MS    = MISSING_THRESHOLD_HOURS * 60 * 60 * 1000;
  *   - status        → 'missing'
  *   - total_hours   → 0
  *   - total_minutes → 0
- *   - clock_out     stays NULL (no fabricated time)
+ *   - clock_out     → clock_in + 15h (auto-close time, removes the open record)
  *   - session closed so next-day clock-in is unblocked
  */
 const markMissingClockOuts = async () => {
@@ -68,14 +68,24 @@ const markMissingClockOuts = async () => {
             const elapsedMs = nowMs - clockInMs;
             if (elapsedMs < MISSING_THRESHOLD_MS) continue;
 
-            // ── Mark as missing ──────────────────────────────────────────────
+            // Auto-close time = exactly clock_in + 15 hours (UTC ISO for DB)
+            const autoCloseMs  = clockInMs + MISSING_THRESHOLD_MS;
+            const autoCloseISO = new Date(autoCloseMs).toISOString();
+
+            // IST string for clock_out_ist column (if it exists)
+            const autoCloseISTDate = new Date(autoCloseMs + IST_OFFSET_MS);
+            const autoCloseIST = autoCloseISTDate.toISOString().replace('T', ' ').substring(0, 19);
+
+            // ── Mark as missing and set clock_out so record is fully closed ──
             const { error: updateErr } = await supabase
                 .from('attendance')
                 .update({
-                    status:        'missing',
-                    total_hours:   0,
-                    total_minutes: 0,
+                    status:              'missing',
+                    total_hours:         0,
+                    total_minutes:       0,
                     total_hours_display: '0h 0m',
+                    clock_out:           autoCloseISO,
+                    clock_out_ist:       autoCloseIST,
                 })
                 .eq('id', record.id);
 
@@ -88,14 +98,14 @@ const markMissingClockOuts = async () => {
             if (record.session_id) {
                 await supabase
                     .from('attendance_sessions')
-                    .update({ is_active: false, clock_out_time: new Date().toISOString() })
+                    .update({ is_active: false, clock_out_time: autoCloseISO })
                     .eq('session_id', record.session_id)
                     .eq('employee_id', record.employee_id);
             }
 
             markedCount++;
             const elapsedHours = (elapsedMs / (1000 * 60 * 60)).toFixed(1);
-            console.log(`⚠️  [MissingClockOut] ${record.employee_id} | ${record.attendance_date} | ${elapsedHours}h elapsed → marked missing`);
+            console.log(`⚠️  [MissingClockOut] ${record.employee_id} | ${record.attendance_date} | ${elapsedHours}h elapsed → marked missing, clock_out set to +15h`);
         }
 
         console.log(`✅ [MissingClockOut] Done. Marked ${markedCount} record(s) as missing.`);

@@ -1094,9 +1094,17 @@ const AttendanceReports = () => {
           <FaCalendarAlt className="me-2 text-primary" />
           Attendance Reports
         </h5>
-        <small className="text-muted">
-          {activeView === 'daily' ? 'Daily View' : `Salary Cycle: ${formatCycleLabel(selectedMonth, selectedYear)}`}
-        </small>
+        <div className="d-flex align-items-center gap-2">
+          <small className="text-muted">
+            {activeView === 'daily' ? 'Daily View' : `Salary Cycle: ${formatCycleLabel(selectedMonth, selectedYear)}`}
+          </small>
+          <button
+            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+            onClick={() => navigate(-1)}
+          >
+            <FaArrowLeft size={12} /> Back
+          </button>
+        </div>
       </div>
 
       {message && (
@@ -1350,6 +1358,14 @@ const AttendanceReports = () => {
                             <td className={`small d-none d-lg-table-cell ${record.clock_out ? 'text-danger' : 'text-muted'}`}>
                               <span className="text-nowrap" title={formatShortTime(record.clock_out)}>
                                 {formatShortTime(record.clock_out) || '--:--'}
+                                {(() => {
+                                  if (!record.clock_in || !record.clock_out) return null;
+                                  const inDate = record.clock_in.split(' ')[0] || record.clock_in.substring(0, 10);
+                                  const outDate = record.clock_out.split(' ')[0] || record.clock_out.substring(0, 10);
+                                  return inDate && outDate && inDate !== outDate
+                                    ? <span className="text-warning ms-1" style={{ fontSize: '10px' }} title="Clock-out is next day">+1d</span>
+                                    : null;
+                                })()}
                               </span>
                             </td>
                             <td className="small d-none d-xl-table-cell">

@@ -143,9 +143,17 @@ const confirmAcceptRequest = async () => {
           <FaBell className="me-2 text-primary" />
           Information Update Requests
         </h5>
-        <Badge bg="info" pill className="px-3 py-2 ms-0 ms-md-auto">
-          {requests.length} Pending
-        </Badge>
+        <div className="d-flex align-items-center gap-2 ms-0 ms-md-auto">
+          <Badge bg="info" pill className="px-3 py-2">
+            {requests.length} Pending
+          </Badge>
+          <button
+            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+            onClick={() => navigate(-1)}
+          >
+            <FaArrowLeft size={12} /> Back
+          </button>
+        </div>
       </div>
 
       {/* Message Alert */}

@@ -1736,13 +1736,14 @@ exports.getMissedClockOuts = async (req, res) => {
         const REGULARIZATION_THRESHOLD_HOURS = 15;
         const REGULARIZATION_THRESHOLD_MINUTES = REGULARIZATION_THRESHOLD_HOURS * 60;
 
-        // Get records where clock_out IS NULL
+        // Get records where clock_out IS NULL and not already auto-closed as missing
         const { data: missedRecords, error } = await supabase
             .from('attendance')
             .select('*, employees!inner(first_name, last_name, shift_timing)')
             .eq('employee_id', employee_id)
             .not('clock_in', 'is', null)
             .is('clock_out', null)
+            .neq('status', 'missing')
             .order('attendance_date', { ascending: false });
 
         if (error) throw error;

@@ -204,16 +204,15 @@ const EmployeeDocumentUpload = ({ requestId, documentTypes, onComplete, existing
   return (
     <div>
       <div className="mb-3">
-        <Button
-          variant="link"
-          size="sm"
-          onClick={() => navigate('/employee/update-requests')}
-          className="p-0 mb-2 d-inline-flex align-items-center"
-        >
-          <FaArrowLeft className="me-1" size={12} />
-          Back to Requests
-        </Button>
-        <h6 className="mb-1">Upload Requested Documents</h6>
+        <div className="d-flex align-items-center justify-content-between mb-2">
+          <h6 className="mb-0">Upload Requested Documents</h6>
+          <button
+            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+            onClick={() => navigate(-1)}
+          >
+            <FaArrowLeft size={12} /> Back
+          </button>
+        </div>
         <p className="text-muted small mb-0">
           Please upload the following documents as requested by admin.
         </p>

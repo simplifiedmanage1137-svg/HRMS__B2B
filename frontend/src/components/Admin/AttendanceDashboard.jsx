@@ -896,7 +896,15 @@ const AttendanceReports = () => {
           <FaCalendarAlt className="me-2 text-primary" />
           Attendance Reports
         </h5>
-        <small className="text-muted">{activeView === 'daily' ? 'Daily View' : 'Monthly View'}</small>
+        <div className="d-flex align-items-center gap-2">
+          <small className="text-muted">{activeView === 'daily' ? 'Daily View' : 'Monthly View'}</small>
+          <button
+            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+            onClick={() => navigate(-1)}
+          >
+            <FaArrowLeft size={12} /> Back
+          </button>
+        </div>
       </div>
 
       {message && (

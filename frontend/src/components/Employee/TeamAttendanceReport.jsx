@@ -30,10 +30,12 @@ import {
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 
 const TeamAttendanceReport = () => {
     const { user } = useAuth();
+    const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [activeView, setActiveView] = useState('daily');
@@ -446,6 +448,12 @@ const TeamAttendanceReport = () => {
                     <Button variant="success" size="sm" onClick={exportToExcel}>
                         <FaDownload className="me-1" size={12} /> Export
                     </Button>
+                    <button
+                        className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+                        onClick={() => navigate(-1)}
+                    >
+                        <FaArrowLeft size={12} /> Back
+                    </button>
                 </div>
             </div>
 
