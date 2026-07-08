@@ -12,11 +12,13 @@ import {
   FaArrowRight,
   FaTrophy
 } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 
 const OvertimeSummary = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [overtimeData, setOvertimeData] = useState([]);

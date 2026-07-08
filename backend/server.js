@@ -290,6 +290,12 @@ if (require.main === module || process.env.VERCEL) {
             else console.log('✅ Supabase connected');
         });
 
+        // ── Missing clock-out cron (every 15 min) ──────────────────────────
+        if (!process.env.VERCEL) {
+            const { scheduleMissingClockOutCheck } = require('./cron/missingClockOutCheck');
+            scheduleMissingClockOutCheck();
+        }
+
         // Orphaned-record repair only runs locally — avoid on every Vercel cold start
         if (!process.env.VERCEL) {
             setTimeout(async () => {

@@ -14,13 +14,16 @@ import {
   FaEyeSlash,
   FaSyncAlt,
   FaInfoCircle,
-  FaUserTie
+  FaUserTie,
+  FaArrowLeft
 } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
 
 const ManagerRegularizationRequests = ({ embedded = false }) => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);

@@ -1,12 +1,13 @@
 // src/components/Admin/Announcements.jsx
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Card, Form, Button, Alert, Spinner, Badge, Row, Col, Table, Modal
 } from 'react-bootstrap';
 import {
   FaBullhorn, FaPlus, FaTrash, FaEye, FaCheckCircle, FaTimesCircle,
   FaExclamationTriangle, FaCalendarAlt, FaBell, FaFileAlt,
-  FaGift, FaShieldAlt, FaImage, FaTimes
+  FaGift, FaShieldAlt, FaImage, FaTimes, FaArrowLeft
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -29,6 +30,7 @@ const PRIORITY_CONFIG = {
 };
 
 const Announcements = ({ embedded = false }) => {
+  const navigate = useNavigate();
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading]             = useState(true);
   const [submitting, setSubmitting]       = useState(false);

@@ -9,8 +9,9 @@ import {
   FaTimesCircle, FaSearch, FaBriefcase, FaEnvelope,
   FaMapMarkerAlt, FaUniversity, FaHeartbeat, FaFileAlt,
   FaCreditCard, FaFileImage, FaFilePdf, FaFileWord,
-  FaUpload, FaTimes, FaUsers
+  FaUpload, FaTimes, FaUsers, FaArrowLeft
 } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 
@@ -47,6 +48,7 @@ const DOC_TYPES = [
 ];
 
 const SendUpdateRequest = () => {
+  const navigate = useNavigate();
   const [employees, setEmployees]       = useState([]);
   const [fetching, setFetching]         = useState(true);
   const [loading, setLoading]           = useState(false);

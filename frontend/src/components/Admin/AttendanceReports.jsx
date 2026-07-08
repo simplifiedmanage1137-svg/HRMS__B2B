@@ -4,6 +4,7 @@ import {
   Card, Table, Badge, Form, Row, Col,
   Button, Spinner, Alert
 } from 'react-bootstrap';
+import { useNavigate } from 'react-router-dom';
 import {
   FaCalendarAlt,
   FaFileExcel,
@@ -35,6 +36,7 @@ const getISTNow = () => new Date(Date.now() + IST_OFFSET_MS);
 const getISTDateString = () => getISTNow().toISOString().split('T')[0];
 
 const AttendanceReports = () => {
+  const navigate = useNavigate();
   const [activeView, setActiveView] = useState('daily');
   const [dailyAttendance, setDailyAttendance] = useState([]);
   const [selectedDate, setSelectedDate] = useState(getISTDateString());
@@ -586,6 +588,7 @@ const AttendanceReports = () => {
               holiday:  { status: 'holiday',  statusBadge: 'warning',   statusIcon: '🎉' },
               comp_off: { status: 'comp_off', statusBadge: 'info',      statusIcon: 'CO' },
               working:  { status: 'present',  statusBadge: 'success',   statusIcon: '✓'  },
+              missing:  { status: 'missing',  statusBadge: 'dark',      statusIcon: '⚠'  },
             };
             const mapped = statusDisplayMap[dbStatus];
             if (mapped) {
@@ -608,6 +611,7 @@ const AttendanceReports = () => {
                       : status === 'weekend'  ? 'Week Off'
                       : status === 'holiday'  ? 'Holiday'
                       : status === 'comp_off' ? 'Comp Off'
+                      : status === 'missing'  ? 'Missing Clock-Out (auto-closed after 15h)'
                       : dbStatus;
             }
             if (lateMinutes > 0) tooltip += ` | Late: ${formatLateDisplay(lateMinutes)}`;

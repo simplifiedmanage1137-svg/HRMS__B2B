@@ -30,7 +30,8 @@ import {
   FaInfoCircle,
   FaTimes as FaTimesIcon,
   FaChartBar,
-  FaSortNumericDown
+  FaSortNumericDown,
+  FaArrowLeft
 } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';

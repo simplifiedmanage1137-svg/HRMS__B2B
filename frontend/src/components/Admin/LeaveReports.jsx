@@ -8,13 +8,15 @@ import {
   FaCalendarAlt, FaDownload, FaPrint, FaEye,
   FaSearch, FaFilter, FaChartPie, FaFileExcel,
   FaTimes, FaCheck, FaExclamationTriangle,
-  FaSortNumericDown
+  FaSortNumericDown, FaArrowLeft
 } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import * as XLSX from 'xlsx';
 
 const LeaveReports = () => {
+  const navigate = useNavigate();
   const [employees, setEmployees] = useState([]);
   const [filteredEmployees, setFilteredEmployees] = useState([]);
   const [loading, setLoading] = useState(true);

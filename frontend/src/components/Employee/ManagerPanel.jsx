@@ -1,6 +1,7 @@
 // src/components/Employee/ManagerPanel.jsx
 import React, { useState } from 'react';
-import { FaCalendarAlt, FaClock, FaExclamationTriangle, FaChartBar, FaStar } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
+import { FaCalendarAlt, FaClock, FaExclamationTriangle, FaChartBar, FaStar, FaArrowLeft } from 'react-icons/fa';
 import ManagerLeaveRequests from './ManagerLeaveRequests';
 import ManagerShiftUpdate from './ManagerShiftUpdate';
 import ManagerRegularizationRequests from './ManagerRegularizationRequests';
@@ -18,14 +19,20 @@ const TABS = [
 ];
 
 const ManagerPanel = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('attendance');
 
   return (
     <div className="p-2 p-md-3 p-lg-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
-      <h5 className="mb-3 d-flex align-items-center">
-        <FaCalendarAlt className="me-2 text-primary" />
-        My Team
-      </h5>
+      <div className="d-flex align-items-center justify-content-between mb-3">
+        <h5 className="mb-0 d-flex align-items-center">
+          <FaCalendarAlt className="me-2 text-primary" />
+          My Team
+        </h5>
+        <button className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" onClick={() => navigate(-1)}>
+          <FaArrowLeft size={12} /> Back
+        </button>
+      </div>
 
       <div className="d-flex border-bottom mb-3 overflow-auto" style={{ gap: '4px' }}>
         {TABS.map(tab => (

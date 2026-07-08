@@ -1,7 +1,7 @@
 // components/Admin/EmployeeList.jsx - Fixed Header
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Card, Modal, Alert, Badge, Spinner, Form, InputGroup } from 'react-bootstrap';
-import { FaEdit, FaTrash, FaEye, FaPlus, FaDownload, FaFilePdf, FaFileImage, FaFileAlt, FaSearch, FaTimes, FaSyncAlt } from 'react-icons/fa';
+import { FaEdit, FaTrash, FaEye, FaPlus, FaDownload, FaFilePdf, FaFileImage, FaFileAlt, FaSearch, FaTimes, FaSyncAlt, FaArrowLeft } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';

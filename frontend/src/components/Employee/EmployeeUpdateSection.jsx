@@ -21,10 +21,13 @@ import {
   FaMapMarkerAlt,
   FaUniversity,
   FaBriefcase,
-  FaFileAlt
+  FaFileAlt,
+  FaArrowLeft
 } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 
 const EmployeeUpdateSection = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [pendingRequests, setPendingRequests] = useState([]);
   const [selectedRequest, setSelectedRequest] = useState(null);

@@ -2,9 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import axios from '../../config/axios'; // Import configured axios instance
 import API_ENDPOINTS from '../../config/api'; // Import API endpoints
-import { FaCheck, FaTimes, FaEye } from 'react-icons/fa';
+import { FaCheck, FaTimes, FaEye, FaArrowLeft } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
+import { Button } from 'react-bootstrap';
 
 const AdminUpdateApprovals = () => {
+  const navigate = useNavigate();
   const [completedRequests, setCompletedRequests] = useState([]);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [loading, setLoading] = useState(false);

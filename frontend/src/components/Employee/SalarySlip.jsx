@@ -26,7 +26,8 @@ import {
   FaClock,
   FaUserTie,
   FaExclamationTriangle,
-  FaTrophy
+  FaTrophy,
+  FaArrowLeft
 } from 'react-icons/fa';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';

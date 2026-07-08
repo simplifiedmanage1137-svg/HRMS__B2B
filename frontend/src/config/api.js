@@ -93,6 +93,7 @@ export const API_ENDPOINTS = {
   ATTENDANCE_REJECT_REGULARIZATION: (requestId) =>
     ep(`/api/attendance/regularization/${requestId}/reject`),
   ATTENDANCE_AUTO_CLOSE_STALE: ep('/api/attendance/auto-close-stale'),
+  ATTENDANCE_TRIGGER_MISSING_CHECK: ep('/api/attendance/admin/trigger-missing-check'),
   ATTENDANCE_UPDATE_HISTORICAL_LATE_MARKS: ep('/api/attendance/update-historical-late-marks'),
 
   // Attendance Import / Export

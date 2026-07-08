@@ -512,80 +512,82 @@ exports.clockIn = async (req, res) => {
             const incompleteRecord = incompleteRecords[0];
             const incompleteDate = incompleteRecord.attendance_date;
 
-            // Check if this record has an active session (night shift employee still working)
-            const { data: activeSessionForRecord } = await supabase
-                .from('attendance_sessions')
-                .select('id, session_id, is_active, clock_out_time')
-                .eq('employee_id', employee_id)
-                .eq('session_id', incompleteRecord.session_id)
-                .maybeSingle();
+            if (incompleteRecord.status === 'missing') {
+                // Cron already closed this session and marked it missing — allow new clock-in
+                console.log(`ℹ️ Previous record for ${incompleteDate} is already 'missing'; allowing clock-in.`);
+            } else {
+                // Check if this record has an active session (night shift support)
+                const { data: activeSessionForRecord } = await supabase
+                    .from('attendance_sessions')
+                    .select('id, session_id, is_active, clock_out_time')
+                    .eq('employee_id', employee_id)
+                    .eq('session_id', incompleteRecord.session_id)
+                    .maybeSingle();
 
-            // If session exists but is INACTIVE → employee already clocked out via session
-            // but clock_out column was not updated (data inconsistency). Auto-fix it.
-            if (activeSessionForRecord && !activeSessionForRecord.is_active) {
-                console.log(`🔧 Auto-fixing incomplete record for ${incompleteDate}: session is closed but clock_out is NULL`);
+                // Session is INACTIVE → already clocked out via session but clock_out column not updated. Auto-fix.
+                if (activeSessionForRecord && !activeSessionForRecord.is_active) {
+                    console.log(`🔧 Auto-fixing incomplete record for ${incompleteDate}: session is closed but clock_out is NULL`);
 
-                const sessionClockOutTime = activeSessionForRecord.clock_out_time
-                    ? new Date(activeSessionForRecord.clock_out_time)
-                    : new Date();
+                    const sessionClockOutTime = activeSessionForRecord.clock_out_time
+                        ? new Date(activeSessionForRecord.clock_out_time)
+                        : new Date();
 
-                // Build clock_out_ist from session's clock_out_time
-                const sessionClockOutMs = sessionClockOutTime.getTime() + IST_OFFSET_MS;
-                const sessionClockOutIST = new Date(sessionClockOutMs);
-                const coY = sessionClockOutIST.getUTCFullYear();
-                const coMo = String(sessionClockOutIST.getUTCMonth() + 1).padStart(2, '0');
-                const coD = String(sessionClockOutIST.getUTCDate()).padStart(2, '0');
-                const coH = String(sessionClockOutIST.getUTCHours()).padStart(2, '0');
-                const coMi = String(sessionClockOutIST.getUTCMinutes()).padStart(2, '0');
-                const coS = String(sessionClockOutIST.getUTCSeconds()).padStart(2, '0');
+                    const sessionClockOutMs  = sessionClockOutTime.getTime() + IST_OFFSET_MS;
+                    const sessionClockOutIST = new Date(sessionClockOutMs);
+                    const coY  = sessionClockOutIST.getUTCFullYear();
+                    const coMo = String(sessionClockOutIST.getUTCMonth() + 1).padStart(2, '0');
+                    const coD  = String(sessionClockOutIST.getUTCDate()).padStart(2, '0');
+                    const coH  = String(sessionClockOutIST.getUTCHours()).padStart(2, '0');
+                    const coMi = String(sessionClockOutIST.getUTCMinutes()).padStart(2, '0');
+                    const coS  = String(sessionClockOutIST.getUTCSeconds()).padStart(2, '0');
 
-                // Keep clock_out_ist on same date as attendance_date (night shift fix)
-                const clockOutDatePart = `${coY}-${coMo}-${coD}`;
-                const clockOutTimePart = `${coH}:${coMi}:${coS}`;
-                const clockOutIST = clockOutDatePart > incompleteDate
-                    ? `${incompleteDate} ${clockOutTimePart}`
-                    : `${clockOutDatePart} ${clockOutTimePart}`;
+                    const clockOutDatePart = `${coY}-${coMo}-${coD}`;
+                    const clockOutTimePart = `${coH}:${coMi}:${coS}`;
+                    const clockOutIST = clockOutDatePart > incompleteDate
+                        ? `${incompleteDate} ${clockOutTimePart}`
+                        : `${clockOutDatePart} ${clockOutTimePart}`;
 
-                const clockInMs = toUTCMs(incompleteRecord.clock_in_ist || incompleteRecord.clock_in);
-                const clockOutMs = toUTCMs(clockOutIST);
-                let totalMinutes = Math.round((clockOutMs - clockInMs) / (1000 * 60));
-                if (totalMinutes < 0) totalMinutes += 24 * 60;
-                const totalHours = totalMinutes / 60;
+                    const clockInMs  = toUTCMs(incompleteRecord.clock_in_ist || incompleteRecord.clock_in);
+                    const clockOutMs = toUTCMs(clockOutIST);
+                    let totalMinutes = Math.round((clockOutMs - clockInMs) / (1000 * 60));
+                    if (totalMinutes < 0) totalMinutes += 24 * 60;
+                    const totalHours = totalMinutes / 60;
 
-                const shiftT = parseShiftTiming(emp.shift_timing);
-                const expMin = (shiftT.totalHours || 9) * 60;
-                let fixStatus = 'half_day';
-                if (totalMinutes >= expMin) fixStatus = 'present';
-                else if (totalMinutes < 300) fixStatus = 'absent';
+                    const shiftT = parseShiftTiming(emp.shift_timing);
+                    const expMin = (shiftT.totalHours || 9) * 60;
+                    let fixStatus = 'half_day';
+                    if (totalMinutes >= expMin) fixStatus = 'present';
+                    else if (totalMinutes < 300) fixStatus = 'absent';
 
-                const dH = Math.floor(totalMinutes / 60);
-                const dM = totalMinutes % 60;
+                    const dH = Math.floor(totalMinutes / 60);
+                    const dM = totalMinutes % 60;
 
-                await supabase.from('attendance').update({
-                    clock_out: sessionClockOutTime.toISOString(),
-                    clock_out_ist: clockOutIST,
-                    total_hours: parseFloat(totalHours.toFixed(2)),
-                    total_minutes: totalMinutes,
-                    total_hours_display: `${dH}h ${dM}m`,
-                    status: fixStatus
-                }).eq('id', incompleteRecord.id);
+                    await supabase.from('attendance').update({
+                        clock_out:           sessionClockOutTime.toISOString(),
+                        clock_out_ist:       clockOutIST,
+                        total_hours:         parseFloat(totalHours.toFixed(2)),
+                        total_minutes:       totalMinutes,
+                        total_hours_display: `${dH}h ${dM}m`,
+                        status:              fixStatus,
+                    }).eq('id', incompleteRecord.id);
 
-                console.log(`✅ Auto-fixed ${incompleteDate}: clock_out set to ${clockOutIST}, status=${fixStatus}`);
-                // Allow clock-in to proceed
-            } else if (!activeSessionForRecord) {
-                // No session at all for this record → genuinely missed clock-out, block clock-in
-                console.log(`⚠️ Found incomplete attendance for ${incompleteDate}. Please clock out first.`);
+                    console.log(`✅ Auto-fixed ${incompleteDate}: clock_out=${clockOutIST}, status=${fixStatus}`);
+                    // Allow clock-in to proceed
 
-                return res.status(400).json({
-                    success: false,
-                    message: `You have an incomplete attendance record from ${incompleteDate}. Please clock out for that day first before clocking in for today.`,
-                    has_missed_clockout: true,
-                    attendance_id: incompleteRecord.id,
-                    attendance_date: incompleteDate,
-                    clock_in_time: incompleteRecord.clock_in_ist || incompleteRecord.clock_in
-                });
+                } else if (!activeSessionForRecord) {
+                    // No session at all → genuinely missed clock-out, block clock-in
+                    console.log(`⚠️ Incomplete attendance for ${incompleteDate} — blocking clock-in.`);
+                    return res.status(400).json({
+                        success: false,
+                        message: `You have an incomplete attendance record from ${incompleteDate}. Please clock out for that day first before clocking in for today.`,
+                        has_missed_clockout: true,
+                        attendance_id:    incompleteRecord.id,
+                        attendance_date:  incompleteDate,
+                        clock_in_time:    incompleteRecord.clock_in_ist || incompleteRecord.clock_in,
+                    });
+                }
+                // else: session.is_active === true → night shift still in progress, allow
             }
-            // else: activeSessionForRecord.is_active === true → night shift still in progress, allow
         }
 
         // Check for existing active session

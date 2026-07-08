@@ -1,11 +1,13 @@
 // src/components/Admin/GeofenceSettings.jsx
 import React, { useState, useEffect } from 'react';
 import { Card, Table, Button, Form, Alert, Modal, Spinner, Badge, Row, Col } from 'react-bootstrap';
-import { FaMapMarkerAlt, FaEdit, FaTrash, FaPlus, FaCheck, FaTimes } from 'react-icons/fa';
+import { FaMapMarkerAlt, FaEdit, FaTrash, FaPlus, FaCheck, FaTimes, FaArrowLeft } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 
 const GeofenceSettings = () => {
+  const navigate = useNavigate();
   const [geofences, setGeofences] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingGeofence, setEditingGeofence] = useState(null);

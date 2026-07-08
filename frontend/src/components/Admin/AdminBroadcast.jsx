@@ -2,9 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import {
   FaExclamationTriangle, FaBullhorn, FaClipboardList,
-  FaPlus, FaEdit, FaTrash, FaToggleOn, FaToggleOff, FaSave, FaTimes
+  FaPlus, FaEdit, FaTrash, FaToggleOn, FaToggleOff, FaSave, FaTimes, FaArrowLeft
 } from 'react-icons/fa';
 import { Spinner, Modal, Form, Button, Alert } from 'react-bootstrap';
+import { useNavigate } from 'react-router-dom';
 import SendNotice from './SendNotice';
 import Announcements from './Announcements';
 import axios from '../../config/axios';
@@ -447,6 +448,7 @@ const TABS = [
 ];
 
 const AdminBroadcast = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('noticeboard');
 
   return (

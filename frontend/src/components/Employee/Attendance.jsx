@@ -16,8 +16,10 @@ import {
   FaCalendarAlt,
   FaMoon,
   FaHistory,
-  FaRegClock
+  FaRegClock,
+  FaArrowLeft
 } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
@@ -46,6 +48,7 @@ ChartJS.register(
 );
 
 const Attendance = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [attendance, setAttendance] = useState(null);
   const [activeSession, setActiveSession] = useState(null);

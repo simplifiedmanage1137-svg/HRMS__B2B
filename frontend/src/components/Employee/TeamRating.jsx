@@ -11,13 +11,16 @@ import {
   FaEdit,
   FaHistory,
   FaInfoCircle,
-  FaSyncAlt
+  FaSyncAlt,
+  FaArrowLeft
 } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
 
 const TeamRating = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [teamMembers, setTeamMembers] = useState([]);
   const [loading, setLoading] = useState(true);

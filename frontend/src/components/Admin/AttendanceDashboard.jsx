@@ -1,5 +1,6 @@
 // src/components/Admin/AttendanceReports.jsx
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Card, Table, Badge, Form, Row, Col,
   Button, Spinner, Alert
@@ -27,6 +28,7 @@ import * as XLSX from 'xlsx';
 import { holidays as holidayData } from '../../data/holidays';
 
 const AttendanceReports = () => {
+  const navigate = useNavigate();
   const [activeView, setActiveView] = useState('daily');
   const [dailyAttendance, setDailyAttendance] = useState([]);
   const [selectedDate, setSelectedDate] = useState(
@@ -43,6 +45,7 @@ const AttendanceReports = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('danger');
+  const [triggeringMissingCheck, setTriggeringMissingCheck] = useState(false);
 
   const currentDate = new Date();
   const currentDay = currentDate.getDate();
@@ -634,6 +637,22 @@ const AttendanceReports = () => {
     };
   };
 
+  const handleTriggerMissingCheck = async () => {
+    if (!window.confirm('Force-close all clock-in sessions open for 15+ hours and mark them as "Missing Clock-Out"?\n\nThis will immediately affect all employees with open sessions older than 15 hours.')) return;
+    setTriggeringMissingCheck(true);
+    try {
+      const res = await axios.post(API_ENDPOINTS.ATTENDANCE_TRIGGER_MISSING_CHECK);
+      const count = res.data?.markedCount ?? 0;
+      setMessage(count > 0 ? `✅ ${count} record(s) marked as missing.` : 'No records needed closing (none open ≥ 15h).');
+      setMessageType(count > 0 ? 'success' : 'info');
+    } catch (err) {
+      setMessage(err.response?.data?.message || 'Failed to trigger missing check.');
+      setMessageType('danger');
+    } finally {
+      setTriggeringMissingCheck(false);
+    }
+  };
+
   const handleExportExcel = async () => {
     try {
       if (activeView === 'daily') {
@@ -853,6 +872,7 @@ const AttendanceReports = () => {
     }
     if (record.status === 'half_day') return <Badge bg="warning" className="px-2 py-1 text-nowrap">Half Day</Badge>;
     if (record.status === 'on_leave') return <Badge bg="purple" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#6f42c1' }}>On Leave</Badge>;
+    if (record.status === 'missing') return <Badge bg="dark" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#7c3aed' }}>Missing CO</Badge>;
     if (record.status === 'holiday') return <Badge bg="warning" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#ffc107' }}>Holiday</Badge>;
     if (record.status === 'weekend') return <Badge bg="secondary" className="px-2 py-1 text-nowrap"><FaMoon className="me-1" size={10} /> W-OFF</Badge>;
     return <Badge bg="secondary" className="px-2 py-1 text-nowrap">Absent</Badge>;
@@ -915,6 +935,18 @@ const AttendanceReports = () => {
           />
           <Button variant="success" size="sm" onClick={handleExportExcel} className="w-20 w-sm-auto">
             <FaFileExcel className="me-2" size={12} /> Export
+          </Button>
+          <Button
+            variant="outline-danger"
+            size="sm"
+            onClick={handleTriggerMissingCheck}
+            disabled={triggeringMissingCheck}
+            title="Force-close sessions open for 15+ hours and mark as Missing Clock-Out"
+          >
+            {triggeringMissingCheck
+              ? <><Spinner animation="border" size="sm" className="me-1" /> Checking...</>
+              : <><FaExclamationTriangle className="me-1" size={12} /> Force Missing CO</>
+            }
           </Button>
         </div>
       ) : (

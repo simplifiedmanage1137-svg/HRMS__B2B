@@ -1,9 +1,10 @@
 // src/components/Employee/ManagerShiftUpdate.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, Form, Button, Alert, Spinner, Badge, Table } from 'react-bootstrap';
+import { useNavigate } from 'react-router-dom';
 import {
   FaClock, FaUserTie, FaCheckCircle, FaExclamationTriangle,
-  FaSyncAlt, FaUsers, FaCalendarAlt,
+  FaSyncAlt, FaUsers, FaCalendarAlt, FaArrowLeft,
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -29,6 +30,7 @@ const fmt = (iso) => {
 };
 
 const ManagerShiftUpdate = ({ embedded = false }) => {
+  const navigate = useNavigate();
   const [team, setTeam]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState({ type: '', text: '' });

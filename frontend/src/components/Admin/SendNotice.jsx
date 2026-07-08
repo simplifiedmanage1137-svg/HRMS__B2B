@@ -7,8 +7,9 @@ import {
 import {
   FaExclamationTriangle, FaBell, FaSearch, FaTimes, FaTrash,
   FaUser, FaUsers, FaCheckCircle, FaTimesCircle, FaEye,
-  FaEnvelope, FaCheckDouble
+  FaEnvelope, FaCheckDouble, FaArrowLeft
 } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
@@ -22,6 +23,7 @@ const isTeamLeaderDesignation = (designation) => {
 };
 
 const SendNotice = ({ embedded = false }) => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'sub_admin';
 

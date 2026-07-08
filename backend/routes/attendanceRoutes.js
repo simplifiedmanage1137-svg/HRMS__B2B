@@ -57,6 +57,18 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
     // Fix orphaned attendance records (clock_out NULL but session closed) - All employees
     router.post('/fix-orphaned', authenticateToken, requireAdmin, attendanceController.fixOrphanedAttendance);
 
+    // Trigger missing clock-out check immediately (Admin only)
+    // Also used to force-clock-out employees stuck with open clock-in (e.g., forgot to clock out)
+    router.post('/admin/trigger-missing-check', authenticateToken, requireAdmin, async (req, res) => {
+        try {
+            const { markMissingClockOuts } = require('../cron/missingClockOutCheck');
+            const result = await markMissingClockOuts();
+            res.json({ success: true, ...result });
+        } catch (err) {
+            res.status(500).json({ success: false, message: err.message });
+        }
+    });
+
     // Update historical late marks (Admin only)
     router.post('/update-historical-late-marks', authenticateToken, requireAdmin, attendanceController.updateHistoricalLateMarks);
 

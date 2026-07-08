@@ -15,12 +15,15 @@ import {
   FaCalendarAlt,
   FaClock,
   FaExclamationTriangle,
-  FaUpload
+  FaUpload,
+  FaArrowLeft
 } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 
 const UpdateApprovals = () => {
+  const navigate = useNavigate();
   const [completedRequests, setCompletedRequests] = useState([]);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [loading, setLoading] = useState(true);

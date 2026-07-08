@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Spinner } from 'react-bootstrap';
+import { Spinner, Button } from 'react-bootstrap';
 import {
   FaMoneyBillWave, FaSave, FaSync, FaCheckCircle,
-  FaExclamationCircle, FaInfoCircle, FaFileExport
+  FaExclamationCircle, FaInfoCircle, FaFileExport, FaArrowLeft
 } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useNotification } from '../../context/NotificationContext';
@@ -74,6 +75,7 @@ const DiffBadge = ({ value }) => {
 // Main Component
 // ══════════════════════════════════════════════════════════════════════════════
 const PayrollAdjustment = () => {
+  const navigate = useNavigate();
   const { showNotification } = useNotification();
 
   const [month,    setMonth]    = useState(currentMonth);

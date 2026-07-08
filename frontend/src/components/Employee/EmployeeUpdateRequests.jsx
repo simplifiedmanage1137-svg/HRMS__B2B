@@ -17,7 +17,8 @@ import {
   FaBriefcase,
   FaHeartbeat,
   FaFileAlt,
-  FaCreditCard
+  FaCreditCard,
+  FaArrowLeft
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
