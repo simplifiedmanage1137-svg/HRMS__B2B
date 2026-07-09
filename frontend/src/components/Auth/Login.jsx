@@ -5,11 +5,9 @@ import { useAuth } from '../../context/AuthContext';
 import loginBg from '../../assets/login.jpg'
 import {
   FaUser, FaLock, FaEye, FaEyeSlash,
-  FaExclamationTriangle, FaCheckCircle
+  FaExclamationTriangle
 } from 'react-icons/fa';
-import { Spinner, Modal, Form, Alert, Button } from 'react-bootstrap';
-import axios from '../../config/axios';
-import API_ENDPOINTS from '../../config/api';
+import { Spinner } from 'react-bootstrap';
 
 const Login = () => {
   const [identifier, setIdentifier] = useState('');
@@ -17,14 +15,6 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError]               = useState('');
   const [loading, setLoading]           = useState(false);
-
-  const [showForgotModal, setShowForgotModal]       = useState(false);
-  const [fpEmail, setFpEmail]                       = useState('');
-  const [fpNewPassword, setFpNewPassword]           = useState('');
-  const [fpConfirmPassword, setFpConfirmPassword]   = useState('');
-  const [fpError, setFpError]                       = useState('');
-  const [fpSuccess, setFpSuccess]                   = useState('');
-  const [fpLoading, setFpLoading]                   = useState(false);
 
   const { login }  = useAuth();
   const navigate   = useNavigate();
@@ -48,34 +38,6 @@ const Login = () => {
       setError('An error occurred during login. Please try again.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleForgotPassword = async (e) => {
-    e.preventDefault();
-    setFpError(''); setFpSuccess('');
-    if (!fpEmail)          return setFpError('Please enter your email address.');
-    if (!fpNewPassword)    return setFpError('Please enter a new password.');
-    if (fpNewPassword.length < 6) return setFpError('Password must be at least 6 characters.');
-    if (fpNewPassword !== fpConfirmPassword) return setFpError('Passwords do not match.');
-    setFpLoading(true);
-    try {
-      const res = await axios.post(API_ENDPOINTS.PASSWORD_RESET_DIRECT, {
-        email: fpEmail, newPassword: fpNewPassword
-      });
-      if (res.data.success) {
-        setFpSuccess(res.data.message);
-        setFpNewPassword(''); setFpConfirmPassword('');
-        setTimeout(() => {
-          setShowForgotModal(false);
-          setFpEmail(''); setFpSuccess('');
-          setIdentifier(fpEmail);
-        }, 2000);
-      }
-    } catch (err) {
-      setFpError(err.response?.data?.message || 'Failed to reset password.');
-    } finally {
-      setFpLoading(false);
     }
   };
 
@@ -234,20 +196,6 @@ const Login = () => {
               </button>
             </div>
 
-            {/* Forgot password */}
-            {/* <div style={{ textAlign: 'right', marginBottom: '24px' }}>
-              <button
-                type="button"
-                onClick={() => { setShowForgotModal(true); setFpEmail(identifier.includes('@') ? identifier : ''); setFpError(''); setFpSuccess(''); }}
-                style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  fontSize: '12px', color: '#2563EB', fontWeight: '600',
-                }}
-              >
-                Forgot password?
-              </button>
-            </div> */}
-
             {/* Submit */}
             <button
               type="submit" disabled={loading}
@@ -282,48 +230,6 @@ const Login = () => {
         </div>
       </div>
 
-      {/* ── Forgot Password Modal ── */}
-      <Modal show={showForgotModal} onHide={() => setShowForgotModal(false)} centered>
-        <Modal.Header closeButton style={{ borderBottom: '1px solid #E2E8F0', padding: '20px 24px' }}>
-          <Modal.Title style={{ fontSize: '16px', fontWeight: '700', color: '#0F172A' }}>
-            <FaLock className="me-2" size={13} style={{ color: '#2563EB' }} />
-            Set New Password
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body style={{ padding: '24px' }}>
-          {fpError   && <Alert variant="danger"  dismissible onClose={() => setFpError('')}  style={{ fontSize: '13px', borderRadius: '8px' }}><FaExclamationTriangle className="me-2" size={12} />{fpError}</Alert>}
-          {fpSuccess && <Alert variant="success" style={{ fontSize: '13px', borderRadius: '8px' }}><FaCheckCircle className="me-2" size={12} />{fpSuccess}</Alert>}
-          <Form onSubmit={handleForgotPassword}>
-            {[
-              { label: 'Email Address',    type: 'email',    value: fpEmail,           onChange: setFpEmail,           placeholder: 'Enter your registered email' },
-              { label: 'New Password',     type: 'password', value: fpNewPassword,     onChange: setFpNewPassword,     placeholder: 'Min 6 characters' },
-              { label: 'Confirm Password', type: 'password', value: fpConfirmPassword, onChange: setFpConfirmPassword, placeholder: 'Confirm new password' },
-            ].map(({ label, type, value, onChange, placeholder }) => (
-              <Form.Group className="mb-3" key={label}>
-                <Form.Label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>{label}</Form.Label>
-                <Form.Control
-                  type={type} value={value} required
-                  onChange={e => onChange(e.target.value)}
-                  placeholder={placeholder}
-                  style={{ height: '44px', fontSize: '13px', borderRadius: '10px', border: '1.5px solid #E2E8F0' }}
-                />
-              </Form.Group>
-            ))}
-            <Button
-              type="submit" disabled={fpLoading}
-              style={{
-                width: '100%', height: '44px',
-                background: 'linear-gradient(135deg, #2563EB, #1D4ED8)',
-                border: 'none', borderRadius: '10px',
-                fontSize: '14px', fontWeight: '600',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-              }}
-            >
-              {fpLoading ? <><Spinner as="span" animation="border" size="sm" /> Setting...</> : 'Set Password'}
-            </Button>
-          </Form>
-        </Modal.Body>
-      </Modal>
     </>
   );
 };

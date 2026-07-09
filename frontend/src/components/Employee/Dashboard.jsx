@@ -36,6 +36,7 @@ import {
 
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
+import { useMobileDevice } from '../../hooks/useMobileDevice';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useNavigate } from 'react-router-dom';
@@ -71,6 +72,7 @@ ChartJS.register(
 const EmployeeDashboard = () => {
   const { user } = useAuth();
   const { showNotification, todayEvents, fetchTodayEvents } = useNotification();
+  const isMobileDevice = useMobileDevice();
   const navigate = useNavigate();
   // Attendance card state
   const [attendance, setAttendance] = useState(null);
@@ -205,6 +207,24 @@ const EmployeeDashboard = () => {
   };
 
   const renderClockButton = () => {
+    if (isMobileDevice) {
+      return (
+        <div style={{ textAlign: 'center' }}>
+          <button disabled style={{
+            display: 'flex', alignItems: 'center', gap: 8, margin: '0 auto',
+            padding: '8px 18px', borderRadius: 20, border: '1px solid #d1d5db',
+            background: '#f3f4f6', color: '#9ca3af', fontSize: 13, fontWeight: 600,
+            cursor: 'not-allowed',
+          }}>
+            <FaSignInAlt size={13} /> Clock In / Clock Out
+          </button>
+          <div style={{ marginTop: 6, fontSize: 11, color: '#ef4444', fontWeight: 500 }}>
+            Not available on mobile / tablet. Use a desktop to mark attendance.
+          </div>
+        </div>
+      );
+    }
+
     const hasOpenSession = !!activeSession || (!!attendance?.clock_in && !attendance?.clock_out);
 
     if (hasOpenSession) {

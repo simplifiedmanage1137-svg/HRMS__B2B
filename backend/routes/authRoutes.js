@@ -1,9 +1,26 @@
 const express = require('express');
 const router = express.Router();
+const rateLimit = require('express-rate-limit');
 const supabase = require('../config/supabase');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
+
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: 'Too many login attempts. Please try again in 15 minutes.' },
+});
+
+const passwordLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: 'Too many password change attempts. Please try again in 1 hour.' },
+});
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || (JWT_SECRET ? JWT_SECRET + '_refresh' : undefined);
@@ -21,7 +38,7 @@ function generateTokens(payload) {
 }
 
 // Login
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
     const startTime = Date.now();
     try {
         const { email, identifier, password } = req.body;
@@ -303,7 +320,7 @@ router.post('/logout', (req, res) => {
 });
 
 // Change password
-router.post('/change-password', async (req, res) => {
+router.post('/change-password', passwordLimiter, async (req, res) => {
     try {
         const token = req.headers['authorization']?.split(' ')[1];
         const { currentPassword, newPassword } = req.body;
@@ -341,7 +358,7 @@ router.post('/change-password', async (req, res) => {
 });
 
 // Forgot password
-router.post('/forgot-password', async (req, res) => {
+router.post('/forgot-password', passwordLimiter, async (req, res) => {
     try {
         const { email } = req.body;
         if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
@@ -351,13 +368,15 @@ router.post('/forgot-password', async (req, res) => {
         // Always return same message for security
         if (!user) return res.json({ success: true, message: 'If your email exists, you will receive a reset link' });
 
-        const resetToken = jwt.sign({ id: user.id, email: user.email, purpose: 'password_reset' }, JWT_SECRET, { expiresIn: '36h' });
-        console.log('📧 Password reset token for', email, ':', resetToken);
+        const resetToken = jwt.sign({ id: user.id, email: user.email, purpose: 'password_reset' }, JWT_SECRET, { expiresIn: '1h' });
+
+        if (process.env.NODE_ENV === 'development') {
+            console.log('📧 [DEV ONLY] Password reset token for', email, ':', resetToken);
+        }
 
         res.json({
             success: true,
             message: 'If your email exists, you will receive a reset link',
-            ...(process.env.NODE_ENV === 'development' && { resetToken })
         });
 
     } catch (error) {
@@ -389,42 +408,6 @@ router.post('/reset-password', async (req, res) => {
     } catch (error) {
         console.error('❌ Reset password error:', error);
         res.status(500).json({ success: false, message: 'Server error' });
-    }
-});
-
-// Self-service password reset (no auth required) — temporary, will be removed
-router.post('/reset-password-self', async (req, res) => {
-    try {
-        const { email, newPassword } = req.body;
-        if (!email || !newPassword)
-            return res.status(400).json({ success: false, message: 'Email and new password are required' });
-        if (newPassword.length < 6)
-            return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
-
-        const { data: employee, error } = await supabase
-            .from('employees')
-            .select('employee_id, email')
-            .eq('email', email.toLowerCase().trim())
-            .maybeSingle();
-
-        if (error) throw error;
-        if (!employee)
-            return res.status(404).json({ success: false, message: 'No account found with this email address' });
-
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-        const { error: updateError } = await supabase
-            .from('employees')
-            .update({ password: hashedPassword })
-            .eq('email', email.toLowerCase().trim());
-
-        if (updateError) throw updateError;
-
-        console.log('✅ Self-service password reset for:', employee.employee_id);
-        res.json({ success: true, message: 'Password updated successfully. You can now login with your new password.' });
-
-    } catch (error) {
-        console.error('❌ Self-service reset error:', error);
-        res.status(500).json({ success: false, message: 'Server error', error: error.message });
     }
 });
 

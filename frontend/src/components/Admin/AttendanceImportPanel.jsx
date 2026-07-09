@@ -20,16 +20,24 @@ const MONTHS = [
 const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 const CODE_LABELS = {
-  P:  { label: 'Present',   color: '#16a34a', bg: '#dcfce7' },
-  A:  { label: 'Absent',    color: '#dc2626', bg: '#fee2e2' },
-  HD: { label: 'Half Day',  color: '#7c3aed', bg: '#ede9fe' },
-  L:  { label: 'Leave',     color: '#0369a1', bg: '#e0f2fe' },
-  WO: { label: 'Week Off',  color: '#78716c', bg: '#f5f5f4' },
-  H:  { label: 'Holiday',   color: '#b45309', bg: '#fef3c7' },
-  CO: { label: 'Comp Off',  color: '#0891b2', bg: '#e0f2fe' },
+  P:  { label: 'Present',    color: '#16a34a', bg: '#dcfce7' },
+  A:  { label: 'Absent',     color: '#dc2626', bg: '#fee2e2' },
+  HD: { label: 'Half Day',   color: '#7c3aed', bg: '#ede9fe' },
+  L:  { label: 'Leave',      color: '#0369a1', bg: '#e0f2fe' },
+  WO: { label: 'Week Off',   color: '#78716c', bg: '#f5f5f4' },
+  H:  { label: 'Holiday',    color: '#b45309', bg: '#fef3c7' },
+  CO: { label: 'Comp Off',   color: '#0891b2', bg: '#e0f2fe' },
+  PL: { label: 'Paid Leave', color: '#0891b2', bg: '#cffafe' },
 };
 
-const VALID_CODES = new Set(['P', 'A', 'HD', 'L', 'WO', 'H', 'CO']);
+// Maps short codes to the full words written into the exported Excel file.
+// Full words are also accepted on re-import via WORD_TO_CODE in the backend.
+const EXPORT_LABEL = {
+  PL: 'Paid Leave',
+  CO: 'Comp Off',
+};
+
+const VALID_CODES = new Set(['P', 'A', 'HD', 'L', 'WO', 'H', 'CO', 'PL']);
 
 const now = new Date();
 const THIS_YEAR  = now.getFullYear();
@@ -91,7 +99,8 @@ const generateTemplate = (employees, month, year) => {
     ['L',  'Leave',    'Employee on approved leave'],
     ['WO', 'Week Off', 'Saturday / Sunday / Weekly off'],
     ['H',  'Holiday',  'Public or company holiday'],
-    ['CO', 'Comp Off', 'Compensatory off — worked on holiday, counts as Present'],
+    ['CO', 'Comp Off',   'Compensatory off — worked on holiday, counts as Present'],
+    ['PL', 'Paid Leave', 'Paid leave from balance — counts as Present, deducts 1 PL day'],
   ];
   const legendWs = XLSX.utils.aoa_to_sheet(legend);
   legendWs['!cols'] = [{ wch: 6 }, { wch: 12 }, { wch: 36 }];
@@ -115,7 +124,8 @@ const generateExportExcel = (records, month, year) => {
     const row = [rec.employee_id, rec.employee_name];
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      row.push(rec.dates[dateStr] || '');
+      const code = rec.dates[dateStr] || '';
+      row.push(EXPORT_LABEL[code] || code);
     }
     return row;
   });
@@ -821,6 +831,7 @@ const AttendanceImportPanel = ({ employees = [], onMonthYearChange, onImportSucc
                   WO: { bg: '#f1f5f9', color: '#64748b' },
                   H:  { bg: '#fef3c7', color: '#92400e' },
                   CO: { bg: '#e0f2fe', color: '#0369a1' },
+                  PL: { bg: '#cffafe', color: '#0891b2' },
                 };
 
                 const fmtDate = (dateStr) => {

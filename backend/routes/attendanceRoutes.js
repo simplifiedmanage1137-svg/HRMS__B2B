@@ -69,6 +69,9 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
         }
     });
 
+    // Admin mark attendance (with Paid Leave / Comp Off balance management)
+    router.post('/admin/mark', authenticateToken, requireAdmin, attendanceController.adminMarkAttendance);
+
     // Update historical late marks (Admin only)
     router.post('/update-historical-late-marks', authenticateToken, requireAdmin, attendanceController.updateHistoricalLateMarks);
 

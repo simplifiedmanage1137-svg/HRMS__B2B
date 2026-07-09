@@ -35,7 +35,6 @@ export const API_ENDPOINTS = {
   PASSWORD_CHANGE:        ep('/api/auth/change-password'),
   PASSWORD_FORGOT:        ep('/api/auth/forgot-password'),
   PASSWORD_RESET:         ep('/api/auth/reset-password'),
-  PASSWORD_RESET_DIRECT:  ep('/api/auth/reset-password-self'),
 
   // Health / test
   TEST:    ep('/api/test'),
@@ -95,6 +94,9 @@ export const API_ENDPOINTS = {
   ATTENDANCE_AUTO_CLOSE_STALE: ep('/api/attendance/auto-close-stale'),
   ATTENDANCE_TRIGGER_MISSING_CHECK: ep('/api/attendance/admin/trigger-missing-check'),
   ATTENDANCE_UPDATE_HISTORICAL_LATE_MARKS: ep('/api/attendance/update-historical-late-marks'),
+
+  // Admin mark attendance (Paid Leave / Comp Off)
+  ATTENDANCE_ADMIN_MARK: ep('/api/attendance/admin/mark'),
 
   // Attendance Import / Export
   ATTENDANCE_IMPORT_VALIDATE: ep('/api/attendance/import/validate'),

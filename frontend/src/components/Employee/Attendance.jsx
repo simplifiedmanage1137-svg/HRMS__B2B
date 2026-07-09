@@ -23,6 +23,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
+import { useMobileDevice } from '../../hooks/useMobileDevice';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -50,6 +51,7 @@ ChartJS.register(
 const Attendance = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const isMobileDevice = useMobileDevice();
   const [attendance, setAttendance] = useState(null);
   const [activeSession, setActiveSession] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -1646,6 +1648,20 @@ const Attendance = () => {
   };
 
   const renderClockButton = () => {
+    if (isMobileDevice) {
+      return (
+        <div className="text-center">
+          <Button variant="secondary" size="lg" className="w-100 py-3" disabled style={{ cursor: 'not-allowed', opacity: 0.65 }}>
+            <FaSignOutAlt className="me-2" /> Clock In / Clock Out
+          </Button>
+          <small className="d-block mt-2" style={{ color: '#ef4444', fontWeight: 500 }}>
+            Clock In / Clock Out is not available on mobile or tablet.
+            Please use a desktop or laptop to mark attendance.
+          </small>
+        </div>
+      );
+    }
+
     const hasActiveSession = !!activeSession;
     const hasOpenAttendance = !!attendance?.clock_in && !attendance?.clock_out;
 

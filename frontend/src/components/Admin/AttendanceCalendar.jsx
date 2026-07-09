@@ -5,7 +5,7 @@ import { Spinner } from 'react-bootstrap';
 import {
   FaCalendarAlt, FaCheckCircle, FaTimesCircle, FaUmbrellaBeach,
   FaSun, FaStopwatch, FaLeaf, FaSave, FaChevronLeft, FaChevronRight,
-  FaExclamationCircle
+  FaExclamationCircle, FaGift, FaExchangeAlt
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -18,19 +18,24 @@ const MONTHS = [
 ];
 
 const STATUSES = [
-  { code: 'present',  label: 'Present',     short: 'P',  color: '#16a34a', bg: '#dcfce7', dbStatus: 'present',  isHoliday: false, holidayName: null },
-  { code: 'absent',   label: 'Absent',      short: 'A',  color: '#dc2626', bg: '#fee2e2', dbStatus: 'absent',   isHoliday: false, holidayName: null },
-  { code: 'week_off', label: 'Weekly Off',  short: 'WO', color: '#6b7280', bg: '#f3f4f6', dbStatus: 'absent',   isHoliday: true,  holidayName: 'Week Off' },
-  { code: 'holiday',  label: 'Holiday',     short: 'H',  color: '#2563eb', bg: '#dbeafe', dbStatus: 'absent',   isHoliday: true,  holidayName: 'Holiday' },
-  { code: 'half_day', label: 'Half Day',    short: 'HD', color: '#d97706', bg: '#fef3c7', dbStatus: 'half_day', isHoliday: false, holidayName: null },
-  { code: 'leave',    label: 'Leave',       short: 'L',  color: '#7c3aed', bg: '#ede9fe', dbStatus: 'absent',   isHoliday: false, holidayName: 'Leave' },
+  { code: 'present',    label: 'Present',              short: 'P',  color: '#16a34a', bg: '#dcfce7', dbStatus: 'present',  isHoliday: false, holidayName: null,   attType: null },
+  { code: 'absent',     label: 'Absent',               short: 'A',  color: '#dc2626', bg: '#fee2e2', dbStatus: 'absent',   isHoliday: false, holidayName: null,   attType: null },
+  { code: 'week_off',   label: 'Weekly Off',           short: 'WO', color: '#6b7280', bg: '#f3f4f6', dbStatus: 'absent',   isHoliday: true,  holidayName: 'Week Off', attType: null },
+  { code: 'holiday',    label: 'Holiday',               short: 'H',  color: '#2563eb', bg: '#dbeafe', dbStatus: 'absent',   isHoliday: true,  holidayName: 'Holiday',  attType: null },
+  { code: 'half_day',   label: 'Half Day',              short: 'HD', color: '#d97706', bg: '#fef3c7', dbStatus: 'half_day', isHoliday: false, holidayName: null,   attType: null },
+  { code: 'leave',      label: 'Leave',                 short: 'L',  color: '#7c3aed', bg: '#ede9fe', dbStatus: 'absent',   isHoliday: false, holidayName: 'Leave', attType: null },
+  { code: 'paid_leave', label: 'Present (Paid Leave)',  short: 'PL', color: '#0891b2', bg: '#cffafe', dbStatus: 'present',  isHoliday: false, holidayName: null,   attType: 'paid_leave', requiresBalance: 'paidLeave' },
+  { code: 'comp_off',   label: 'Present (Comp Off)',    short: 'CO', color: '#c026d3', bg: '#fae8ff', dbStatus: 'present',  isHoliday: false, holidayName: null,   attType: 'comp_off',   requiresBalance: 'compOff' },
 ];
 
 // Resolve a DB record → internal code
 const resolveCode = (rec) => {
   if (!rec) return null;
   const s = rec.status;
+  const type = rec.attendance_type;
   const hn = (rec.holiday_name || '').toLowerCase();
+  if (type === 'paid_leave') return 'paid_leave';
+  if (type === 'comp_off') return 'comp_off';
   if (s === 'present') return 'present';
   if (s === 'half_day') return 'half_day';
   if (hn.includes('week off') || hn.includes('weekly off')) return 'week_off';
@@ -82,9 +87,30 @@ const AttendanceCalendar = ({ employee, onAttendanceSaved }) => {
   const [unsaved,  setUnsaved]  = useState({}); // { 'YYYY-MM-DD': code }
   const [popover,  setPopover]  = useState(null); // { dateStr, x, y }
   const [saveAllLoading, setSaveAllLoading] = useState(false);
+  const [paidLeaveBalance, setPaidLeaveBalance] = useState(0);
+  const [compOffBalance, setCompOffBalance] = useState(0);
 
   const popoverRef = useRef(null);
   const empId = employee?.employee_id;
+
+  // ── Fetch Paid Leave / Comp Off balances ─────────────────────────────────
+  const fetchBalances = useCallback(async () => {
+    if (!empId) return;
+    try {
+      const [leaveRes, compRes] = await Promise.all([
+        axios.get(API_ENDPOINTS.LEAVE_BALANCE(empId)),
+        axios.get(API_ENDPOINTS.COMP_OFF_BALANCE(empId)),
+      ]);
+      setPaidLeaveBalance(parseFloat(leaveRes.data?.available || 0));
+      setCompOffBalance(parseFloat(compRes.data?.comp_off_balance || 0));
+    } catch {
+      // Non-blocking — dropdown just falls back to showing 0
+    }
+  }, [empId]);
+
+  useEffect(() => { fetchBalances(); }, [fetchBalances]);
+
+  const balanceFor = { paidLeave: paidLeaveBalance, compOff: compOffBalance };
 
   // ── Fetch attendance for selected month ──────────────────────────────────
   const fetchAttendance = useCallback(async () => {
@@ -132,50 +158,70 @@ const AttendanceCalendar = ({ employee, onAttendanceSaved }) => {
     if (!st) return;
     setSaving(s => ({ ...s, [dateStr]: true }));
     try {
-      // Use importAttendance endpoint — it handles upsert cleanly
-      const payload = {
-        month: selMonth + 1,
-        year: selYear,
-        records: [{
+      if (code === 'paid_leave' || code === 'comp_off') {
+        // Admin mark endpoint handles balance validation + deduction atomically
+        await axios.post(API_ENDPOINTS.ATTENDANCE_ADMIN_MARK, {
           employee_id: empId,
-          dates: { [dateStr]: code === 'present' ? 'P' : code === 'absent' ? 'A' : code === 'half_day' ? 'HD' : code === 'week_off' ? 'WO' : code === 'holiday' ? 'H' : 'L' }
-        }]
-      };
-      await axios.post(API_ENDPOINTS.ATTENDANCE_IMPORT, payload);
+          attendance_date: dateStr,
+          status_code: code,
+        });
+        await fetchBalances(); // Refresh displayed balance after deduction
+      } else {
+        const codeMap = { present: 'P', absent: 'A', half_day: 'HD', week_off: 'WO', holiday: 'H', leave: 'L' };
+        await axios.post(API_ENDPOINTS.ATTENDANCE_IMPORT, {
+          month: selMonth + 1,
+          year: selYear,
+          records: [{ employee_id: empId, dates: { [dateStr]: codeMap[code] || 'A' } }]
+        });
+      }
       setAttendanceMap(m => ({ ...m, [dateStr]: code }));
       setUnsaved(u => { const n = { ...u }; delete n[dateStr]; return n; });
-      showNotification(`✅ ${dateStr} updated to ${st.label}`, 'success');
+      showNotification(`✅ ${dateStr} saved as ${st.label}`, 'success');
       if (onAttendanceSaved) onAttendanceSaved(selMonth + 1, selYear);
-    } catch {
-      showNotification(`Failed to save ${dateStr}`, 'danger');
+    } catch (err) {
+      const msg = err.response?.data?.message || `Failed to save ${dateStr}`;
+      showNotification(msg, 'danger');
     } finally {
       setSaving(s => { const n = { ...s }; delete n[dateStr]; return n; });
     }
-  }, [empId, selMonth, selYear, showNotification]);
+  }, [empId, selMonth, selYear, showNotification, fetchBalances]);
 
   // ── Save all unsaved changes at once ─────────────────────────────────────
   const saveAll = useCallback(async () => {
     if (!empId || Object.keys(unsaved).length === 0) return;
     setSaveAllLoading(true);
     const codeMap = { present: 'P', absent: 'A', half_day: 'HD', week_off: 'WO', holiday: 'H', leave: 'L' };
-    const dates = {};
-    Object.entries(unsaved).forEach(([ds, code]) => { dates[ds] = codeMap[code] || 'A'; });
+    const bulkDates = {};
+    const balanceDays = []; // PL/CO — sequential, balance deducted per call
+    Object.entries(unsaved).forEach(([ds, code]) => {
+      if (code === 'paid_leave' || code === 'comp_off') balanceDays.push([ds, code]);
+      else bulkDates[ds] = codeMap[code] || 'A';
+    });
     try {
-      await axios.post(API_ENDPOINTS.ATTENDANCE_IMPORT, {
-        month: selMonth + 1,
-        year: selYear,
-        records: [{ employee_id: empId, dates }]
-      });
+      if (Object.keys(bulkDates).length > 0) {
+        await axios.post(API_ENDPOINTS.ATTENDANCE_IMPORT, {
+          month: selMonth + 1, year: selYear,
+          records: [{ employee_id: empId, dates: bulkDates }]
+        });
+      }
+      for (const [ds, code] of balanceDays) {
+        await axios.post(API_ENDPOINTS.ATTENDANCE_ADMIN_MARK, {
+          employee_id: empId, attendance_date: ds, status_code: code,
+        });
+      }
       setAttendanceMap(m => ({ ...m, ...unsaved }));
       setUnsaved({});
-      showNotification(`✅ ${Object.keys(dates).length} day(s) saved successfully`, 'success');
+      const total = Object.keys(bulkDates).length + balanceDays.length;
+      showNotification(`✅ ${total} day(s) saved successfully`, 'success');
+      if (balanceDays.length > 0) await fetchBalances();
       if (onAttendanceSaved) onAttendanceSaved(selMonth + 1, selYear);
-    } catch {
-      showNotification('Failed to save changes', 'danger');
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Failed to save changes';
+      showNotification(msg, 'danger');
     } finally {
       setSaveAllLoading(false);
     }
-  }, [empId, unsaved, selMonth, selYear, showNotification]);
+  }, [empId, unsaved, selMonth, selYear, showNotification, fetchBalances]);
 
   // ── Handle day click ──────────────────────────────────────────────────────
   const handleDayClick = (e, dateStr) => {
@@ -213,9 +259,9 @@ const AttendanceCalendar = ({ employee, onAttendanceSaved }) => {
 
   // ── Summary counts ────────────────────────────────────────────────────────
   const summary = (() => {
-    const counts = { present: 0, absent: 0, week_off: 0, holiday: 0, half_day: 0, leave: 0 };
+    const counts = { present: 0, absent: 0, week_off: 0, holiday: 0, half_day: 0, leave: 0, paid_leave: 0, comp_off: 0 };
     Object.values(effectiveMap).forEach(code => { if (code && counts[code] !== undefined) counts[code]++; });
-    const payable = counts.present + counts.holiday + counts.week_off + Math.floor(counts.half_day / 2) + counts.leave;
+    const payable = counts.present + counts.holiday + counts.week_off + Math.floor(counts.half_day / 2) + counts.leave + counts.paid_leave + counts.comp_off;
     return { ...counts, payable };
   })();
 
@@ -227,13 +273,15 @@ const AttendanceCalendar = ({ employee, onAttendanceSaved }) => {
 
   // ── Summary card data ─────────────────────────────────────────────────────
   const summaryCards = [
-    { label: 'Present',    value: summary.present,  color: '#16a34a', bg: '#dcfce7', icon: <FaCheckCircle size={14} /> },
-    { label: 'Absent',     value: summary.absent,   color: '#dc2626', bg: '#fee2e2', icon: <FaTimesCircle size={14} /> },
-    { label: 'Weekly Off', value: summary.week_off, color: '#6b7280', bg: '#f3f4f6', icon: <FaSun size={14} /> },
-    { label: 'Holiday',    value: summary.holiday,  color: '#2563eb', bg: '#dbeafe', icon: <FaCalendarAlt size={14} /> },
-    { label: 'Half Day',   value: summary.half_day, color: '#d97706', bg: '#fef3c7', icon: <FaStopwatch size={14} /> },
-    { label: 'Leave',      value: summary.leave,    color: '#7c3aed', bg: '#ede9fe', icon: <FaUmbrellaBeach size={14} /> },
-    { label: 'Payable Days', value: summary.payable, color: '#0ea5e9', bg: '#e0f2fe', icon: <FaLeaf size={14} />, bold: true },
+    { label: 'Present',    value: summary.present,    color: '#16a34a', bg: '#dcfce7', icon: <FaCheckCircle size={14} /> },
+    { label: 'Absent',     value: summary.absent,     color: '#dc2626', bg: '#fee2e2', icon: <FaTimesCircle size={14} /> },
+    { label: 'Weekly Off', value: summary.week_off,   color: '#6b7280', bg: '#f3f4f6', icon: <FaSun size={14} /> },
+    { label: 'Holiday',    value: summary.holiday,    color: '#2563eb', bg: '#dbeafe', icon: <FaCalendarAlt size={14} /> },
+    { label: 'Half Day',   value: summary.half_day,   color: '#d97706', bg: '#fef3c7', icon: <FaStopwatch size={14} /> },
+    { label: 'Leave',      value: summary.leave,      color: '#7c3aed', bg: '#ede9fe', icon: <FaUmbrellaBeach size={14} /> },
+    { label: 'Paid Leave', value: summary.paid_leave, color: '#0891b2', bg: '#cffafe', icon: <FaGift size={14} />, sub: `Bal: ${paidLeaveBalance.toFixed(1)}` },
+    { label: 'Comp Off',   value: summary.comp_off,   color: '#c026d3', bg: '#fae8ff', icon: <FaExchangeAlt size={14} />, sub: `Bal: ${compOffBalance.toFixed(1)}` },
+    { label: 'Payable Days', value: summary.payable,  color: '#0ea5e9', bg: '#e0f2fe', icon: <FaLeaf size={14} />, bold: true },
   ];
 
   return (
@@ -331,6 +379,7 @@ const AttendanceCalendar = ({ employee, onAttendanceSaved }) => {
               <div style={{ fontSize: 22, fontWeight: c.bold ? 900 : 800, color: c.bold ? c.color : '#111827', lineHeight: 1 }}>
                 {loading ? <Skeleton w={32} h={20} /> : c.value}
               </div>
+              {c.sub && <div style={{ fontSize: 10, color: c.color, fontWeight: 600, marginTop: 2 }}>{c.sub}</div>}
             </div>
           ))}
         </div>
@@ -457,30 +506,45 @@ const AttendanceCalendar = ({ employee, onAttendanceSaved }) => {
           <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', padding: '6px 8px 8px', borderBottom: '1px solid #f3f4f6', marginBottom: 4 }}>
             {popover.dateStr} — Select Status
           </div>
-          {STATUSES.map(s => (
-            <button
-              key={s.code}
-              onClick={() => handleStatusSelect(s.code)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                width: '100%', background: effectiveMap[popover.dateStr] === s.code ? s.bg : 'transparent',
-                border: 'none', borderRadius: 6, padding: '7px 10px',
-                cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                color: effectiveMap[popover.dateStr] === s.code ? s.color : '#374151',
-                transition: 'background 0.1s',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = s.bg; }}
-              onMouseLeave={e => { e.currentTarget.style.background = effectiveMap[popover.dateStr] === s.code ? s.bg : 'transparent'; }}
-            >
-              <div style={{ width: 22, height: 22, borderRadius: 5, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ fontSize: 9, fontWeight: 900, color: s.color }}>{s.short}</span>
-              </div>
-              {s.label}
-              {effectiveMap[popover.dateStr] === s.code && (
-                <FaCheckCircle size={10} color={s.color} style={{ marginLeft: 'auto' }} />
-              )}
-            </button>
-          ))}
+          {STATUSES.map(s => {
+            const availBal = s.requiresBalance ? balanceFor[s.requiresBalance] : null;
+            const noBalance = availBal !== null && availBal < 1;
+            const isSelected = effectiveMap[popover.dateStr] === s.code;
+            return (
+              <button
+                key={s.code}
+                onClick={noBalance ? undefined : () => handleStatusSelect(s.code)}
+                disabled={noBalance}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  width: '100%', background: isSelected ? s.bg : 'transparent',
+                  border: 'none', borderRadius: 6, padding: '7px 10px',
+                  cursor: noBalance ? 'not-allowed' : 'pointer',
+                  fontSize: 12, fontWeight: 600,
+                  color: noBalance ? '#9ca3af' : isSelected ? s.color : '#374151',
+                  opacity: noBalance ? 0.55 : 1,
+                  transition: 'background 0.1s',
+                }}
+                onMouseEnter={e => { if (!noBalance) e.currentTarget.style.background = s.bg; }}
+                onMouseLeave={e => { e.currentTarget.style.background = isSelected ? s.bg : 'transparent'; }}
+              >
+                <div style={{ width: 22, height: 22, borderRadius: 5, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span style={{ fontSize: 9, fontWeight: 900, color: s.color }}>{s.short}</span>
+                </div>
+                <span style={{ flex: 1 }}>{s.label}</span>
+                <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {availBal !== null && (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: noBalance ? '#ef4444' : s.color }}>
+                      {noBalance ? 'No balance' : `${availBal.toFixed(1)} avail`}
+                    </span>
+                  )}
+                  {isSelected && !noBalance && (
+                    <FaCheckCircle size={10} color={s.color} />
+                  )}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
     </>

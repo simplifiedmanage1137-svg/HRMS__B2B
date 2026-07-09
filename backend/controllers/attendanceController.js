@@ -2530,6 +2530,8 @@ exports.getEmployeeAttendanceReport = async (req, res) => {
                 late_display: late.late_display,
                 early_minutes: record.early_minutes,
                 is_holiday: record.is_holiday,
+                holiday_name: record.holiday_name || null,
+                attendance_type: record.attendance_type || null,
                 comp_off_awarded: record.comp_off_awarded,
                 is_regularized: record.is_regularized || false,
                 first_name: employee.first_name || '',
@@ -3406,7 +3408,7 @@ exports.fixOrphanedAttendance = async (req, res) => {
 
 // ── Attendance Import / Export ─────────────────────────────────────────────────
 
-const VALID_CODES = new Set(['P', 'A', 'HD', 'L', 'WO', 'H', 'CO']);
+const VALID_CODES = new Set(['P', 'A', 'HD', 'L', 'WO', 'H', 'CO', 'PL']);
 
 // Maps full-word values (as they appear in custom Excel sheets) to short codes.
 // All lookups are done after .toUpperCase() so case variants are handled automatically.
@@ -3434,6 +3436,10 @@ const WORD_TO_CODE = {
     'COMP OFF':     'CO',
     'COMPOFF':      'CO',
     'COMP-OFF':     'CO',
+    // Paid Leave
+    'PAID LEAVE':   'PL',
+    'PAIDLEAVE':    'PL',
+    'PAID-LEAVE':   'PL',
     // New Joinee = Present (employee joined and was present)
     'NEW JOINEE':   'P',
     'NEW JOINER':   'P',
@@ -3448,7 +3454,8 @@ const CODE_TO_STATUS = {
     L:  'leave',
     WO: 'week_off',
     H:  'holiday',
-    CO: 'comp_off',
+    CO: 'present',   // stored with attendance_type='comp_off'
+    PL: 'present',   // stored with attendance_type='paid_leave'
 };
 
 const STATUS_TO_CODE = {
@@ -3643,21 +3650,25 @@ exports.importAttendance = async (req, res) => {
                 const code = String(rawCode).toUpperCase();
                 if (!VALID_CODES.has(code)) continue;
 
-                const isHol = code === 'H';
-                const isWO  = code === 'WO';
+                const isHol   = code === 'H';
+                const isWO    = code === 'WO';
                 const isLeave = code === 'L';
-                const isPaidFullDay = code === 'P' || code === 'CO';
+                const isCO    = code === 'CO';
+                const isPL    = code === 'PL';
+                const isPaidFullDay = code === 'P' || isCO || isPL;
                 const totalHours   = isPaidFullDay ? 9 : code === 'HD' ? 4.5 : 0;
                 const totalMinutes = isPaidFullDay ? 540 : code === 'HD' ? 270 : 0;
 
-                // WO/H/L use 'absent' status (DB constraint only allows present/absent/half_day/working/on_leave).
-                // is_holiday=true flags week_off/holiday as paid days; salary calc respects this.
-                const status = (isWO || isHol) ? 'absent' : isLeave ? 'absent' : CODE_TO_STATUS[code];
+                // WO/H/L use 'absent' status (DB constraint: present/absent/half_day).
+                // CO/PL use 'present' with attendance_type set; salary calc respects this.
+                const status  = (isWO || isHol) ? 'absent' : isLeave ? 'absent' : CODE_TO_STATUS[code];
+                const attType = isCO ? 'comp_off' : isPL ? 'paid_leave' : null;
 
                 const payload = {
                     employee_id,
                     attendance_date: date,
                     status,
+                    attendance_type: attType,
                     is_holiday:    isHol || isWO,
                     holiday_name:  isHol ? 'Holiday' : isWO ? 'Week Off' : isLeave ? 'Leave' : null,
                     total_hours:   totalHours,
@@ -3757,7 +3768,7 @@ exports.exportAttendanceData = async (req, res) => {
         const endDate   = `${y}-${String(m).padStart(2, '0')}-${new Date(y, m, 0).getDate()}`;
 
         const [{ data: attendance, error: attErr }, { data: employees, error: empErr }] = await Promise.all([
-            supabase.from('attendance').select('employee_id, attendance_date, status')
+            supabase.from('attendance').select('employee_id, attendance_date, status, attendance_type, is_holiday, holiday_name')
                 .gte('attendance_date', startDate).lte('attendance_date', endDate),
             supabase.from('employees').select('employee_id, first_name, last_name')
                 .eq('is_active', true).order('employee_id'),
@@ -3768,7 +3779,13 @@ exports.exportAttendanceData = async (req, res) => {
         const attMap = {};
         for (const r of (attendance || [])) {
             if (!attMap[r.employee_id]) attMap[r.employee_id] = {};
-            const code = STATUS_TO_CODE[r.status] || r.status?.toUpperCase() || 'A';
+            let code;
+            if (r.attendance_type === 'paid_leave') code = 'PL';
+            else if (r.attendance_type === 'comp_off') code = 'CO';
+            else if (r.is_holiday && r.holiday_name === 'Week Off') code = 'WO';
+            else if (r.is_holiday && r.holiday_name === 'Holiday') code = 'H';
+            else if (r.is_holiday && r.holiday_name === 'Leave') code = 'L';
+            else code = STATUS_TO_CODE[r.status] || r.status?.toUpperCase() || 'A';
             attMap[r.employee_id][r.attendance_date] = code;
         }
 
@@ -3801,6 +3818,170 @@ exports.getImportHistory = async (req, res) => {
     } catch (error) {
         console.error('❌ getImportHistory:', error);
         res.status(500).json({ success: false, message: 'Failed to fetch history', error: error.message });
+    }
+};
+
+// ── Admin Mark Attendance (with Paid Leave / Comp Off balance management) ─────
+// POST /api/attendance/admin/mark
+// Body: { employee_id, attendance_date, status_code }
+//   status_code: 'present' | 'absent' | 'half_day' | 'week_off' | 'holiday' | 'leave' | 'paid_leave' | 'comp_off'
+exports.adminMarkAttendance = async (req, res) => {
+    try {
+        const { employee_id, attendance_date, status_code } = req.body;
+
+        if (!employee_id || !attendance_date || !status_code) {
+            return res.status(400).json({ success: false, message: 'employee_id, attendance_date, and status_code are required' });
+        }
+
+        const ADMIN_MARK_VALID_CODES = ['present', 'absent', 'half_day', 'week_off', 'holiday', 'leave', 'paid_leave', 'comp_off'];
+        if (!ADMIN_MARK_VALID_CODES.includes(status_code)) {
+            return res.status(400).json({ success: false, message: `Invalid status_code. Must be one of: ${ADMIN_MARK_VALID_CODES.join(', ')}` });
+        }
+
+        // ── Resolve DB fields from status_code ──────────────────────────────
+        // attendance_type stored in DB: null | 'paid_leave' | 'comp_off'
+        const typeMap = {
+            present:   { dbStatus: 'present',  isHoliday: false, holidayName: null,       attType: null },
+            absent:    { dbStatus: 'absent',   isHoliday: false, holidayName: null,       attType: null },
+            half_day:  { dbStatus: 'half_day', isHoliday: false, holidayName: null,       attType: null },
+            week_off:  { dbStatus: 'absent',   isHoliday: true,  holidayName: 'Week Off', attType: null },
+            holiday:   { dbStatus: 'absent',   isHoliday: true,  holidayName: 'Holiday',  attType: null },
+            leave:     { dbStatus: 'absent',   isHoliday: false, holidayName: 'Leave',    attType: null },
+            paid_leave:{ dbStatus: 'present',  isHoliday: false, holidayName: null,       attType: 'paid_leave' },
+            comp_off:  { dbStatus: 'present',  isHoliday: false, holidayName: null,       attType: 'comp_off' },
+        };
+        const resolved = typeMap[status_code];
+
+        // ── Fetch employee + current balances ────────────────────────────────
+        const { data: employee, error: empErr } = await supabase
+            .from('employees')
+            .select('comp_off_balance, joining_date')
+            .eq('employee_id', employee_id)
+            .single();
+        if (empErr || !employee) {
+            return res.status(404).json({ success: false, message: 'Employee not found' });
+        }
+
+        const currentYear = new Date().getFullYear();
+
+        // Paid leave balance from leave_balance table
+        const { data: leaveBal } = await supabase
+            .from('leave_balance')
+            .select('current_balance')
+            .eq('employee_id', employee_id)
+            .eq('leave_year', currentYear)
+            .maybeSingle();
+        const paidLeaveBalance = parseFloat(leaveBal?.current_balance || 0);
+        const compOffBalance   = parseFloat(employee.comp_off_balance || 0);
+
+        // ── Backend validation for balance ───────────────────────────────────
+        if (status_code === 'paid_leave' && paidLeaveBalance < 1) {
+            return res.status(400).json({
+                success: false,
+                message: `Insufficient Paid Leave balance. Available: ${paidLeaveBalance.toFixed(1)} days.`
+            });
+        }
+        if (status_code === 'comp_off' && compOffBalance < 1) {
+            return res.status(400).json({
+                success: false,
+                message: `Insufficient Comp Off balance. Available: ${compOffBalance.toFixed(1)} days.`
+            });
+        }
+
+        // ── Fetch existing record for this date (to restore old balance) ─────
+        const { data: existing } = await supabase
+            .from('attendance')
+            .select('id, status, attendance_type, is_holiday, holiday_name')
+            .eq('employee_id', employee_id)
+            .eq('attendance_date', attendance_date)
+            .maybeSingle();
+
+        const oldType = existing?.attendance_type || null;
+
+        // ── Restore previous balance if editing ──────────────────────────────
+        if (existing && oldType !== resolved.attType) {
+            if (oldType === 'paid_leave') {
+                // Restore 1 paid leave
+                if (leaveBal) {
+                    await supabase.from('leave_balance').update({
+                        current_balance: paidLeaveBalance + 1,
+                        total_used: Math.max(0, (leaveBal.total_used || 0) - 1),
+                        last_updated: new Date().toISOString()
+                    }).eq('employee_id', employee_id).eq('leave_year', currentYear);
+                }
+            } else if (oldType === 'comp_off') {
+                // Restore 1 comp off
+                await supabase.from('employees').update({
+                    comp_off_balance: compOffBalance + 1
+                }).eq('employee_id', employee_id);
+            }
+        }
+
+        // ── Deduct new balance ───────────────────────────────────────────────
+        if (resolved.attType === 'paid_leave' && oldType !== 'paid_leave') {
+            if (leaveBal) {
+                await supabase.from('leave_balance').update({
+                    current_balance: Math.max(0, paidLeaveBalance - 1),
+                    total_used: (leaveBal.total_used || 0) + 1,
+                    last_updated: new Date().toISOString()
+                }).eq('employee_id', employee_id).eq('leave_year', currentYear);
+            }
+        } else if (resolved.attType === 'comp_off' && oldType !== 'comp_off') {
+            await supabase.from('employees').update({
+                comp_off_balance: Math.max(0, compOffBalance - 1)
+            }).eq('employee_id', employee_id);
+        }
+
+        // ── Upsert attendance record ─────────────────────────────────────────
+        const payload = {
+            employee_id,
+            attendance_date,
+            status:           resolved.dbStatus,
+            is_holiday:       resolved.isHoliday,
+            holiday_name:     resolved.holidayName,
+            attendance_type:  resolved.attType,
+            total_hours:      resolved.dbStatus === 'present' ? 9 : resolved.dbStatus === 'half_day' ? 4.5 : 0,
+            total_minutes:    resolved.dbStatus === 'present' ? 540 : resolved.dbStatus === 'half_day' ? 270 : 0,
+            late_minutes:     0,
+        };
+
+        let upsertError;
+        if (existing) {
+            const { error } = await supabase.from('attendance').update(payload).eq('id', existing.id);
+            upsertError = error;
+        } else {
+            const { error } = await supabase.from('attendance').insert([payload]);
+            upsertError = error;
+        }
+
+        if (upsertError) {
+            // attendance_type column may not exist yet — retry without it
+            if (upsertError.message && upsertError.message.includes('attendance_type')) {
+                const { attendance_type: _removed, ...payloadWithout } = payload;
+                if (existing) {
+                    const { error } = await supabase.from('attendance').update(payloadWithout).eq('id', existing.id);
+                    if (error) throw error;
+                } else {
+                    const { error } = await supabase.from('attendance').insert([payloadWithout]);
+                    if (error) throw error;
+                }
+                console.warn('⚠️ attendance_type column missing — saved without it. Run migration to add the column.');
+            } else {
+                throw upsertError;
+            }
+        }
+
+        return res.json({
+            success: true,
+            message: `Attendance marked as ${status_code} for ${attendance_date}`,
+            status_code,
+            attendance_type: resolved.attType,
+            db_status: resolved.dbStatus,
+        });
+
+    } catch (error) {
+        console.error('❌ adminMarkAttendance error:', error);
+        res.status(500).json({ success: false, message: 'Failed to mark attendance', error: error.message });
     }
 };
 

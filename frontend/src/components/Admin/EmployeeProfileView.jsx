@@ -392,6 +392,17 @@ const EmployeeProfileView = () => {
     };
   })();
 
+  // ── Resolve a single attendance record to its display label ─────────────────
+  const resolveAttStatus = (r) => {
+    if (r.attendance_type === 'paid_leave') return 'Paid Leave';
+    if (r.attendance_type === 'comp_off')   return 'Comp Off';
+    const hn = r.holiday_name || '';
+    if (r.is_holiday && hn) return hn; // 'Week Off' | 'Holiday' | 'Leave'
+    if (r.status === 'half_day') return 'Half Day';
+    if (r.status) return r.status.charAt(0).toUpperCase() + r.status.slice(1);
+    return 'N/A';
+  };
+
   // ── export ─────────────────────────────────────────────────────────────────
   const exportAttendance = () => {
     const rows = attHistory.map((r, i) => ({
@@ -399,7 +410,7 @@ const EmployeeProfileView = () => {
       'Clock In': fmtTimeIST(r.clock_in_ist || r.clock_in),
       'Clock Out': fmtTimeIST(r.clock_out_ist || r.clock_out),
       'Hours': r.total_hours || 0, 'Late (min)': r.late_minutes || 0,
-      'Status': r.status || ''
+      'Status': resolveAttStatus(r)
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
@@ -745,7 +756,13 @@ const EmployeeProfileView = () => {
                       ) : attHistory.map((r, i) => {
                         const isLate = parseFloat(r.late_minutes) > 0;
                         const dow = new Date(r.attendance_date).toLocaleDateString('en-US', { weekday: 'short' });
-                        const statusColors = { present: '#22c55e', absent: '#ef4444', half_day: '#f97316', working: '#0ea5e9' };
+                        const STATUS_COLOR = {
+                          present: '#22c55e', absent: '#ef4444', half_day: '#f97316', working: '#0ea5e9',
+                          'Paid Leave': '#0891b2', 'Comp Off': '#c026d3',
+                          'Week Off': '#6b7280', 'Holiday': '#2563eb', 'Leave': '#7c3aed',
+                        };
+                        const statusLabel = resolveAttStatus(r);
+                        const statusColor = STATUS_COLOR[statusLabel] || STATUS_COLOR[r.status] || '#9ca3af';
                         return (
                           <tr key={i} style={{ borderBottom: '1px solid #f3f4f6', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
                             <td style={{ padding: '8px 12px', fontWeight: 600 }}>{r.attendance_date}</td>
@@ -757,8 +774,8 @@ const EmployeeProfileView = () => {
                               {isLate ? <span style={{ background: '#fef2f2', color: '#ef4444', borderRadius: 10, padding: '2px 8px', fontWeight: 600, fontSize: 11 }}>Late</span> : '—'}
                             </td>
                             <td style={{ padding: '8px 12px' }}>
-                              <span style={{ background: `${statusColors[r.status] || '#9ca3af'}18`, color: statusColors[r.status] || '#9ca3af', borderRadius: 10, padding: '2px 8px', fontWeight: 700, fontSize: 11, textTransform: 'capitalize' }}>
-                                {r.status || 'N/A'}
+                              <span style={{ background: `${statusColor}18`, color: statusColor, borderRadius: 10, padding: '2px 8px', fontWeight: 700, fontSize: 11 }}>
+                                {statusLabel}
                               </span>
                             </td>
                           </tr>
