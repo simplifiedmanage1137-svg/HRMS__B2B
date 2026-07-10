@@ -45,15 +45,17 @@ const numberToWords = (num) => {
 };
 
 // Returns PF/PT/DT breakdown based on slip period:
-// Up to May 2026 → DT ₹200, PF ₹0, PT ₹0
-// June 2026 onwards → PF ₹1800, PT ₹200, DT ₹0
+// Before May 2026 → DT ₹200, PF ₹0, PT ₹0
+// May 2026 onwards → PF = slip.dt - 200, PT ₹200, DT ₹0
 const getDeductionBreakdown = (slip) => {
   const m = parseInt(slip?.month || 0);
   const y = parseInt(slip?.year  || 0);
-  const isAfterMay2026 = y > 2026 || (y === 2026 && m >= 6);
-  return isAfterMay2026
-    ? { pf: 1800, pt: 200, dt: 0 }
-    : { pf: 0, pt: 0, dt: null }; // dt: null = use a.deduction from slip
+  const isPFApplicable = y > 2026 || (y === 2026 && m >= 5);
+  if (isPFApplicable) {
+    const totalFixed = Number(slip?.dt) || 2000;
+    return { pf: totalFixed - 200, pt: 200, dt: 0 };
+  }
+  return { pf: 0, pt: 0, dt: null }; // dt: null = use a.deduction from slip
 };
 
 const getAmounts = (slip, emp) => {

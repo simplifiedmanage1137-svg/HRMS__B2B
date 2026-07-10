@@ -344,6 +344,26 @@ const TeamRating = () => {
                 </Row>
               </div>
 
+              {/* Previous rating context */}
+              {selectedEmployee.has_rated && (
+                <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, padding: '12px 14px', marginBottom: 20 }}>
+                  <div style={{ fontSize: 11, color: '#92400e', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Last Rating This Period
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: selectedEmployee.comments ? 6 : 0 }}>
+                    {[1,2,3,4,5].map(n => (
+                      <span key={n} style={{ color: n <= selectedEmployee.rating ? '#f59e0b' : '#fde68a', fontSize: 16 }}>★</span>
+                    ))}
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#92400e', marginLeft: 4 }}>{getRatingLabel(selectedEmployee.rating)}</span>
+                  </div>
+                  {selectedEmployee.comments && (
+                    <div style={{ fontSize: 12, color: '#92400e', fontStyle: 'italic', marginTop: 4 }}>
+                      "{selectedEmployee.comments}"
+                    </div>
+                  )}
+                </div>
+              )}
+
               <Form.Group className="mb-4">
                 <Form.Label className="fw-semibold">Select Rating</Form.Label>
                 <div className="d-flex align-items-center">

@@ -29,6 +29,14 @@ const RATING_COLORS = {
 const getRatingLabel = (r) => RATING_LABELS[r] || '—';
 const getRatingColor = (r) => RATING_COLORS[r] || '#94a3b8';
 
+const getRoleRatedText = (role) => {
+  const r = (role || '').toLowerCase();
+  if (r === 'admin') return 'Admin rated you';
+  if (r === 'sub_admin') return 'Manager rated you';
+  if (r === 'manager') return 'Team Leader rated you';
+  return 'Supervisor rated you';
+};
+
 const Stars = ({ rating, size = 18 }) => (
   <span style={{ display: 'inline-flex', gap: 2 }}>
     {[1, 2, 3, 4, 5].map(n => (
@@ -66,30 +74,29 @@ const PerformanceHistory = () => {
         let oldReviews = [];
         if (oldRes.status === 'fulfilled' && oldRes.value.data.success) {
           const d = oldRes.value.data;
-          const allOld = [...(d.manager_ratings || []), ...(d.admin_ratings || [])];
+          const allOld = [
+            ...(d.manager_ratings || []).map(r => ({ ...r, _role: 'manager' })),
+            ...(d.admin_ratings   || []).map(r => ({ ...r, _role: 'admin'   })),
+          ];
           oldReviews = allOld.map((r, i) => ({
             id: `legacy_${i}`,
             rating: r.rating,
             month_name: r.month_name,
             review_year: r.year,
             reviewer_name: r.rater_name || 'Supervisor',
+            reviewer_role: r._role,
             remarks: r.comments || '',
+            created_at: r.created_at,
             source: 'legacy',
           }));
         }
 
-        // Merge, deduplicate by month+year (prefer new system if both exist)
-        const newKeys = new Set(newReviews.map(r => `${r.review_year}-${r.review_month}`));
-        const filteredOld = oldReviews.filter(r => {
-          const monthNum = new Date(`${r.month_name} 1, ${r.review_year}`).getMonth() + 1;
-          return !newKeys.has(`${r.review_year}-${monthNum}`);
-        });
-
-        const combined = [...newReviews, ...filteredOld].sort((a, b) => {
+        const combined = [...newReviews, ...oldReviews].sort((a, b) => {
           if (b.review_year !== a.review_year) return b.review_year - a.review_year;
           const mA = new Date(`${a.month_name} 1`).getMonth();
           const mB = new Date(`${b.month_name} 1`).getMonth();
-          return mB - mA;
+          if (mB !== mA) return mB - mA;
+          return new Date(b.created_at || 0) - new Date(a.created_at || 0);
         });
 
         setReviews(combined);
@@ -265,7 +272,10 @@ const ReviewCard = ({ review, isLatest }) => {
           fontSize: 12, color: '#64748b', marginBottom: review.remarks ? 12 : 0,
         }}>
           <FaUserTie size={11} />
-          <span>Reviewed by <strong style={{ color: '#374151' }}>{review.reviewer_name}</strong></span>
+          <span>
+            <strong style={{ color: '#374151' }}>{getRoleRatedText(review.reviewer_role)}</strong>
+            {review.reviewer_name && <span style={{ color: '#94a3b8' }}> — {review.reviewer_name}</span>}
+          </span>
         </div>
 
         {/* Remarks */}

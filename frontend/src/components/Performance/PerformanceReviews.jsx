@@ -226,7 +226,7 @@ const PerformanceReviews = () => {
                   </div>
                   {selected.has_review && (
                     <Badge bg="warning" text="dark" className="mt-1" style={{ fontSize: 10 }}>
-                      Override existing review
+                      Adding to review history
                     </Badge>
                   )}
                 </div>
@@ -234,6 +234,29 @@ const PerformanceReviews = () => {
 
               {submitError   && <Alert variant="danger"  className="py-2 small">{submitError}</Alert>}
               {submitSuccess && <Alert variant="success" className="py-2 small">{submitSuccess}</Alert>}
+
+              {/* Previous review context */}
+              {selected.has_review && selected.rating > 0 && (
+                <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, padding: '12px 14px', marginBottom: 20 }}>
+                  <div style={{ fontSize: 11, color: '#92400e', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Previous Review This Period
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: selected.remarks ? 6 : 0 }}>
+                    <Stars rating={selected.rating} size={15} />
+                    <span style={{ fontSize: 12, fontWeight: 600, color: getRatingColor(selected.rating), marginLeft: 4 }}>
+                      {RATING_LABELS[selected.rating]}
+                    </span>
+                  </div>
+                  {selected.remarks && (
+                    <div style={{ fontSize: 12, color: '#92400e', fontStyle: 'italic', marginTop: 4 }}>
+                      "{selected.remarks}"
+                    </div>
+                  )}
+                  <div style={{ fontSize: 10, color: '#b45309', marginTop: 6 }}>
+                    A new submission will be added to the history — previous reviews are preserved.
+                  </div>
+                </div>
+              )}
 
               {/* Star picker */}
               <Form.Group className="mb-3">

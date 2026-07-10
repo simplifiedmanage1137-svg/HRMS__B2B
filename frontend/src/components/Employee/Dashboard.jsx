@@ -304,14 +304,9 @@ const EmployeeDashboard = () => {
     compOffEarned: 0
   });
 
-  // Rating states - Separate for Manager and Admin
-  const [managerRatings, setManagerRatings] = useState([]);
-  const [managerAverage, setManagerAverage] = useState(null);
+  // Unified performance ratings (merged from employee_ratings + performance_reviews)
+  const [allRatings, setAllRatings] = useState([]);
   const [showRatingHistory, setShowRatingHistory] = useState(false);
-  const [activeRatingTab, setActiveRatingTab] = useState('manager');
-
-  // Performance review (new hierarchical system)
-  const [perfReview, setPerfReview] = useState(null);
 
   // Chart view toggle: 'weekly' | 'monthly'
   const [chartView, setChartView] = useState('weekly');
@@ -360,64 +355,114 @@ const EmployeeDashboard = () => {
   // Weekly off days (0 = Sunday, 6 = Saturday)
   const WEEKLY_OFF_DAYS = [0, 6];
 
-  // Helper functions for ratings
+  // ── Rating helpers ──────────────────────────────────────────────────────────
+  const PERF_LABELS = {
+    5: 'Excellent Performer', 4: 'Very Good Performer', 3: 'Meets Expectations',
+    2: 'Performance Improvement Plan (PIP)', 1: 'Termination Recommended',
+  };
+  const PERF_COLORS = { 5: '#22c55e', 4: '#4ade80', 3: '#eab308', 2: '#f97316', 1: '#ef4444' };
+
+  const getRoleRatedText = (role) => {
+    const r = (role || '').toLowerCase();
+    if (r === 'admin') return 'Admin rated you';
+    if (r === 'sub_admin') return 'Manager rated you';
+    if (r === 'manager') return 'Team Leader rated you';
+    return 'Supervisor rated you';
+  };
+
+  const getRatingAvatarColor = (role) => {
+    const r = (role || '').toLowerCase();
+    if (r === 'admin') return '#6366f1';
+    if (r === 'sub_admin') return '#0ea5e9';
+    return '#10b981';
+  };
+
+  const fmtRatingDate = (d) => {
+    if (!d) return '';
+    try { return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }); }
+    catch { return ''; }
+  };
+
+  const getNameInitials = (name) => {
+    if (!name) return '?';
+    return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+  };
+
+  const getRatingLabel = (r) => PERF_LABELS[r] || `${r}/5`;
+
+  // Used in the attendance header mini-stars
   const renderStars = (rating) => {
     const stars = [];
     const fullStars = Math.floor(rating);
     const hasHalfStar = rating % 1 >= 0.5;
-
     for (let i = 1; i <= 5; i++) {
-      if (i <= fullStars) {
-        stars.push(<FaStar key={i} size={14} className="me-1 text-warning" />);
-      } else if (i === fullStars + 1 && hasHalfStar) {
-        stars.push(<FaStarHalfAlt key={i} size={14} className="me-1 text-warning" />);
-      } else {
-        stars.push(<FaRegStar key={i} size={14} className="me-1 text-secondary" />);
-      }
+      if (i <= fullStars) stars.push(<FaStar key={i} size={14} className="me-1 text-warning" />);
+      else if (i === fullStars + 1 && hasHalfStar) stars.push(<FaStarHalfAlt key={i} size={14} className="me-1 text-warning" />);
+      else stars.push(<FaRegStar key={i} size={14} className="me-1 text-secondary" />);
     }
     return stars;
-  };
-
-  const getRatingLabel = (rating) => {
-    if (rating >= 4.5) return 'Excellent';
-    if (rating >= 3.5) return 'Good';
-    if (rating >= 2.5) return 'Average';
-    if (rating >= 1.5) return 'Below Average';
-    return 'Needs Improvement';
-  };
-
-  const getRatingColor = (rating) => {
-    if (rating >= 4) return 'success';
-    if (rating >= 3) return 'info';
-    if (rating >= 2) return 'warning';
-    return 'danger';
   };
 
   useEffect(() => {
     if (user?.employeeId) {
       loadDashboardData();
-      fetchEmployeeRatings();
-      fetchPerfReview();
+      fetchAllRatings();
     }
   }, [user]);
 
-  const fetchEmployeeRatings = async () => {
+  const fetchAllRatings = async () => {
     try {
-      const response = await axios.get(`${API_ENDPOINTS.RATINGS}/employee/${user.employeeId}/history`);
-      if (response.data.success) {
-        setManagerRatings(response.data.manager_ratings || []);
-        setManagerAverage(response.data.manager_average);
-      }
-    } catch (error) {
-      console.error('Error fetching ratings:', error);
-    }
-  };
+      const [newRes, oldRes] = await Promise.allSettled([
+        axios.get(API_ENDPOINTS.PERFORMANCE_MY_HISTORY),
+        axios.get(`${API_ENDPOINTS.RATINGS}/employee/${user.employeeId}/history`),
+      ]);
 
-  const fetchPerfReview = async () => {
-    try {
-      const res = await axios.get(API_ENDPOINTS.PERFORMANCE_MY_LATEST);
-      if (res.data.success) setPerfReview(res.data.review);
-    } catch (_) { /* silent */ }
+      const newReviews = (newRes.status === 'fulfilled' ? newRes.value.data.reviews || [] : [])
+        .map(r => ({
+          id: r.id,
+          rating: r.rating,
+          label: PERF_LABELS[r.rating] || `${r.rating}/5`,
+          remark: r.remarks || '',
+          reviewer_name: r.reviewer_name || 'Reviewer',
+          reviewer_role: r.reviewer_role || 'admin',
+          date: r.created_at,
+          month_name: r.month_name,
+          year: r.review_year,
+          month: r.review_month,
+          source: 'new',
+        }));
+
+      let oldReviews = [];
+      if (oldRes.status === 'fulfilled' && oldRes.value.data.success) {
+        const d = oldRes.value.data;
+        const allOld = [
+          ...(d.manager_ratings || []).map(r => ({ ...r, _role: 'manager' })),
+          ...(d.admin_ratings   || []).map(r => ({ ...r, _role: 'admin'   })),
+        ];
+        oldReviews = allOld.map((r, i) => ({
+          id: `legacy_${i}`,
+          rating: r.rating,
+          label: r.rating_label || '',
+          remark: r.comments || '',
+          reviewer_name: r.rater_name || 'Supervisor',
+          reviewer_role: r._role,
+          date: r.created_at,
+          month_name: r.month_name,
+          year: r.year,
+          month: new Date(`${r.month_name} 1, ${r.year}`).getMonth() + 1,
+          source: 'legacy',
+        }));
+      }
+
+      const combined = [...newReviews, ...oldReviews].sort((a, b) => {
+        if (b.year !== a.year) return b.year - a.year;
+        if (b.month !== a.month) return b.month - a.month;
+        return new Date(b.date || 0) - new Date(a.date || 0);
+      });
+      setAllRatings(combined);
+    } catch (e) {
+      console.error('Error fetching ratings:', e);
+    }
   };
 
   const recalculateAttendanceStats = () => {
@@ -918,7 +963,7 @@ const EmployeeDashboard = () => {
                   </div>
                   {/* Performance Stars */}
                   <div style={{ display: 'flex' }}>
-                    {renderStars(managerAverage ? parseFloat(managerAverage) : 0)}
+                    {renderStars(allRatings.length > 0 ? allRatings.reduce((s, r) => s + r.rating, 0) / allRatings.length : 0)}
                   </div>
                 </div>
               </Col>
@@ -1113,136 +1158,131 @@ const EmployeeDashboard = () => {
         </Col>
       </Row>
 
-      {/* ── Performance Review Card ── */}
-      <Row className="mb-4">
-        <Col xs={12} md={6}>
-          <Card className="border-0 shadow-sm h-100" style={{ borderRadius: 14, overflow: 'hidden' }}>
-            <Card.Body className="p-0">
-              {perfReview ? (() => {
-                const colors = { 5: '#22c55e', 4: '#4ade80', 3: '#eab308', 2: '#f97316', 1: '#ef4444' };
-                const labels = { 5: 'Excellent Performer', 4: 'Very Good Performer', 3: 'Meets Expectations', 2: 'Performance Improvement Plan (PIP)', 1: 'Termination Recommended' };
-                const c = colors[perfReview.rating] || '#6366f1';
-                return (
-                  <div style={{ padding: '18px 20px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <FaStar size={14} style={{ color: '#eab308' }} />
-                        <span style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>Performance Rating</span>
-                      </div>
-                      <span style={{ fontSize: 11, color: '#64748b', background: '#f1f5f9', borderRadius: 20, padding: '2px 10px' }}>
-                        {perfReview.month_name} {perfReview.review_year}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', gap: 2, marginBottom: 6 }}>
-                      {[1,2,3,4,5].map(n => (
-                        <FaStar key={n} size={20} style={{ color: n <= perfReview.rating ? c : '#e2e8f0' }} />
-                      ))}
-                    </div>
-                    <div style={{ fontWeight: 700, fontSize: 15, color: c, marginBottom: 8 }}>
-                      {labels[perfReview.rating]}
-                    </div>
-                    <div style={{ fontSize: 11, color: '#64748b', marginBottom: perfReview.remarks ? 10 : 0 }}>
-                      Overall <strong style={{ color: '#0f172a' }}>{perfReview.rating} / 5</strong>
-                      &nbsp;·&nbsp;By <strong style={{ color: '#0f172a' }}>{perfReview.reviewer_name}</strong>
-                    </div>
-                    {perfReview.remarks && (
-                      <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', background: '#f8fafc', borderRadius: 8, padding: '8px 12px', borderLeft: `3px solid ${c}` }}>
-                        "{perfReview.remarks}"
-                      </div>
-                    )}
-                  </div>
-                );
-              })() : (
-                <div style={{ padding: '28px 20px', textAlign: 'center' }}>
-                  <FaStar size={32} style={{ color: '#e2e8f0', marginBottom: 10 }} />
-                  <div style={{ fontWeight: 600, fontSize: 13, color: '#64748b' }}>Performance Rating</div>
-                  <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>No Performance Review Available Yet</div>
-                </div>
-              )}
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
-
-      {/* Ratings Card - Second Row */}
-      {/* Ratings Card - Second Row */}
+      {/* ── Unified Performance Ratings Card ── */}
       <Row className="mb-4">
         <Col xs={12}>
-          <Card className="border-0 shadow-sm">
-            <Card.Header className="bg-white p-0 border-bottom-0">
-              <div className="d-flex">
-                <button
-                  className={`flex-grow-1 py-2 px-3 border-0 bg-transparent fw-semibold small ${activeRatingTab === 'manager' ? 'text-primary border-bottom border-primary border-2' : 'text-muted'}`}
-                  onClick={() => setActiveRatingTab('manager')}
-                  style={{ transition: 'all 0.2s' }}
-                >
-                  <FaUserTie className="me-1" size={12} />
-                  TL Rating
-                  <Badge bg={activeRatingTab === 'manager' ? 'primary' : 'secondary'} className="ms-1" pill style={{ fontSize: '10px' }}>
-                    {managerRatings.length}
-                  </Badge>
-                </button>
+          <Card className="border-0 shadow-sm" style={{ borderRadius: 14, overflow: 'hidden' }}>
+            {/* Card header */}
+            <div style={{ padding: '14px 20px 12px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <FaStar size={15} style={{ color: '#eab308' }} />
+                <span style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>Performance Ratings</span>
+                {allRatings.length > 0 && (
+                  <Badge bg="secondary" pill style={{ fontSize: 10 }}>{allRatings.length}</Badge>
+                )}
               </div>
-            </Card.Header>
-            <Card.Body className="p-3">
-              {managerRatings.length > 0 ? (
-                  <>
-                    <div className="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
-                      <div className="d-flex align-items-center gap-3">
-                        <div className="text-center">
-                          <div className="display-6 fw-bold text-info mb-0">
-                            {managerAverage ? `${managerAverage}` : '0'}
-                          </div>
-                          <div className="d-flex justify-content-center" style={{ fontSize: '10px' }}>
-                            {managerAverage && renderStars(parseFloat(managerAverage))}
-                          </div>
+              {allRatings.length > 5 && (
+                <Button variant="link" size="sm" className="p-0 text-decoration-none small" onClick={() => setShowRatingHistory(true)}>
+                  View Full History <FaArrowRight size={10} />
+                </Button>
+              )}
+            </div>
+
+            {/* Summary row */}
+            {allRatings.length > 0 && (() => {
+              const avg = allRatings.reduce((s, r) => s + r.rating, 0) / allRatings.length;
+              const latest = allRatings[0];
+              const latestColor = PERF_COLORS[latest.rating] || '#94a3b8';
+              return (
+                <div style={{ display: 'flex', gap: 0, background: '#f8fafc', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
+                  <div style={{ padding: '12px 20px', flex: '1 1 auto', borderRight: '1px solid #f1f5f9' }}>
+                    <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Overall Rating</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {[1,2,3,4,5].map(n => (
+                        <FaStar key={n} size={13} style={{ color: n <= Math.round(avg) ? '#eab308' : '#e2e8f0' }} />
+                      ))}
+                      <span style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{avg.toFixed(1)} / 5</span>
+                    </div>
+                  </div>
+                  <div style={{ padding: '12px 20px', flex: '0 0 auto', borderRight: '1px solid #f1f5f9', textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Total Ratings</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: '#6366f1' }}>{allRatings.length}</div>
+                  </div>
+                  <div style={{ padding: '12px 20px', flex: '1 1 auto' }}>
+                    <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Latest Status</div>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: latestColor }}>
+                      {latest.label || getRatingLabel(latest.rating)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <Card.Body className="p-0">
+              {allRatings.length === 0 ? (
+                <div style={{ padding: '36px 20px', textAlign: 'center' }}>
+                  <FaStar size={40} style={{ color: '#e2e8f0', marginBottom: 12 }} />
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#64748b' }}>No Performance Ratings Yet</div>
+                  <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
+                    Your manager or admin will rate your performance here.
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  {allRatings.slice(0, 5).map((r, idx) => {
+                    const color = PERF_COLORS[r.rating] || '#94a3b8';
+                    const initials = getNameInitials(r.reviewer_name);
+                    const avatarBg = getRatingAvatarColor(r.reviewer_role);
+                    return (
+                      <div key={r.id || idx} style={{
+                        display: 'flex', gap: 14, padding: '14px 20px',
+                        borderBottom: idx < Math.min(allRatings.length, 5) - 1 ? '1px solid #f1f5f9' : 'none',
+                        alignItems: 'flex-start',
+                      }}>
+                        {/* Reviewer avatar */}
+                        <div style={{
+                          width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
+                          background: avatarBg, color: '#fff',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontWeight: 700, fontSize: 13,
+                        }}>
+                          {initials}
                         </div>
-                        <div>
-                          <div className="small text-muted">Overall Rating</div>
-                          <div className="small fw-semibold">Based on {managerRatings.length} review(s)</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {/* Reviewer role label + date */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
+                            <span style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>
+                              {getRoleRatedText(r.reviewer_role)}
+                            </span>
+                            <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                              {r.month_name} {r.year}
+                              {r.date ? ` · ${fmtRatingDate(r.date)}` : ''}
+                            </span>
+                          </div>
+                          {/* Reviewer name */}
+                          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 5 }}>{r.reviewer_name}</div>
+                          {/* Stars + label */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: r.remark ? 6 : 0, flexWrap: 'wrap' }}>
+                            {[1,2,3,4,5].map(n => (
+                              <FaStar key={n} size={14} style={{ color: n <= r.rating ? color : '#e2e8f0' }} />
+                            ))}
+                            <span style={{ fontSize: 12, fontWeight: 600, color, marginLeft: 4 }}>
+                              {r.label || getRatingLabel(r.rating)}
+                            </span>
+                          </div>
+                          {/* Comment */}
+                          {r.remark && (
+                            <div style={{
+                              fontSize: 12, color: '#475569', fontStyle: 'italic',
+                              background: '#f8fafc', borderRadius: 6, padding: '6px 10px',
+                              borderLeft: `3px solid ${color}`, marginTop: 4,
+                            }}>
+                              "{r.remark}"
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <Button
-                        variant="link"
-                        size="sm"
-                        className="p-0 text-decoration-none small"
-                        onClick={() => setShowRatingHistory(true)}
-                      >
-                        View All <FaArrowRight size={10} />
+                    );
+                  })}
+                  {allRatings.length > 5 && (
+                    <div style={{ padding: '12px 20px', textAlign: 'center', borderTop: '1px solid #f1f5f9' }}>
+                      <Button variant="link" size="sm" className="text-decoration-none p-0 small" onClick={() => setShowRatingHistory(true)}>
+                        View Full History ({allRatings.length} ratings) <FaArrowRight size={10} />
                       </Button>
                     </div>
-
-                    <div className="table-responsive">
-                      <table className="table table-sm table-borderless mb-0">
-                        <tbody>
-                          {managerRatings.slice(0, 3).map((rating, index) => (
-                            <tr key={index} className="border-bottom">
-                              <td style={{ width: '30%' }} className="py-2">
-                                <small className="text-muted">{rating.month_name} {rating.year}</small>
-                              </td>
-                              <td style={{ width: '35%' }} className="py-2">
-                                <div style={{ fontSize: '10px' }}>
-                                  {renderStars(rating.rating)}
-                                </div>
-                              </td>
-                              <td style={{ width: '35%' }} className="py-2">
-                                <Badge bg={getRatingColor(rating.rating)} pill style={{ fontSize: '10px' }}>
-                                  {rating.rating_label}
-                                </Badge>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-center py-3">
-                    <FaUserTie size={30} className="text-muted mb-2 opacity-25" />
-                    <p className="text-muted small mb-0">No manager ratings yet</p>
-                  </div>
-                )
-              }
+                  )}
+                </div>
+              )}
             </Card.Body>
           </Card>
         </Col>
@@ -1597,54 +1637,73 @@ const EmployeeDashboard = () => {
         </Col>
       </Row>
 
-      {/* Rating History Modal */}
+      {/* Full Performance Rating History Modal */}
       <Modal show={showRatingHistory} onHide={() => setShowRatingHistory(false)} centered size="lg">
-        <Modal.Header closeButton className="bg-warning">
-          <Modal.Title className="h6">
-            <FaStar className="me-2" /> My Performance Rating History
+        <Modal.Header closeButton style={{ background: '#1e2a3e', border: 'none', padding: '16px 24px' }}>
+          <Modal.Title style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>
+            <FaStar className="me-2" style={{ color: '#eab308' }} />
+            Full Performance Rating History
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body className="p-0">
-          <div className="table-responsive">
-            <Table hover className="mb-0">
-              <thead className="bg-light">
-                <tr className="small">
-                  <th className="fw-normal">Period</th>
-                  <th className="fw-normal">Rating</th>
-                  <th className="fw-normal">Comments</th>
-                  <th className="fw-normal">Rated By</th>
-                </tr>
-              </thead>
-              <tbody>
-                {managerRatings.map((rating, index) => (
-                  <tr key={index}>
-                    <td className="small">{rating.month_name} {rating.year}</td>
-                    <td className="small">
-                      <div className="text-nowrap">
-                        {renderStars(rating.rating)}
+        <Modal.Body className="p-0" style={{ maxHeight: '72vh', overflowY: 'auto' }}>
+          {allRatings.length === 0 ? (
+            <div className="text-center py-5">
+              <FaStar size={40} className="text-muted mb-2 opacity-25" />
+              <p className="text-muted mb-0 small">No ratings found</p>
+            </div>
+          ) : (
+            <div>
+              {allRatings.map((r, idx) => {
+                const color = PERF_COLORS[r.rating] || '#94a3b8';
+                const initials = getNameInitials(r.reviewer_name);
+                const avatarBg = getRatingAvatarColor(r.reviewer_role);
+                return (
+                  <div key={r.id || idx} style={{
+                    display: 'flex', gap: 14, padding: '16px 20px',
+                    borderBottom: idx < allRatings.length - 1 ? '1px solid #f1f5f9' : 'none',
+                    alignItems: 'flex-start',
+                  }}>
+                    <div style={{
+                      width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+                      background: avatarBg, color: '#fff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontWeight: 700, fontSize: 14,
+                    }}>
+                      {initials}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 4, marginBottom: 2 }}>
+                        <span style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>{getRoleRatedText(r.reviewer_role)}</span>
+                        <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                          {r.month_name} {r.year}{r.date ? ` · ${fmtRatingDate(r.date)}` : ''}
+                        </span>
                       </div>
-                      <small className={`text-${getRatingColor(rating.rating)}`}>{rating.rating_label}</small>
-                    </td>
-                    <td className="small">{rating.comments || '-'}</td>
-                    <td className="small">
-                      {rating.rater_name}
-                      <Badge bg="info" pill className="ms-1">TL</Badge>
-                    </td>
-                  </tr>
-                ))}
-                {managerRatings.length === 0 && (
-                  <tr>
-                    <td colSpan="4" className="text-center py-4">
-                      <FaStar size={40} className="text-muted mb-2 opacity-50" />
-                      <p className="text-muted mb-0">No TL ratings found</p>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </Table>
-          </div>
+                      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>{r.reviewer_name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: r.remark ? 6 : 0, flexWrap: 'wrap' }}>
+                        {[1,2,3,4,5].map(n => (
+                          <FaStar key={n} size={14} style={{ color: n <= r.rating ? color : '#e2e8f0' }} />
+                        ))}
+                        <span style={{ fontSize: 12, fontWeight: 600, color, marginLeft: 4 }}>
+                          {r.label || getRatingLabel(r.rating)}
+                        </span>
+                      </div>
+                      {r.remark && (
+                        <div style={{
+                          fontSize: 12, color: '#475569', fontStyle: 'italic',
+                          background: '#f8fafc', borderRadius: 6, padding: '6px 10px',
+                          borderLeft: `3px solid ${color}`,
+                        }}>
+                          "{r.remark}"
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </Modal.Body>
-        <Modal.Footer>
+        <Modal.Footer style={{ padding: '12px 20px' }}>
           <Button variant="secondary" size="sm" onClick={() => setShowRatingHistory(false)}>Close</Button>
         </Modal.Footer>
       </Modal>

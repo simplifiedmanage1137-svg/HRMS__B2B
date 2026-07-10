@@ -3689,41 +3689,52 @@ exports.importAttendance = async (req, res) => {
         let insertedCount = 0, updatedCount = 0, failedCount = 0;
         const dbErrors = [];
 
-        // Batch inserts (500 per call)
-        for (let i = 0; i < toInsert.length; i += 500) {
-            const batch = toInsert.slice(i, i + 500);
+        // Strip attendance_type from a batch when the column doesn't exist in the table
+        const stripAttType = (rows) => rows.map(({ attendance_type: _at, ...rest }) => rest);
+
+        const tryInsertBatch = async (batch) => {
             const { error } = await supabase.from('attendance').insert(batch);
-            if (error) {
+            if (!error) { insertedCount += batch.length; return; }
+            if (error.message?.includes('attendance_type')) {
+                console.warn('⚠️ attendance_type column missing — retrying insert without it');
+                const { error: e2 } = await supabase.from('attendance').insert(stripAttType(batch));
+                if (e2) {
+                    failedCount += batch.length;
+                    const msg = e2.message || JSON.stringify(e2);
+                    if (!dbErrors.includes(msg)) dbErrors.push(msg);
+                } else {
+                    insertedCount += batch.length;
+                }
+            } else {
                 failedCount += batch.length;
                 console.error('❌ insert batch:', error);
                 const msg = error.message || error.details || JSON.stringify(error);
                 if (!dbErrors.includes(msg)) dbErrors.push(msg);
-            } else {
-                insertedCount += batch.length;
             }
+        };
+
+        const tryUpdateRow = async ({ id, ...payload }) => {
+            const { error } = await supabase.from('attendance').update(payload).eq('id', id);
+            if (!error) { updatedCount++; return; }
+            if (error.message?.includes('attendance_type')) {
+                console.warn('⚠️ attendance_type column missing — retrying update without it');
+                const { error: e2 } = await supabase.from('attendance').update(stripAttType([payload])[0]).eq('id', id);
+                if (e2) { failedCount++; } else { updatedCount++; }
+            } else {
+                failedCount++;
+                const msg = error?.message || error?.details || JSON.stringify(error);
+                if (msg && !dbErrors.includes(msg)) dbErrors.push(msg);
+            }
+        };
+
+        // Batch inserts (500 per call)
+        for (let i = 0; i < toInsert.length; i += 500) {
+            await tryInsertBatch(toInsert.slice(i, i + 500));
         }
 
         // Parallel updates — 100 concurrent calls at a time instead of one-by-one
         for (let i = 0; i < toUpdate.length; i += 100) {
-            const batch = toUpdate.slice(i, i + 100);
-            const results = await Promise.all(
-                batch.map(async ({ id, ...payload }) => {
-                    try {
-                        return await supabase.from('attendance').update(payload).eq('id', id);
-                    } catch (e) {
-                        return { error: e };
-                    }
-                })
-            );
-            results.forEach(({ error }) => {
-                if (error) {
-                    failedCount++;
-                    const msg = error?.message || error?.details || JSON.stringify(error);
-                    if (msg && !dbErrors.includes(msg)) dbErrors.push(msg);
-                } else {
-                    updatedCount++;
-                }
-            });
+            await Promise.all(toUpdate.slice(i, i + 100).map(tryUpdateRow));
         }
 
         // Log import

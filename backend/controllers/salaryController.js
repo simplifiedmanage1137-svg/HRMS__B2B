@@ -382,13 +382,9 @@ exports.generateSalarySlip = async (req, res) => {
         const attendanceRecords = await getAttendanceRecords(employee_id, cycle.startDateStr, cycle.endDateStr);
         const leaveRecords      = await getApprovedLeaves(employee_id, cycle.startDateStr, cycle.endDateStr);
 
-        // No attendance for this cycle — nothing to base a salary slip on
-        if (attendanceRecords.length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'No attendance records found for this period. Salary slip cannot be generated without attendance data.'
-            });
-        }
+        // If 0 records, treat as fully absent (all working days deducted).
+        // This allows slips to generate for months where admin marked attendance
+        // outside the normal import flow or where records were just entered.
 
         // ── 4. Count company holidays (weekdays only) in cycle ──
         // Holidays are treated as present days (not deducted)
@@ -429,9 +425,11 @@ exports.generateSalarySlip = async (req, res) => {
             ? attendanceOtHours
             : parseFloat((overtimeAmount / 150).toFixed(2));
 
-        // Fixed deduction: DT ₹200 up to May 2026; PFPT ₹2000 (PF ₹1800 + PT ₹200) from June 2026
-        const isAfterMay2026 = parseInt(year) > 2026 || (parseInt(year) === 2026 && parseInt(month) >= 6);
-        const dtDeduction = basicSalary > 0 ? (isAfterMay2026 ? 2000 : 200) : 0;
+        // Fixed deduction: DT ₹200 before May 2026; PF (per employee) + PT ₹200 from May 2026 onwards
+        const isPFApplicable = parseInt(year) > 2026 || (parseInt(year) === 2026 && parseInt(month) >= 5);
+        const pfAmount = isPFApplicable ? (parseInt(employee.pf_amount) || 1800) : 0;
+        const ptAmount = isPFApplicable ? 200 : 0;
+        const dtDeduction = basicSalary > 0 ? (isPFApplicable ? pfAmount + ptAmount : 200) : 0;
 
         // Net salary
         const netSalary = parseFloat(Math.max(0, basicSalary + overtimeAmount - effectiveUnpaidDeduction - dtDeduction).toFixed(2));
@@ -910,8 +908,9 @@ exports.saveSalaryAdjustment = async (req, res) => {
             const employee = await getEmployeeDetails(employee_id);
             if (!employee) return res.status(404).json({ success: false, message: 'Employee not found' });
             const monthlySalary = parseFloat(employee.in_hand_salary || employee.gross_salary || employee.salary || 0);
-            const isAfterMay2026OT = parseInt(year) > 2026 || (parseInt(year) === 2026 && parseInt(month) >= 6);
-            const dt = monthlySalary > 0 ? (isAfterMay2026OT ? 2000 : 200) : 0;
+            const isPFApplicableOT = parseInt(year) > 2026 || (parseInt(year) === 2026 && parseInt(month) >= 5);
+            const pfAmountOT = isPFApplicableOT ? (parseInt(employee.pf_amount) || 1800) : 0;
+            const dt = monthlySalary > 0 ? (isPFApplicableOT ? pfAmountOT + 200 : 200) : 0;
 
             // Use limit(1) to avoid maybeSingle() error when duplicate rows exist
             const { data: slipRows } = await supabase
@@ -1025,8 +1024,9 @@ exports.saveSalaryAdjustment = async (req, res) => {
             ? Math.round(adj.adj_deduction_amount / perDaySalary)
             : 0;
 
-        const isAfterMay2026Adj = parseInt(year) > 2026 || (parseInt(year) === 2026 && parseInt(month) >= 6);
-        const fixedDeductions = monthlySalary > 0 ? (isAfterMay2026Adj ? 2000 : 200) : 0; // DT ₹200 until May 2026; PFPT ₹2000 from June 2026
+        const isPFApplicableAdj = parseInt(year) > 2026 || (parseInt(year) === 2026 && parseInt(month) >= 5);
+        const pfAmountAdj = isPFApplicableAdj ? (parseInt(employee.pf_amount) || 1800) : 0;
+        const fixedDeductions = monthlySalary > 0 ? (isPFApplicableAdj ? pfAmountAdj + 200 : 200) : 0;
 
         // basic_salary = what the employee earned (before fixed deductions)
         // For OT case:  earned(49900) - OT(1900) = monthly(48000) ← base pay
