@@ -1098,7 +1098,7 @@ const EmployeeDashboard = () => {
         </Alert>
       )}
 
-      {/* Today's Status Card */}
+      {/* Today's Status Card
       {isTodayWeeklyOff() ? (
         <Card className="mb-4 border-0 shadow-sm bg-secondary bg-opacity-10">
           <Card.Body className="p-2 p-md-3">
@@ -1147,7 +1147,7 @@ const EmployeeDashboard = () => {
             </div>
           </Card.Body>
         </Card>
-      )}
+      )} */}
 
       {/* Statistics Cards - First Row with 3 Cards */}
       <Row className="mb-4 g-2 g-md-3">
