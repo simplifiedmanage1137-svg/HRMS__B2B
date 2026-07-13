@@ -424,6 +424,7 @@ const EmployeeList = () => {
                   <th className="text-nowrap text-dark fw-normal d-none d-lg-table-cell" style={{ width: '15%' }}>Designation</th>
                   <th className="text-nowrap text-dark fw-normal d-none d-sm-table-cell" style={{ width: '10%' }}>Employment Type</th>
                   <th className="text-nowrap text-dark fw-normal d-none d-xl-table-cell" style={{ width: '10%' }}>Joining Date</th>
+                  <th className="text-nowrap text-dark fw-normal d-none d-lg-table-cell" style={{ width: '10%' }}>Company</th>
                   <th className="text-nowrap text-dark fw-normal text-center" style={{ width: '15%' }}>Actions</th>
                 </tr>
               </thead>
@@ -458,6 +459,13 @@ const EmployeeList = () => {
                       </td>
                       <td className="text-truncate d-none d-xl-table-cell" style={{ maxWidth: '100px' }} title={formatDate(emp.joining_date)}>
                         {formatDate(emp.joining_date)}
+                      </td>
+                      <td className="d-none d-lg-table-cell">
+                        {emp.pf_amount != null && parseInt(emp.pf_amount) === 0 ? (
+                          <Badge style={{ background: '#0d7b6f' }} className="px-2 py-1">PropCulture</Badge>
+                        ) : (
+                          <Badge style={{ background: '#1e3a5f' }} className="px-2 py-1">B2B InDemand</Badge>
+                        )}
                       </td>
                       <td onClick={e => e.stopPropagation()}>
                         <div className="d-flex gap-2 gap-md-3 align-items-center justify-content-center flex-wrap">

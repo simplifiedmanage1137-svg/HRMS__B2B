@@ -427,7 +427,7 @@ exports.generateSalarySlip = async (req, res) => {
 
         // Fixed deduction: DT ₹200 before May 2026; PF (per employee) + PT ₹200 from May 2026 onwards
         const isPFApplicable = parseInt(year) > 2026 || (parseInt(year) === 2026 && parseInt(month) >= 5);
-        const pfAmount = isPFApplicable ? (parseInt(employee.pf_amount) || 1800) : 0;
+        const pfAmount = isPFApplicable ? (employee.pf_amount != null ? parseInt(employee.pf_amount) : 1800) : 0;
         const ptAmount = isPFApplicable ? 200 : 0;
         const dtDeduction = basicSalary > 0 ? (isPFApplicable ? pfAmount + ptAmount : 200) : 0;
 
@@ -909,7 +909,7 @@ exports.saveSalaryAdjustment = async (req, res) => {
             if (!employee) return res.status(404).json({ success: false, message: 'Employee not found' });
             const monthlySalary = parseFloat(employee.in_hand_salary || employee.gross_salary || employee.salary || 0);
             const isPFApplicableOT = parseInt(year) > 2026 || (parseInt(year) === 2026 && parseInt(month) >= 5);
-            const pfAmountOT = isPFApplicableOT ? (parseInt(employee.pf_amount) || 1800) : 0;
+            const pfAmountOT = isPFApplicableOT ? (employee.pf_amount != null ? parseInt(employee.pf_amount) : 1800) : 0;
             const dt = monthlySalary > 0 ? (isPFApplicableOT ? pfAmountOT + 200 : 200) : 0;
 
             // Use limit(1) to avoid maybeSingle() error when duplicate rows exist
@@ -1025,7 +1025,7 @@ exports.saveSalaryAdjustment = async (req, res) => {
             : 0;
 
         const isPFApplicableAdj = parseInt(year) > 2026 || (parseInt(year) === 2026 && parseInt(month) >= 5);
-        const pfAmountAdj = isPFApplicableAdj ? (parseInt(employee.pf_amount) || 1800) : 0;
+        const pfAmountAdj = isPFApplicableAdj ? (employee.pf_amount != null ? parseInt(employee.pf_amount) : 1800) : 0;
         const fixedDeductions = monthlySalary > 0 ? (isPFApplicableAdj ? pfAmountAdj + 200 : 200) : 0;
 
         // basic_salary = what the employee earned (before fixed deductions)

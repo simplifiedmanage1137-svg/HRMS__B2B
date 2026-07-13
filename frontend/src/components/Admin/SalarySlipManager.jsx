@@ -44,14 +44,17 @@ const numberToWords = (num) => {
   return n2w(Math.abs(Math.round(num)));
 };
 
-// Returns PF/PT/DT breakdown based on slip period:
+// Returns PF/PT/DT breakdown based on slip period and employee.pf_amount:
 // Before May 2026 → DT ₹200, PF ₹0, PT ₹0
-// May 2026 onwards → PF = slip.dt - 200, PT ₹200, DT ₹0
-const getDeductionBreakdown = (slip) => {
+// May 2026 onwards → PF from emp.pf_amount (if set, including 0) else slip.dt - 200, PT ₹200
+const getDeductionBreakdown = (slip, emp) => {
   const m = parseInt(slip?.month || 0);
   const y = parseInt(slip?.year  || 0);
   const isPFApplicable = y > 2026 || (y === 2026 && m >= 5);
   if (isPFApplicable) {
+    if (emp?.pf_amount != null) {
+      return { pf: parseInt(emp.pf_amount), pt: 200, dt: 0 };
+    }
     const totalFixed = Number(slip?.dt) || 2000;
     return { pf: totalFixed - 200, pt: 200, dt: 0 };
   }
@@ -85,27 +88,44 @@ const getAmounts = (slip, emp) => {
   };
 };
 
+// PropCulture employees have pf_amount explicitly set to 0
+const isPropCulture = (emp) => emp?.pf_amount != null && parseInt(emp.pf_amount) === 0;
+
+const COMPANY = {
+  b2b: {
+    accent:  '#1e3a5f',
+    name:    'B2BinDemand',
+    address: '8th Floor SkyVista, 805, Mhada Colony, Viman Nagar, Pune, Maharashtra 411014',
+  },
+  pc: {
+    accent:  '#0d7b6f',
+    name:    'PropCulture',
+    address: 'Pune, Maharashtra',
+  },
+};
+
 // ── PDF HTML template ──────────────────────────────────────────────────────────
 const buildPDFHTML = (slip, emp, a, monthName, logoBase64) => {
-  const bd = getDeductionBreakdown(slip);
+  const bd = getDeductionBreakdown(slip, emp);
   const pfAmt  = bd.pf;
   const ptAmt  = bd.pt;
   const dtAmt  = bd.dt !== null ? bd.dt : a.deduction;
+  const co = isPropCulture(emp) ? COMPANY.pc : COMPANY.b2b;
   const cycleLabel = slip.cycle_start_date && slip.cycle_end_date
     ? `${new Date(slip.cycle_start_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} – ${new Date(slip.cycle_end_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`
     : `${monthName} ${slip.year}`;
 
   return `
     <div style="border:1px solid #e2e8f0;padding:32px 36px;font-size:13px;color:#1e293b;font-family:Arial,sans-serif;">
-      <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #1e3a5f;padding-bottom:20px;margin-bottom:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid ${co.accent};padding-bottom:20px;margin-bottom:20px;">
         <div>
-          ${logoBase64
+          ${!isPropCulture(emp) && logoBase64
             ? `<img src="data:image/jpeg;base64,${logoBase64}" style="height:52px;width:auto;object-fit:contain;" />`
-            : `<div style="font-size:20px;font-weight:900;color:#1e3a5f;letter-spacing:1px;">B2BinDemand</div>`}
-          <div style="font-size:11px;color:#64748b;margin-top:6px;max-width:280px;">8th Floor SkyVista, 805, Mhada Colony, Viman Nagar, Pune, Maharashtra 411014</div>
+            : `<div style="font-size:22px;font-weight:900;color:${co.accent};letter-spacing:1px;">${co.name}</div>`}
+          <div style="font-size:11px;color:#64748b;margin-top:6px;max-width:280px;">${co.address}</div>
         </div>
         <div style="text-align:right;">
-          <div style="font-size:18px;font-weight:800;text-transform:uppercase;letter-spacing:2px;color:#1e3a5f;">Salary Slip</div>
+          <div style="font-size:18px;font-weight:800;text-transform:uppercase;letter-spacing:2px;color:${co.accent};">Salary Slip</div>
           <div style="font-size:13px;color:#475569;margin-top:4px;">${monthName} ${slip.year}</div>
           <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Pay Cycle: ${cycleLabel}</div>
         </div>
@@ -167,7 +187,7 @@ const buildPDFHTML = (slip, emp, a, monthName, logoBase64) => {
           <td style="width:49%;">
             <div style="font-weight:700;font-size:11px;color:#475569;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Deductions</div>
             <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
-              <tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#475569;">Provident Fund (PF)</td><td style="padding:7px 0;text-align:right;">₹${fmtNum(pfAmt)}</td></tr>
+              ${pfAmt > 0 ? `<tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#475569;">Provident Fund (PF)</td><td style="padding:7px 0;text-align:right;">₹${fmtNum(pfAmt)}</td></tr>` : ''}
               <tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#475569;">Professional Tax</td><td style="padding:7px 0;text-align:right;">₹${fmtNum(ptAmt)}</td></tr>
               <tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#475569;">TDS</td><td style="padding:7px 0;text-align:right;">₹0</td></tr>
               ${(a.absentDays + a.unpaidLeaveDays) > 0 ? `<tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#dc2626;font-weight:600;">Absent Deduction (${a.absentDays > 0 ? a.absentDays + ' absent' : ''}${a.unpaidLeaveDays > 0 ? (a.absentDays > 0 ? ' + ' : '') + a.unpaidLeaveDays + ' unpaid leave' : ''} × ₹${fmtNum(a.perDaySalary)}/day)</td><td style="padding:7px 0;text-align:right;color:#dc2626;font-weight:700;">₹${fmtNum((a.absentDays + a.unpaidLeaveDays) * a.perDaySalary)}</td></tr>` : ''}
@@ -178,7 +198,7 @@ const buildPDFHTML = (slip, emp, a, monthName, logoBase64) => {
         </tr>
       </table>
 
-      <div style="background:#1e3a5f;color:#fff;padding:18px 24px;border-radius:10px;display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+      <div style="background:${co.accent};color:#fff;padding:18px 24px;border-radius:10px;display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
         <div>
           <div style="font-size:10px;opacity:0.7;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">Net Salary Payable</div>
           <div style="font-size:11px;opacity:0.6;">Rupees ${numberToWords(Math.round(a.netSalary))} Only</div>
@@ -409,7 +429,7 @@ const SalarySlipManager = ({ employee, refreshKey }) => {
   // ── Slip modal view ────────────────────────────────────────────────────────
   const SlipView = ({ slip }) => {
     const a = getAmounts(slip, employee);
-    const bd = getDeductionBreakdown(slip);
+    const bd = getDeductionBreakdown(slip, employee);
     const pfAmt = bd.pf;
     const ptAmt = bd.pt;
     const dtAmt = bd.dt !== null ? bd.dt : a.deduction;
@@ -417,22 +437,27 @@ const SalarySlipManager = ({ employee, refreshKey }) => {
     const cycleLabel = slip.cycle_start_date && slip.cycle_end_date
       ? `${fmtDate(slip.cycle_start_date)} – ${fmtDate(slip.cycle_end_date)}`
       : `${monthName} ${slip.year}`;
+    const co = isPropCulture(employee) ? COMPANY.pc : COMPANY.b2b;
 
     return (
       <div style={{ fontFamily: 'system-ui, -apple-system, Arial, sans-serif' }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2px solid #1e3a5f', paddingBottom: 18, marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `2px solid ${co.accent}`, paddingBottom: 18, marginBottom: 20 }}>
           <div>
-            <img
-              src="/images/b2bindemand_logo.jfif" alt="logo"
-              style={{ height: 44, objectFit: 'contain', display: 'block', marginBottom: 6 }}
-              onError={(e) => { e.target.style.display = 'none'; }}
-            />
-            <div style={{ fontSize: 11, color: '#64748b', maxWidth: 260 }}>8th Floor SkyVista, 805, Mhada Colony, Viman Nagar, Pune, Maharashtra 411014</div>
+            {isPropCulture(employee) ? (
+              <div style={{ fontSize: 22, fontWeight: 900, color: co.accent, letterSpacing: 1, marginBottom: 6 }}>{co.name}</div>
+            ) : (
+              <img
+                src="/images/b2bindemand_logo.jfif" alt="logo"
+                style={{ height: 44, objectFit: 'contain', display: 'block', marginBottom: 6 }}
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+            )}
+            <div style={{ fontSize: 11, color: '#64748b', maxWidth: 260 }}>{co.address}</div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 17, fontWeight: 800, color: '#1e3a5f', textTransform: 'uppercase', letterSpacing: 1.5 }}>Salary Slip</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: co.accent, textTransform: 'uppercase', letterSpacing: 1.5 }}>Salary Slip</div>
             <div style={{ fontSize: 13, color: '#475569', marginTop: 4 }}>{monthName} {slip.year}</div>
             <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>Pay Cycle: {cycleLabel}</div>
           </div>
@@ -474,8 +499,8 @@ const SalarySlipManager = ({ employee, refreshKey }) => {
         {/* Earnings & Deductions */}
         <Row className="g-2 mb-3">
           <Col xs={12} sm={6}>
-            <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
-              <div style={{ background: '#1e3a5f', color: '#fff', padding: '9px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <div style={{ border: `1px solid ${co.accent}30`, borderRadius: 10, overflow: 'hidden' }}>
+              <div style={{ background: co.accent, color: '#fff', padding: '9px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Earnings
               </div>
               <SalaryRow label="Monthly Salary (CTC)" value={a.monthlySalary} />
@@ -487,11 +512,11 @@ const SalarySlipManager = ({ employee, refreshKey }) => {
             </div>
           </Col>
           <Col xs={12} sm={6}>
-            <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
-              <div style={{ background: '#1e3a5f', color: '#fff', padding: '9px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <div style={{ border: `1px solid ${co.accent}30`, borderRadius: 10, overflow: 'hidden' }}>
+              <div style={{ background: co.accent, color: '#fff', padding: '9px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Deductions
               </div>
-              <SalaryRow label="Provident Fund (PF)"  value={pfAmt} />
+              {pfAmt > 0 && <SalaryRow label="Provident Fund (PF)" value={pfAmt} />}
               <SalaryRow label="Professional Tax"      value={ptAmt} />
               <SalaryRow label="TDS"                   value={0} />
               {(a.absentDays + a.unpaidLeaveDays) > 0 && (
@@ -508,7 +533,7 @@ const SalarySlipManager = ({ employee, refreshKey }) => {
         </Row>
 
         {/* Net Salary */}
-        <div style={{ background: '#1e3a5f', color: '#fff', borderRadius: 10, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ background: co.accent, color: '#fff', borderRadius: 10, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div>
             <div style={{ fontSize: 10, opacity: 0.65, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Net Salary Payable</div>
             <div style={{ fontSize: 11, opacity: 0.55 }}>Rupees {numberToWords(Math.round(a.netSalary))} Only</div>

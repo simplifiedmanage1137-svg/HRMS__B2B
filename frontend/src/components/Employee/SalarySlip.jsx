@@ -37,8 +37,12 @@ import { useNavigate } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
-// Use public folder path instead of import
 const companyLogo = '/images/b2bindemand_logo.jfif';
+
+const COMPANY_INFO = {
+  b2b: { name: 'B2BinDemand', address: '8th Floor SkyVista, 805, Mhada Colony, Viman Nagar, Pune, Maharashtra 411014', accent: '#1e3a5f' },
+  pc:  { name: 'PropCulture', address: 'Pune, Maharashtra', accent: '#0d7b6f' },
+};
 
 const SalarySlip = () => {
   const { user } = useAuth();
@@ -425,10 +429,16 @@ const SalarySlip = () => {
       pdfContentDiv.style.fontFamily = 'Arial, sans-serif';
       pdfContentDiv.style.backgroundColor = 'white';
 
+      const isPC = employee?.pf_amount != null && parseInt(employee.pf_amount) === 0;
+      const co = isPC ? COMPANY_INFO.pc : COMPANY_INFO.b2b;
+
       pdfContentDiv.innerHTML = `
         <div style="text-align: center; margin-bottom: 20px;">
-          ${logoBase64 ? `<img src="data:image/png;base64,${logoBase64}" style="height: 60px; width: auto; margin-bottom: 10px; object-fit: contain;" />` : ''}
-          <p style="font-size: 12px; color: #333; margin: 0;">8th Floor SkyVista, 805, Mhada Colony, Viman Nagar, Pune, Maharashtra 411014</p>
+          ${isPC
+            ? `<div style="font-size:26px;font-weight:900;color:${co.accent};letter-spacing:1px;margin-bottom:8px;">${co.name}</div>`
+            : logoBase64 ? `<img src="data:image/png;base64,${logoBase64}" style="height: 60px; width: auto; margin-bottom: 10px; object-fit: contain;" />` : `<div style="font-size:22px;font-weight:900;color:${co.accent};margin-bottom:8px;">${co.name}</div>`
+          }
+          <p style="font-size: 12px; color: #333; margin: 0;">${co.address}</p>
         </div>
 
         <h3 style="text-align: center; font-size: 18px; font-weight: bold; margin: 20px 0; text-decoration: underline;">
@@ -481,7 +491,7 @@ const SalarySlip = () => {
             </tr>
           </thead>
           <tbody>
-            <tr><td style="padding: 4px 4px;">PF (Provident Fund)</td><td style="text-align: right; padding: 4px 4px;">${pfAmt > 0 ? formatCurrency(pfAmt) : '0'}</td></tr>
+            ${pfAmt > 0 ? `<tr><td style="padding: 4px 4px;">PF (Provident Fund)</td><td style="text-align: right; padding: 4px 4px;">${formatCurrency(pfAmt)}</td></tr>` : ''}
             <tr><td style="padding: 4px 4px;">Professional Tax</td><td style="text-align: right; padding: 4px 4px;">${ptAmt > 0 ? formatCurrency(ptAmt) : '0'}</td></tr>
             <tr><td style="padding: 4px 4px;">TDS</td><td style="text-align: right; padding: 4px 4px;">0</td></tr>
             ${totalAbsentDeduction > 0 ? `
@@ -587,10 +597,15 @@ const SalarySlip = () => {
   const getDeductionBreakdown = (slip) => {
     const m = parseInt(slip?.month || 0);
     const y = parseInt(slip?.year  || 0);
-    const isAfterMay2026 = y > 2026 || (y === 2026 && m >= 6);
-    return isAfterMay2026
-      ? { pf: 1800, pt: 200, dt: 0 }
-      : { pf: 0, pt: 0, dt: null }; // dt: null = use deduction from slip
+    const isPFApplicable = y > 2026 || (y === 2026 && m >= 5);
+    if (isPFApplicable) {
+      if (employee?.pf_amount != null) {
+        return { pf: parseInt(employee.pf_amount), pt: 200, dt: 0 };
+      }
+      const totalFixed = Number(slip?.dt) || 2000;
+      return { pf: totalFixed - 200, pt: 200, dt: 0 };
+    }
+    return { pf: 0, pt: 0, dt: null };
   };
 
   const getSlipAmounts = (slip) => {
@@ -1080,27 +1095,24 @@ const SalarySlip = () => {
               margin: '0 auto',
               background: 'white'
             }}>
-              {/* Company Header with Logo */}
-              <div className="text-center mb-3">
-                {!logoError ? (
-                  <img
-                    src={companyLogo}
-                    alt="B2BinDemand Logo"
-                    onError={handleLogoError}
-                    style={{
-                      height: '50px',
-                      width: 'auto',
-                      marginBottom: '10px',
-                      objectFit: 'contain'
-                    }}
-                  />
-                ) : (
-                  <div style={{ height: '50px', marginBottom: '10px' }}></div>
-                )}
-                <p className="small text-muted mb-0 text-wrap">
-                  8th Floor SkyVista, 805, Mhada Colony, Viman Nagar, Pune, Maharashtra 411014
-                </p>
-              </div>
+              {/* Company Header */}
+              {(() => {
+                const isPC = employee?.pf_amount != null && parseInt(employee.pf_amount) === 0;
+                const co = isPC ? COMPANY_INFO.pc : COMPANY_INFO.b2b;
+                return (
+                  <div className="text-center mb-3">
+                    {isPC ? (
+                      <div style={{ fontSize: 24, fontWeight: 900, color: co.accent, letterSpacing: 1, marginBottom: 8 }}>{co.name}</div>
+                    ) : !logoError ? (
+                      <img src={companyLogo} alt="B2BinDemand Logo" onError={handleLogoError}
+                        style={{ height: '50px', width: 'auto', marginBottom: '10px', objectFit: 'contain' }} />
+                    ) : (
+                      <div style={{ fontSize: 20, fontWeight: 900, color: co.accent, marginBottom: 8 }}>{co.name}</div>
+                    )}
+                    <p className="small text-muted mb-0 text-wrap">{co.address}</p>
+                  </div>
+                );
+              })()}
 
               {/* Title */}
               <h3 className="text-center fw-bold text-decoration-underline mb-3" style={{ fontSize: '15px' }}>
@@ -1216,7 +1228,7 @@ const SalarySlip = () => {
                       const dtV = bdown.dt !== null ? bdown.dt : selectedSlipAmounts.deduction;
                       const absentDeduct = (selectedSlipAmounts.absentDays + selectedSlipAmounts.unpaidLeaveDays) * selectedSlipAmounts.perDaySalary;
                       return (<>
-                        <tr><td className="py-1 ps-2">PF (Provident Fund)</td><td className="text-end py-1 pe-2">{pfV > 0 ? formatCurrency(pfV) : '0'}</td></tr>
+                        {pfV > 0 && <tr><td className="py-1 ps-2">PF (Provident Fund)</td><td className="text-end py-1 pe-2">{formatCurrency(pfV)}</td></tr>}
                         <tr><td className="py-1 ps-2">Professional Tax</td><td className="text-end py-1 pe-2">{ptV > 0 ? formatCurrency(ptV) : '0'}</td></tr>
                         <tr><td className="py-1 ps-2">TDS</td><td className="text-end py-1 pe-2">0</td></tr>
                         {(selectedSlipAmounts.absentDays + selectedSlipAmounts.unpaidLeaveDays) > 0 && (

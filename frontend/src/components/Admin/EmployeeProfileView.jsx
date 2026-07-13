@@ -561,15 +561,25 @@ const EmployeeProfileView = () => {
 
           <div style={{ flex: 1 }}>
             <h2 style={{ color: '#fff', fontWeight: 800, margin: 0, fontSize: 22 }}>{fullName}</h2>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-              <span style={{ background: 'rgba(255,255,255,0.15)', color: '#e0e7ff', borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>{employee.employee_id}</span>
-              <span style={{ background: 'rgba(255,255,255,0.15)', color: '#e0e7ff', borderRadius: 20, padding: '2px 10px', fontSize: 11 }}>{employee.designation || 'N/A'}</span>
-              <span style={{ background: 'rgba(255,255,255,0.15)', color: '#e0e7ff', borderRadius: 20, padding: '2px 10px', fontSize: 11 }}>{employee.department || 'N/A'}</span>
-              <span style={{
-                background: employee.is_active !== false ? '#22c55e' : '#ef4444',
-                color: '#fff', borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 700
-              }}>{employee.is_active !== false ? '● Active' : '● Inactive'}</span>
-            </div>
+            {(() => {
+              const isPropCulture = employee.pf_amount != null && parseInt(employee.pf_amount) === 0;
+              const companyName = isPropCulture ? 'PropCulture' : 'B2B InDemand';
+              const companyBg   = isPropCulture ? '#0d7b6f' : 'rgba(255,255,255,0.15)';
+              return (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                  <span style={{ background: 'rgba(255,255,255,0.15)', color: '#e0e7ff', borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>{employee.employee_id}</span>
+                  <span style={{ background: 'rgba(255,255,255,0.15)', color: '#e0e7ff', borderRadius: 20, padding: '2px 10px', fontSize: 11 }}>{employee.designation || 'N/A'}</span>
+                  <span style={{ background: 'rgba(255,255,255,0.15)', color: '#e0e7ff', borderRadius: 20, padding: '2px 10px', fontSize: 11 }}>{employee.department || 'N/A'}</span>
+                  <span style={{ background: companyBg, color: '#fff', borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 700, border: '1px solid rgba(255,255,255,0.3)' }}>
+                    🏢 {companyName}
+                  </span>
+                  <span style={{
+                    background: employee.is_active !== false ? '#22c55e' : '#ef4444',
+                    color: '#fff', borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 700
+                  }}>{employee.is_active !== false ? '● Active' : '● Inactive'}</span>
+                </div>
+              );
+            })()}
           </div>
 
           <Button
@@ -629,6 +639,9 @@ const EmployeeProfileView = () => {
             <Col lg={4}>
               <Section title="Employment Details" icon={<FaBriefcase />} color="#0ea5e9">
                 <Info label="Employee ID"      value={employee.employee_id}       icon={<FaIdCard />} />
+                <Info label="Company"
+                  value={employee.pf_amount != null && parseInt(employee.pf_amount) === 0 ? 'PropCulture' : 'B2B InDemand'}
+                  icon={<FaBuilding />} />
                 <Info label="Designation"      value={employee.designation}       icon={<FaUserTie />} />
                 <Info label="Department"       value={employee.department}        icon={<FaBuilding />} />
                 <Info label="Reporting Manager" value={employee.reporting_manager} icon={<FaUserTie />} />
