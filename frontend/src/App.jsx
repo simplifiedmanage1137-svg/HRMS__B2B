@@ -35,6 +35,7 @@ const EmployeeProfileView = lazy(() => import('./components/Admin/EmployeeProfil
 const AdminRatings        = lazy(() => import('./components/Admin/AdminRatings'));
 const Teams               = lazy(() => import('./components/Admin/Teams'));
 const PayrollAdjustment   = lazy(() => import('./components/Admin/PayrollAdjustment'));
+const DeductionManager    = lazy(() => import('./components/Admin/DeductionManager'));
 
 // Manager — lazy loaded
 const ManagerDashboard = lazy(() => import('./components/Manager/Dashboard'));
@@ -250,6 +251,13 @@ function AppContent() {
             <Route path="/admin/payroll" element={
               <PrivateRoute allowedRoles={['admin', 'sub_admin']}>
                 <PayrollAdjustment />
+              </PrivateRoute>
+            } />
+
+            {/* Deductions */}
+            <Route path="/admin/deductions" element={
+              <PrivateRoute allowedRoles={['admin', 'sub_admin']}>
+                <DeductionManager />
               </PrivateRoute>
             } />
 

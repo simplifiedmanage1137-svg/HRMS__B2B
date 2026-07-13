@@ -1,5 +1,6 @@
 const supabase = require('../config/supabase');
 const { isDateHoliday, getHolidayName } = require('../data/holidays');
+const { getDeductionTotal } = require('./deductionController');
 
 const FIXED_WORKING_DAYS = 22;
 // Helper function to get month name
@@ -431,8 +432,11 @@ exports.generateSalarySlip = async (req, res) => {
         const ptAmount = isPFApplicable ? 200 : 0;
         const dtDeduction = basicSalary > 0 ? (isPFApplicable ? pfAmount + ptAmount : 200) : 0;
 
+        // Custom admin deductions for this employee/month/year
+        const customDeduction = parseFloat((await getDeductionTotal(employee_id, month, year)).toFixed(2));
+
         // Net salary
-        const netSalary = parseFloat(Math.max(0, basicSalary + overtimeAmount - effectiveUnpaidDeduction - dtDeduction).toFixed(2));
+        const netSalary = parseFloat(Math.max(0, basicSalary + overtimeAmount - effectiveUnpaidDeduction - dtDeduction - customDeduction).toFixed(2));
 
         const salaryData = {
             employee_id,
@@ -453,6 +457,7 @@ exports.generateSalarySlip = async (req, res) => {
             overtime_hours:     overtimeHours,
             overtime_amount:    overtimeAmount,
             dt:                 dtDeduction,
+            custom_deduction:   customDeduction,
             net_salary:         netSalary,
             generated_date:     new Date().toISOString(),
             is_paid:            false

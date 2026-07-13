@@ -204,6 +204,11 @@ export const API_ENDPOINTS = {
   GEOFENCE_GET:    (id) => ep(`/api/geofence/${id}`),
   GEOFENCE_CHECK:  ep('/api/geofence/check'),
 
+  // Deductions
+  DEDUCTIONS:                ep('/api/deductions'),
+  DEDUCTIONS_EMPLOYEE:       (employeeId) => ep(`/api/deductions/employee/${employeeId}`),
+  DEDUCTION_DELETE:          (id) => ep(`/api/deductions/${id}`),
+
   // Performance Reviews
   PERFORMANCE_REVIEWABLE:       ep('/api/performance/reviewable'),
   PERFORMANCE_SUBMIT:           ep('/api/performance/submit'),

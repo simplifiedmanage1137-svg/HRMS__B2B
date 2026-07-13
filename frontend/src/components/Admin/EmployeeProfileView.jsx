@@ -436,16 +436,27 @@ const EmployeeProfileView = () => {
   };
 
   const exportPayroll = () => {
-    const rows = salaryList.map((s, i) => ({
-      'Sr': i + 1,
-      'Month': s.month_name || s.month,
-      'Year': s.year,
-      'Gross Salary': s.gross_salary,
-      'In-Hand Salary': s.in_hand_salary,
-      'Deductions': s.total_deductions,
-      'Net Pay': s.net_pay || s.in_hand_salary,
-      'Status': s.status || 'Paid'
-    }));
+    const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const rows = salaryList.map((s, i) => {
+      const customDed = parseFloat(s.custom_deduction || 0);
+      const absentDed = parseFloat(s.unpaid_deduction || 0);
+      const dtDed     = parseFloat(s.dt || 0);
+      const totalDed  = dtDed + absentDed + customDed;
+      return {
+        'Sr': i + 1,
+        'Month': MONTH_NAMES[(parseInt(s.month) - 1)] || s.month,
+        'Year': s.year,
+        'Monthly Salary': s.monthly_salary,
+        'Basic (Earned)': s.basic_salary,
+        'Overtime': s.overtime_amount || 0,
+        'Fixed Deduction (DT/PF+PT)': dtDed,
+        'Absent Deduction': absentDed,
+        'Other Deduction': customDed,
+        'Total Deductions': totalDed,
+        'Net Salary': s.net_salary,
+        'Status': s.is_paid ? 'Paid' : 'Unpaid',
+      };
+    });
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Payroll');

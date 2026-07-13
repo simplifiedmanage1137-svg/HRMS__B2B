@@ -39,6 +39,7 @@ const performanceRoutes   = require('./routes/performanceRoutes');
 const loginFeedRoutes     = require('./routes/loginFeedRoutes');
 const noticeBoardRoutes   = require('./routes/noticeBoardRoutes');
 const teamRoutes          = require('./routes/teamRoutes');
+const deductionRoutes     = require('./routes/deductionRoutes');
 
 const attendanceController = require('./controllers/attendanceController');
 const cronRoutes           = require('./routes/cronRoutes');
@@ -216,6 +217,7 @@ app.use('/api/announcements',    authenticateToken, announcementRoutes);
 app.use('/api/ratings',          ratingRoutes(authenticateToken, requireAdmin));
 app.use('/api/performance',      performanceRoutes(authenticateToken));
 app.use('/api/teams',            authenticateToken, teamRoutes);
+app.use('/api/deductions',       authenticateToken, deductionRoutes);
 
 // ─── Utility endpoints ────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({

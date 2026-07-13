@@ -1226,6 +1226,7 @@ const SalarySlip = () => {
                       const pfV = bdown.pf;
                       const ptV = bdown.pt;
                       const dtV = bdown.dt !== null ? bdown.dt : selectedSlipAmounts.deduction;
+                      const customDed = parseFloat(selectedSlip?.custom_deduction || 0);
                       const absentDeduct = (selectedSlipAmounts.absentDays + selectedSlipAmounts.unpaidLeaveDays) * selectedSlipAmounts.perDaySalary;
                       return (<>
                         {pfV > 0 && <tr><td className="py-1 ps-2">PF (Provident Fund)</td><td className="text-end py-1 pe-2">{formatCurrency(pfV)}</td></tr>}
@@ -1245,9 +1246,15 @@ const SalarySlip = () => {
                             <td className="text-end fw-bold text-danger py-1 pe-2">{formatCurrency(dtV)}</td>
                           </tr>
                         )}
+                        {customDed > 0 && (
+                          <tr style={{ backgroundColor: '#ffe0e0' }}>
+                            <td className="py-1 ps-2 text-danger fw-semibold">Other Deduction</td>
+                            <td className="text-end fw-bold text-danger py-1 pe-2">{formatCurrency(customDed)}</td>
+                          </tr>
+                        )}
                         <tr style={{ backgroundColor: '#f2f2f2' }}>
                           <td className="fw-bold py-1 ps-2">Total Deductions</td>
-                          <td className="text-end fw-bold text-danger py-1 pe-2">{formatCurrency(pfV + ptV + dtV + absentDeduct)}</td>
+                          <td className="text-end fw-bold text-danger py-1 pe-2">{formatCurrency(pfV + ptV + dtV + absentDeduct + customDed)}</td>
                         </tr>
                       </>);
                     })()}

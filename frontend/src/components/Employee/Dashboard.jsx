@@ -308,6 +308,9 @@ const EmployeeDashboard = () => {
   const [allRatings, setAllRatings] = useState([]);
   const [showRatingHistory, setShowRatingHistory] = useState(false);
 
+  // Current-month deductions
+  const [myDeductions, setMyDeductions] = useState([]);
+
   // Chart view toggle: 'weekly' | 'monthly'
   const [chartView, setChartView] = useState('weekly');
 
@@ -566,7 +569,8 @@ const EmployeeDashboard = () => {
         fetchLeaveRequests(),
         fetchTodayAttendance(),
         fetchAttendanceHistory(),
-        fetchTodayEvents()
+        fetchTodayEvents(),
+        fetchMyDeductions(),
       ]);
       loadUpcomingHolidays();
     } catch (error) {
@@ -592,6 +596,20 @@ const EmployeeDashboard = () => {
     } catch (error) {
       console.error('Error fetching employee:', error);
       showNotification(error.response?.data?.message || 'Failed to load profile data', 'danger');
+    }
+  };
+
+  const fetchMyDeductions = async () => {
+    try {
+      const now = new Date();
+      const month = now.getMonth() + 1;
+      const year  = now.getFullYear();
+      const res = await axios.get(
+        `${API_ENDPOINTS.DEDUCTIONS_EMPLOYEE(user.employeeId)}?month=${month}&year=${year}`
+      );
+      setMyDeductions(res.data?.data || []);
+    } catch {
+      // non-critical; silently ignore
     }
   };
 
@@ -1012,6 +1030,39 @@ const EmployeeDashboard = () => {
 
       <AnnouncementBanner />
       <EmployeeNotices />
+
+      {/* Salary deduction notice */}
+      {myDeductions.length > 0 && (() => {
+        const total = myDeductions.reduce((s, d) => s + parseFloat(d.amount || 0), 0);
+        return (
+          <Alert
+            variant="warning"
+            className="mb-3 py-2 small"
+            style={{ borderLeft: '4px solid #dc3545', background: '#fff5f5' }}
+          >
+            <div className="d-flex align-items-start gap-2">
+              <FaExclamationTriangle className="text-danger mt-1 flex-shrink-0" size={14} />
+              <div>
+                <div className="fw-semibold text-danger mb-1">
+                  Salary Deduction Notice — {new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}
+                </div>
+                <div className="mb-1">
+                  A total deduction of{' '}
+                  <strong>₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>{' '}
+                  has been applied to your salary this month.
+                </div>
+                <ul className="mb-0 ps-3">
+                  {myDeductions.map(d => (
+                    <li key={d.id}>
+                      ₹{parseFloat(d.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })} — {d.reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </Alert>
+        );
+      })()}
 
       {error && (
         <Alert variant="danger" onClose={() => setError('')} dismissible className="mb-3 py-2">

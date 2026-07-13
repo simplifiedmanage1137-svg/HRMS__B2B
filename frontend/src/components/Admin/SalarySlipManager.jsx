@@ -107,9 +107,10 @@ const COMPANY = {
 // ── PDF HTML template ──────────────────────────────────────────────────────────
 const buildPDFHTML = (slip, emp, a, monthName, logoBase64) => {
   const bd = getDeductionBreakdown(slip, emp);
-  const pfAmt  = bd.pf;
-  const ptAmt  = bd.pt;
-  const dtAmt  = bd.dt !== null ? bd.dt : a.deduction;
+  const pfAmt     = bd.pf;
+  const ptAmt     = bd.pt;
+  const dtAmt     = bd.dt !== null ? bd.dt : a.deduction;
+  const customDed = parseFloat(slip?.custom_deduction || 0);
   const co = isPropCulture(emp) ? COMPANY.pc : COMPANY.b2b;
   const cycleLabel = slip.cycle_start_date && slip.cycle_end_date
     ? `${new Date(slip.cycle_start_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} – ${new Date(slip.cycle_end_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`
@@ -192,7 +193,8 @@ const buildPDFHTML = (slip, emp, a, monthName, logoBase64) => {
               <tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#475569;">TDS</td><td style="padding:7px 0;text-align:right;">₹0</td></tr>
               ${(a.absentDays + a.unpaidLeaveDays) > 0 ? `<tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#dc2626;font-weight:600;">Absent Deduction (${a.absentDays > 0 ? a.absentDays + ' absent' : ''}${a.unpaidLeaveDays > 0 ? (a.absentDays > 0 ? ' + ' : '') + a.unpaidLeaveDays + ' unpaid leave' : ''} × ₹${fmtNum(a.perDaySalary)}/day)</td><td style="padding:7px 0;text-align:right;color:#dc2626;font-weight:700;">₹${fmtNum((a.absentDays + a.unpaidLeaveDays) * a.perDaySalary)}</td></tr>` : ''}
               ${dtAmt > 0 ? `<tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#b45309;font-weight:600;">DT (Fixed Deduction)</td><td style="padding:7px 0;text-align:right;color:#b45309;font-weight:700;">₹${fmtNum(dtAmt)}</td></tr>` : ''}
-              <tr style="background:#f8fafc;"><td style="padding:8px 4px;font-weight:700;color:#dc2626;">Total Deductions</td><td style="padding:8px 4px;text-align:right;font-weight:700;color:#dc2626;">₹${fmtNum(pfAmt + ptAmt + dtAmt + (a.absentDays + a.unpaidLeaveDays) * a.perDaySalary)}</td></tr>
+              ${customDed > 0 ? `<tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#dc2626;font-weight:600;">Other Deduction</td><td style="padding:7px 0;text-align:right;color:#dc2626;font-weight:700;">₹${fmtNum(customDed)}</td></tr>` : ''}
+              <tr style="background:#f8fafc;"><td style="padding:8px 4px;font-weight:700;color:#dc2626;">Total Deductions</td><td style="padding:8px 4px;text-align:right;font-weight:700;color:#dc2626;">₹${fmtNum(pfAmt + ptAmt + dtAmt + (a.absentDays + a.unpaidLeaveDays) * a.perDaySalary + customDed)}</td></tr>
             </table>
           </td>
         </tr>
@@ -527,7 +529,10 @@ const SalarySlipManager = ({ employee, refreshKey }) => {
                 />
               )}
               {dtAmt > 0 && <SalaryRow label="DT (Fixed Deduction)" value={dtAmt} accent="#b45309" />}
-              <SalaryRow label="Total Deductions" value={pfAmt + ptAmt + dtAmt + (a.absentDays + a.unpaidLeaveDays) * a.perDaySalary} bold accent="#dc2626" last />
+              {parseFloat(slip?.custom_deduction || 0) > 0 && (
+                <SalaryRow label="Other Deduction" value={parseFloat(slip.custom_deduction)} accent="#dc2626" />
+              )}
+              <SalaryRow label="Total Deductions" value={pfAmt + ptAmt + dtAmt + (a.absentDays + a.unpaidLeaveDays) * a.perDaySalary + parseFloat(slip?.custom_deduction || 0)} bold accent="#dc2626" last />
             </div>
           </Col>
         </Row>
