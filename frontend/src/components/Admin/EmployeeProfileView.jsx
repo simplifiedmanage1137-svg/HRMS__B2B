@@ -405,6 +405,8 @@ const EmployeeProfileView = () => {
 
   // ── reset profile completion ────────────────────────────────────────────────
   const [resettingProfile, setResettingProfile] = useState(false);
+  const [togglingProfileForm, setTogglingProfileForm] = useState(false);
+
   const handleResetProfile = async () => {
     if (!window.confirm(`Reset profile completion for ${employee.first_name} ${employee.last_name}? They will be prompted to complete their profile again on next login.`)) return;
     setResettingProfile(true);
@@ -415,6 +417,20 @@ const EmployeeProfileView = () => {
       alert(err.response?.data?.message || 'Failed to reset profile status.');
     } finally {
       setResettingProfile(false);
+    }
+  };
+
+  const handleToggleProfileForm = async () => {
+    setTogglingProfileForm(true);
+    try {
+      const res = await axios.post(API_ENDPOINTS.EMPLOYEE_TOGGLE_PROFILE_FORM(employee.id));
+      if (res.data.success) {
+        setEmployee(prev => ({ ...prev, require_profile_completion: res.data.require_profile_completion }));
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to toggle profile form.');
+    } finally {
+      setTogglingProfileForm(false);
     }
   };
 
@@ -621,10 +637,21 @@ const EmployeeProfileView = () => {
               size="sm"
               variant="warning"
               onClick={handleResetProfile}
-              disabled={resettingProfile}
+              disabled={resettingProfile || !employee.profile_completed}
               style={{ fontSize: 12, fontWeight: 600, borderRadius: 8 }}
+              title={!employee.profile_completed ? 'Profile is not yet complete' : 'Reset profile completion'}
             >
               {resettingProfile ? '...' : '↺ Reset Profile'}
+            </Button>
+            <Button
+              size="sm"
+              variant={employee.require_profile_completion ? 'success' : 'outline-secondary'}
+              onClick={handleToggleProfileForm}
+              disabled={togglingProfileForm || employee.profile_completed}
+              style={{ fontSize: 12, fontWeight: 600, borderRadius: 8 }}
+              title={employee.profile_completed ? 'Profile already complete' : 'Toggle whether this employee is required to fill the profile form'}
+            >
+              {togglingProfileForm ? '...' : employee.require_profile_completion ? '🔔 Form ON' : '🔕 Form OFF'}
             </Button>
           </div>
         </div>

@@ -298,7 +298,7 @@ export default function ProfileCompletion({ employee, onSkip }) {
               Skip for Now
             </button>
             <span style={{ fontSize: 11, color: '#cbd5e1', marginLeft: 6 }}>
-              (will reappear in 30 min)
+              (will reappear in 10 min)
             </span>
             {skipCountdown > 0 && (
               <span style={{ fontSize: 11, color: '#f97316', marginLeft: 6, fontWeight: 600 }}>

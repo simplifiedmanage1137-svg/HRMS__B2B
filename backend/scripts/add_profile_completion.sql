@@ -27,5 +27,9 @@ ALTER TABLE employees ADD COLUMN IF NOT EXISTS emergency_contact_name       VARC
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS emergency_contact_relation   VARCHAR(100);
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS emergency_contact            VARCHAR(20);
 
+-- Admin-controlled toggle: when TRUE, that employee is required to fill the profile form
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS require_profile_completion BOOLEAN DEFAULT FALSE;
+
 -- Mark existing employees as already complete so they don't see the onboarding screen
 UPDATE employees SET profile_completed = TRUE WHERE profile_completed IS NULL OR profile_completed = FALSE;
+-- Existing employees don't need to fill the form (toggle stays OFF by default)

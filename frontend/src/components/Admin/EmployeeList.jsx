@@ -25,6 +25,7 @@ const EmployeeList = () => {
   const [docLoading, setDocLoading] = useState(false);
   const [error, setError] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [togglingProfileForm, setTogglingProfileForm] = useState(null);
 
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -293,6 +294,23 @@ const EmployeeList = () => {
     setSelectedEmployee(null);
   };
 
+  const handleToggleProfileForm = async (emp, e) => {
+    e.stopPropagation();
+    setTogglingProfileForm(emp.id);
+    try {
+      const res = await axios.post(API_ENDPOINTS.EMPLOYEE_TOGGLE_PROFILE_FORM(emp.id));
+      if (res.data.success) {
+        setEmployees(prev => prev.map(e =>
+          e.id === emp.id ? { ...e, require_profile_completion: res.data.require_profile_completion } : e
+        ));
+      }
+    } catch {
+      // silent — toggle snaps back via state
+    } finally {
+      setTogglingProfileForm(null);
+    }
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -474,10 +492,24 @@ const EmployeeList = () => {
                         )}
                       </td>
                       <td className="d-none d-md-table-cell">
-                        {emp.profile_completed
-                          ? <Badge bg="success" className="px-2 py-1" style={{ fontSize: 10 }}>✓ Complete</Badge>
-                          : <Badge bg="warning" text="dark" className="px-2 py-1" style={{ fontSize: 10 }}>⚠ Pending</Badge>
-                        }
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                          {emp.profile_completed
+                            ? <Badge bg="success" className="px-2 py-1" style={{ fontSize: 10 }}>✓ Complete</Badge>
+                            : <Badge bg="warning" text="dark" className="px-2 py-1" style={{ fontSize: 10 }}>⚠ Pending</Badge>
+                          }
+                          <Form.Check
+                            type="switch"
+                            id={`profile-form-toggle-${emp.id}`}
+                            label={<span style={{ fontSize: 10, color: emp.require_profile_completion ? '#16a34a' : '#94a3b8' }}>
+                              {emp.require_profile_completion ? 'Form ON' : 'Form OFF'}
+                            </span>}
+                            checked={!!emp.require_profile_completion}
+                            disabled={togglingProfileForm === emp.id || emp.profile_completed}
+                            onChange={(e) => handleToggleProfileForm(emp, e)}
+                            style={{ fontSize: 11 }}
+                            title={emp.profile_completed ? 'Profile already complete' : emp.require_profile_completion ? 'Click to stop showing form' : 'Click to require employee to fill profile'}
+                          />
+                        </div>
                       </td>
                       <td onClick={e => e.stopPropagation()}>
                         <div className="d-flex gap-2 gap-md-3 align-items-center justify-content-center flex-wrap">

@@ -927,13 +927,18 @@ const EmployeeDashboard = () => {
     );
   }
 
-  // Show mandatory profile completion overlay for employees with incomplete profiles
-  if (!loading && employee && employee.profile_completed === false && ['employee','manager'].includes(user?.role)) {
+  // Show profile completion overlay when admin has enabled the toggle AND employee hasn't completed it
+  if (
+    !loading && employee &&
+    employee.require_profile_completion === true &&
+    employee.profile_completed !== true &&
+    ['employee', 'manager'].includes(user?.role)
+  ) {
     const skipKey = `profile_skip_until_${employee.employee_id}`;
     const skipUntil = parseInt(localStorage.getItem(skipKey) || '0', 10);
     if (Date.now() >= skipUntil) {
       const handleSkip = () => {
-        localStorage.setItem(skipKey, String(Date.now() + 30 * 60 * 1000));
+        localStorage.setItem(skipKey, String(Date.now() + 10 * 60 * 1000));
         window.location.reload();
       };
       return <ProfileCompletion employee={employee} onSkip={handleSkip} />;

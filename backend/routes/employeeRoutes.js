@@ -550,6 +550,33 @@ router.post('/:id/reset-profile', verifyToken, isAdmin, async (req, res) => {
     }
 });
 
+// Admin toggles whether an employee must fill the profile completion form
+router.post('/:id/toggle-profile-form', verifyToken, isAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        // Read current value then flip it
+        const { data: current, error: fetchErr } = await supabase
+            .from('employees')
+            .select('require_profile_completion')
+            .eq('id', id)
+            .single();
+        if (fetchErr) return res.status(500).json({ success: false, message: fetchErr.message });
+
+        const newValue = !current.require_profile_completion;
+        const { data, error } = await supabase
+            .from('employees')
+            .update({ require_profile_completion: newValue, updated_at: new Date().toISOString() })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) return res.status(500).json({ success: false, message: error.message });
+        res.json({ success: true, require_profile_completion: newValue, employee: data });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 // Update employee (Admin only)
 router.put('/:id', verifyToken, isAdmin, async (req, res) => {
     try {
