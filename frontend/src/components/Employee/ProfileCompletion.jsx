@@ -43,6 +43,7 @@ export default function ProfileCompletion({ employee, onSkip }) {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [globalError, setGlobalError] = useState('');
+  const [docWarning, setDocWarning] = useState('');
 
   // ── Skip countdown (shows remaining seconds until re-appearance after skip) ──
   const [skipCountdown, setSkipCountdown] = useState(0);
@@ -170,18 +171,26 @@ export default function ProfileCompletion({ employee, onSkip }) {
 
     setSubmitting(true);
     setGlobalError('');
+    setDocWarning('');
+
+    // Step 1: Save profile fields — this MUST succeed
     try {
-      // 1. Save profile fields
       await axios.post(API_ENDPOINTS.EMPLOYEE_COMPLETE_PROFILE, {
         ...form,
         pan_number:    form.pan_number.toUpperCase(),
         ifsc_code:     form.ifsc_code.toUpperCase(),
         aadhar_number: form.aadhar_number.replace(/\s/g,''),
       });
+    } catch (err) {
+      setGlobalError(err.response?.data?.message || 'Failed to save profile. Please try again.');
+      setSubmitting(false);
+      return;
+    }
 
-      // 2. Upload documents if any selected
-      const hasFiles = Object.values(docs).some(Boolean);
-      if (hasFiles) {
+    // Step 2: Upload documents — optional, non-fatal
+    const hasFiles = Object.values(docs).some(Boolean);
+    if (hasFiles) {
+      try {
         const fd = new FormData();
         Object.entries(docs).forEach(([key, file]) => {
           if (file) fd.append(key, file);
@@ -191,16 +200,17 @@ export default function ProfileCompletion({ employee, onSkip }) {
           fd,
           { headers: { 'Content-Type': 'multipart/form-data' } }
         );
+      } catch (err) {
+        // Documents failed but profile is saved — show warning, still complete
+        const detail = err.response?.data?.error || err.response?.data?.message || err.message;
+        setDocWarning(`Profile saved! Documents could not be uploaded (${detail}). You can upload them later from your profile settings.`);
       }
-
-      // 3. Update local auth state so overlay disappears
-      updateUser({ profile_completed: true });
-      setDone(true);
-    } catch (err) {
-      setGlobalError(err.response?.data?.message || 'Something went wrong. Please try again.');
-    } finally {
-      setSubmitting(false);
     }
+
+    // Step 3: Mark complete in local state regardless of document upload result
+    updateUser({ profile_completed: true });
+    setSubmitting(false);
+    setDone(true);
   };
 
   // ── Success screen ────────────────────────────────────────────────────────────
@@ -212,6 +222,11 @@ export default function ProfileCompletion({ employee, onSkip }) {
           <FaCheckCircle size={56} color="#22c55e" className="mb-3" />
           <h3 className="fw-bold mb-2" style={{ color: '#1e3a5f' }}>Profile Complete!</h3>
           <p className="text-muted mb-4">Welcome aboard, {form.first_name}! Your profile has been saved successfully.</p>
+          {docWarning && (
+            <Alert variant="warning" className="text-start small mb-4">
+              <strong>Note:</strong> {docWarning}
+            </Alert>
+          )}
           <Button
             variant="success"
             size="lg"
