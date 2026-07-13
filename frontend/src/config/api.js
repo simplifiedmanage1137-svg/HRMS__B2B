@@ -52,6 +52,8 @@ export const API_ENDPOINTS = {
   EMPLOYEE_DOCUMENT_DELETE: (employeeId, documentType) =>
     ep(`/api/employees/${employeeId}/documents/${documentType}`),
   EMPLOYEE_DELETE: (id) => ep(`/api/employees/${id}`),
+  EMPLOYEE_COMPLETE_PROFILE: ep('/api/employees/complete-profile'),
+  EMPLOYEE_RESET_PROFILE:    (id) => ep(`/api/employees/${id}/reset-profile`),
   EMPLOYEE_UPDATE_ROLE: (id) => ep(`/api/employees/${id}/role`),
   EMPLOYEE_RESET_PASSWORD: (id) => ep(`/api/employees/${id}/reset-password`),
   TODAY_EVENTS:    ep('/api/employees/today-events'),

@@ -403,6 +403,21 @@ const EmployeeProfileView = () => {
     return 'N/A';
   };
 
+  // ── reset profile completion ────────────────────────────────────────────────
+  const [resettingProfile, setResettingProfile] = useState(false);
+  const handleResetProfile = async () => {
+    if (!window.confirm(`Reset profile completion for ${employee.first_name} ${employee.last_name}? They will be prompted to complete their profile again on next login.`)) return;
+    setResettingProfile(true);
+    try {
+      await axios.post(API_ENDPOINTS.EMPLOYEE_RESET_PROFILE(employee.id));
+      setEmployee(prev => ({ ...prev, profile_completed: false }));
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to reset profile status.');
+    } finally {
+      setResettingProfile(false);
+    }
+  };
+
   // ── export ─────────────────────────────────────────────────────────────────
   const exportAttendance = () => {
     const rows = attHistory.map((r, i) => ({
@@ -593,14 +608,25 @@ const EmployeeProfileView = () => {
             })()}
           </div>
 
-          <Button
-            size="sm"
-            variant="light"
-            onClick={() => navigate(`/admin/edit-employee/${employee.id}`)}
-            style={{ fontSize: 12, fontWeight: 600, borderRadius: 8 }}
-          >
-            <FaEdit className="me-1" size={11} /> Edit Profile
-          </Button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Button
+              size="sm"
+              variant="light"
+              onClick={() => navigate(`/admin/edit-employee/${employee.id}`)}
+              style={{ fontSize: 12, fontWeight: 600, borderRadius: 8 }}
+            >
+              <FaEdit className="me-1" size={11} /> Edit Profile
+            </Button>
+            <Button
+              size="sm"
+              variant="warning"
+              onClick={handleResetProfile}
+              disabled={resettingProfile}
+              style={{ fontSize: 12, fontWeight: 600, borderRadius: 8 }}
+            >
+              {resettingProfile ? '...' : '↺ Reset Profile'}
+            </Button>
+          </div>
         </div>
       </div>
 

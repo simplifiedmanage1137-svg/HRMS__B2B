@@ -44,6 +44,7 @@ import { Bar, Doughnut } from 'react-chartjs-2';
 import { holidays } from '../../data/holidays';
 import EmployeeNotices from './EmployeeNotices';
 import AnnouncementBanner from './AnnouncementBanner';
+import ProfileCompletion from './ProfileCompletion';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -924,6 +925,19 @@ const EmployeeDashboard = () => {
         </div>
       </div>
     );
+  }
+
+  // Show mandatory profile completion overlay for employees with incomplete profiles
+  if (!loading && employee && employee.profile_completed === false && ['employee','manager'].includes(user?.role)) {
+    const skipKey = `profile_skip_until_${employee.employee_id}`;
+    const skipUntil = parseInt(localStorage.getItem(skipKey) || '0', 10);
+    if (Date.now() >= skipUntil) {
+      const handleSkip = () => {
+        localStorage.setItem(skipKey, String(Date.now() + 30 * 60 * 1000));
+        window.location.reload();
+      };
+      return <ProfileCompletion employee={employee} onSkip={handleSkip} />;
+    }
   }
 
   return (

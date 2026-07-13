@@ -132,10 +132,19 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const updateUser = (patch) => {
+    setUser(prev => {
+      const updated = { ...prev, ...patch };
+      const { token: t, refreshToken: r } = loadFromStorage();
+      persistToStorage(updated, t, r);
+      return updated;
+    });
+  };
+
   // ─── value ──────────────────────────────────────────────────────────────────
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

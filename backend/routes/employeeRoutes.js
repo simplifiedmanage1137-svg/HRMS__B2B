@@ -494,6 +494,62 @@ router.patch('/:id/role', verifyToken, isAdmin, async (req, res) => {
     }
 });
 
+// Employee completes their own onboarding profile
+router.post('/complete-profile', verifyToken, async (req, res) => {
+    try {
+        const employeeId = req.user?.employeeId;
+        if (!employeeId) return res.status(400).json({ success: false, message: 'Employee ID missing from token' });
+
+        const ALLOWED_FIELDS = [
+            'first_name','middle_name','last_name','dob','gender','blood_group',
+            'phone','personal_email','address','city','state','pincode',
+            'bank_account_name','account_number','ifsc_code','branch_name',
+            'pan_number','aadhar_number','uan',
+            'emergency_contact','emergency_contact_name','emergency_contact_relation',
+        ];
+
+        const updates = {};
+        for (const field of ALLOWED_FIELDS) {
+            if (req.body[field] !== undefined) {
+                updates[field] = req.body[field] || null;
+            }
+        }
+        updates.profile_completed = true;
+        updates.updated_at = new Date().toISOString();
+
+        const { data, error } = await supabase
+            .from('employees')
+            .update(updates)
+            .eq('employee_id', employeeId)
+            .select()
+            .single();
+
+        if (error) return res.status(500).json({ success: false, message: error.message });
+        res.json({ success: true, message: 'Profile completed successfully', employee: data });
+    } catch (err) {
+        console.error('complete-profile error:', err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// Admin resets an employee's profile completion status
+router.post('/:id/reset-profile', verifyToken, isAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { data, error } = await supabase
+            .from('employees')
+            .update({ profile_completed: false, updated_at: new Date().toISOString() })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) return res.status(500).json({ success: false, message: error.message });
+        res.json({ success: true, message: 'Profile completion reset. Employee will be prompted to re-complete on next login.', employee: data });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 // Update employee (Admin only)
 router.put('/:id', verifyToken, isAdmin, async (req, res) => {
     try {

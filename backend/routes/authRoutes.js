@@ -132,7 +132,8 @@ router.post('/login', loginLimiter, async (req, res) => {
                 lastName: user.last_name,
                 department: user.department,
                 designation: user.designation,
-                profile_image: user.profile_image
+                profile_image: user.profile_image,
+                profile_completed: user.profile_completed ?? true
             }
         });
 
@@ -163,7 +164,7 @@ router.post('/refresh', async (req, res) => {
         try {
             const result = await supabase
                 .from('employees')
-                .select('id, email, role, employee_id, first_name, last_name, department, designation, profile_image, is_active')
+                .select('id, email, role, employee_id, first_name, last_name, department, designation, profile_image, is_active, profile_completed')
                 .eq('id', decoded.id)
                 .maybeSingle();
             data = result.data;
@@ -192,7 +193,8 @@ router.post('/refresh', async (req, res) => {
                 lastName: user.last_name,
                 department: user.department,
                 designation: user.designation,
-                profile_image: user.profile_image
+                profile_image: user.profile_image,
+                profile_completed: user.profile_completed ?? true
             }
         });
 
@@ -232,7 +234,7 @@ router.post('/verify', async (req, res) => {
         try {
             const result = await supabase
                 .from('employees')
-                .select('id, email, role, employee_id, first_name, last_name, department, designation, profile_image, is_active')
+                .select('id, email, role, employee_id, first_name, last_name, department, designation, profile_image, is_active, profile_completed')
                 .eq('id', decoded.id)
                 .maybeSingle();
             user = result.data;
@@ -260,7 +262,8 @@ router.post('/verify', async (req, res) => {
                 lastName: user.last_name,
                 department: user.department,
                 designation: user.designation,
-                profile_image: user.profile_image
+                profile_image: user.profile_image,
+                profile_completed: user.profile_completed ?? true
             }
         });
 

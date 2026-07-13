@@ -13,6 +13,7 @@ const EmployeeList = () => {
   const [employees, setEmployees] = useState([]);
   const [filteredEmployees, setFilteredEmployees] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [profileFilter, setProfileFilter] = useState('all');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -33,10 +34,10 @@ const EmployeeList = () => {
     fetchEmployees();
   }, []);
 
-  // Filter employees whenever searchTerm or employees change
+  // Filter employees whenever searchTerm, profileFilter, or employees change
   useEffect(() => {
     filterEmployees();
-  }, [searchTerm, employees]);
+  }, [searchTerm, profileFilter, employees]);
 
   // Refresh employees when update occurs
   useEffect(() => {
@@ -79,32 +80,25 @@ const EmployeeList = () => {
   };
 
   const filterEmployees = () => {
-    if (!searchTerm.trim()) {
-      setFilteredEmployees(employees);
-      return;
+    let filtered = employees;
+
+    if (profileFilter === 'completed')  filtered = filtered.filter(e => e.profile_completed === true);
+    if (profileFilter === 'incomplete') filtered = filtered.filter(e => e.profile_completed !== true);
+
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase().trim();
+      filtered = filtered.filter(emp =>
+        (emp.employee_id  || '').toLowerCase().includes(q) ||
+        (emp.first_name   || '').toLowerCase().includes(q) ||
+        (emp.last_name    || '').toLowerCase().includes(q) ||
+        `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase().includes(q) ||
+        (emp.middle_name  || '').toLowerCase().includes(q) ||
+        (emp.department   || '').toLowerCase().includes(q) ||
+        (emp.designation  || '').toLowerCase().includes(q)
+      );
     }
 
-    const searchLower = searchTerm.toLowerCase().trim();
-    const filtered = employees.filter(emp => {
-      const employeeId = (emp.employee_id || '').toLowerCase();
-      const firstName = (emp.first_name || '').toLowerCase();
-      const lastName = (emp.last_name || '').toLowerCase();
-      const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase();
-      const middleName = (emp.middle_name || '').toLowerCase();
-      const department = (emp.department || '').toLowerCase();
-      const designation = (emp.designation || '').toLowerCase();
-
-      return employeeId.includes(searchLower) ||
-             firstName.includes(searchLower) ||
-             lastName.includes(searchLower) ||
-             fullName.includes(searchLower) ||
-             middleName.includes(searchLower) ||
-             department.includes(searchLower) ||
-             designation.includes(searchLower);
-    });
-
     setFilteredEmployees(filtered);
-    console.log(`🔍 Search: "${searchTerm}" found ${filtered.length} employees`);
   };
 
   const clearSearch = () => {
@@ -373,6 +367,17 @@ const EmployeeList = () => {
                   </Button>
                 )}
               </InputGroup>
+              <Form.Select
+                size="sm"
+                value={profileFilter}
+                onChange={e => setProfileFilter(e.target.value)}
+                style={{ width: 160, flexShrink: 0 }}
+                title="Filter by profile status"
+              >
+                <option value="all">All Profiles</option>
+                <option value="completed">✅ Completed</option>
+                <option value="incomplete">⚠️ Incomplete</option>
+              </Form.Select>
               <Button
                 variant="outline-primary"
                 size="sm"
@@ -425,6 +430,7 @@ const EmployeeList = () => {
                   <th className="text-nowrap text-dark fw-normal d-none d-sm-table-cell" style={{ width: '10%' }}>Employment Type</th>
                   <th className="text-nowrap text-dark fw-normal d-none d-xl-table-cell" style={{ width: '10%' }}>Joining Date</th>
                   <th className="text-nowrap text-dark fw-normal d-none d-lg-table-cell" style={{ width: '10%' }}>Company</th>
+                  <th className="text-nowrap text-dark fw-normal d-none d-md-table-cell" style={{ width: '10%' }}>Profile</th>
                   <th className="text-nowrap text-dark fw-normal text-center" style={{ width: '15%' }}>Actions</th>
                 </tr>
               </thead>
@@ -466,6 +472,12 @@ const EmployeeList = () => {
                         ) : (
                           <Badge style={{ background: '#1e3a5f' }} className="px-2 py-1">B2B InDemand</Badge>
                         )}
+                      </td>
+                      <td className="d-none d-md-table-cell">
+                        {emp.profile_completed
+                          ? <Badge bg="success" className="px-2 py-1" style={{ fontSize: 10 }}>✓ Complete</Badge>
+                          : <Badge bg="warning" text="dark" className="px-2 py-1" style={{ fontSize: 10 }}>⚠ Pending</Badge>
+                        }
                       </td>
                       <td onClick={e => e.stopPropagation()}>
                         <div className="d-flex gap-2 gap-md-3 align-items-center justify-content-center flex-wrap">
