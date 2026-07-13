@@ -122,8 +122,8 @@ export default function ProfileCompletion({ employee, onSkip }) {
     if (s === 2) {
       if (!form.phone.trim())          errs.phone  = 'Phone number is required';
       else if (!isPhone(form.phone))   errs.phone  = 'Enter a valid 10-digit mobile number';
-      if (form.personal_email && !isEmail(form.personal_email))
-        errs.personal_email = 'Enter a valid email address';
+      if (!form.personal_email.trim()) errs.personal_email = 'Personal email is required';
+      else if (!isEmail(form.personal_email)) errs.personal_email = 'Enter a valid email address';
       if (!form.address.trim()) errs.address = 'Address is required';
       if (!form.city.trim())    errs.city    = 'City is required';
       if (!form.state.trim())   errs.state   = 'State is required';
@@ -150,14 +150,8 @@ export default function ProfileCompletion({ employee, onSkip }) {
       else if (!isPhone(form.emergency_contact))
         errs.emergency_contact = 'Enter a valid 10-digit mobile number';
     }
-    if (s === 7) {
-      if (!docs.profile_image && !employee?.profile_image)
-        errs.profile_image = 'Profile photo is required';
-      if (!docs.aadhar_card && !employee?.aadhar_card)
-        errs.aadhar_card = 'Aadhaar document is required';
-      if (!docs.pan_card && !employee?.pan_card)
-        errs.pan_card = 'PAN document is required';
-    }
+    // step 7: all document uploads are optional
+
     return errs;
   }, [form, docs, employee]);
 
@@ -440,7 +434,7 @@ const StepContact = ({ form, set, errors, email }) => (
       <TCol half><Field label="Mobile Number" required error={errors.phone}>
         <Form.Control size="sm" value={form.phone} onChange={set('phone')} placeholder="10-digit mobile" isInvalid={!!errors.phone} />
       </Field></TCol>
-      <TCol half><Field label="Personal Email" error={errors.personal_email}>
+      <TCol half><Field label="Personal Email" required error={errors.personal_email}>
         <Form.Control size="sm" type="email" value={form.personal_email} onChange={set('personal_email')} placeholder="your@gmail.com" isInvalid={!!errors.personal_email} />
       </Field></TCol>
     </TRow>
@@ -569,9 +563,9 @@ const StepEmergency = ({ form, set, errors }) => (
 
 // ── Step 7: Documents ─────────────────────────────────────────────────────────
 const DOC_FIELDS = [
-  { key: 'profile_image',      label: 'Profile Photo',        required: true, accept: 'image/*',                    hint: 'JPG or PNG, max 5MB' },
-  { key: 'aadhar_card',        label: 'Aadhaar Card',         required: true, accept: '.pdf,image/*',               hint: 'PDF or image' },
-  { key: 'pan_card',           label: 'PAN Card',             required: true, accept: '.pdf,image/*',               hint: 'PDF or image' },
+  { key: 'profile_image',      label: 'Profile Photo',        required: false, accept: 'image/*',                   hint: 'JPG or PNG, max 5MB — Optional' },
+  { key: 'aadhar_card',        label: 'Aadhaar Card',         required: false, accept: '.pdf,image/*',              hint: 'PDF or image — Optional' },
+  { key: 'pan_card',           label: 'PAN Card',             required: false, accept: '.pdf,image/*',              hint: 'PDF or image — Optional' },
   { key: 'appointment_letter', label: 'Appointment Letter',   required: false, accept: '.pdf,.doc,.docx,image/*',   hint: 'Optional' },
   { key: 'bank_proof',         label: 'Bank Proof',           required: false, accept: '.pdf,image/*',              hint: 'Passbook / cancelled cheque — Optional' },
 ];

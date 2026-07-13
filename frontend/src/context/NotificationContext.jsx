@@ -71,14 +71,15 @@ export const NotificationProvider = ({ children }) => {
       console.log('✅ Today events fetched:', response.data);
       setTodayEvents(response.data);
       
-      // Create event notifications
+      // Create event notifications — IDs are stable per employee per day so dedup always works
+      const today = new Date().toISOString().split('T')[0];
       const events = [];
-      
+
       // Add birthday notifications
       if (response.data.birthdays && response.data.birthdays.length > 0) {
         response.data.birthdays.forEach(emp => {
           events.push({
-            id: `birthday-${emp.id}-${Date.now()}`,
+            id: `birthday-${emp.id}-${today}`,
             type: 'birthday',
             title: '🎂 Birthday Today!',
             message: `${emp.first_name} ${emp.last_name} (${emp.department}) is celebrating their birthday today!`,
@@ -88,12 +89,12 @@ export const NotificationProvider = ({ children }) => {
           });
         });
       }
-      
+
       // Add anniversary notifications
       if (response.data.anniversaries && response.data.anniversaries.length > 0) {
         response.data.anniversaries.forEach(emp => {
           events.push({
-            id: `anniversary-${emp.id}-${Date.now()}`,
+            id: `anniversary-${emp.id}-${today}`,
             type: 'anniversary',
             title: '🏆 Work Anniversary!',
             message: `${emp.first_name} ${emp.last_name} (${emp.department}) is celebrating ${emp.years} year(s) at the company!`,
@@ -103,9 +104,8 @@ export const NotificationProvider = ({ children }) => {
           });
         });
       }
-      
+
       setEventNotifications(prev => {
-        // Combine with existing notifications, remove duplicates
         const existingIds = new Set(prev.map(n => n.id));
         const newEvents = events.filter(e => !existingIds.has(e.id));
         return [...newEvents, ...prev];
@@ -157,19 +157,14 @@ export const NotificationProvider = ({ children }) => {
     setToastMessage(null);
   }, []);
 
-  // Fetch events when user changes
+  // Fetch events when user logs in — depend on stable identifiers only, not function refs
   useEffect(() => {
     if (user && token) {
       fetchTodayEvents();
-      
-      // Refresh every hour
-      const interval = setInterval(() => {
-        fetchTodayEvents();
-      }, 60 * 60 * 1000); // 1 hour
-      
+      const interval = setInterval(fetchTodayEvents, 60 * 60 * 1000);
       return () => clearInterval(interval);
     }
-  }, [user, token, fetchTodayEvents]);
+  }, [user?.employeeId, token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const value = {
     // Event notifications
