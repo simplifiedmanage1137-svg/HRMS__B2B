@@ -492,23 +492,52 @@ const EmployeeList = () => {
                         )}
                       </td>
                       <td className="d-none d-md-table-cell">
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
                           {emp.profile_completed
                             ? <Badge bg="success" className="px-2 py-1" style={{ fontSize: 10 }}>✓ Complete</Badge>
                             : <Badge bg="warning" text="dark" className="px-2 py-1" style={{ fontSize: 10 }}>⚠ Pending</Badge>
                           }
-                          <Form.Check
-                            type="switch"
-                            id={`profile-form-toggle-${emp.id}`}
-                            label={<span style={{ fontSize: 10, color: emp.require_profile_completion ? '#16a34a' : '#94a3b8' }}>
-                              {emp.require_profile_completion ? 'Form ON' : 'Form OFF'}
-                            </span>}
-                            checked={!!emp.require_profile_completion}
-                            disabled={togglingProfileForm === emp.id || emp.profile_completed}
-                            onChange={(e) => handleToggleProfileForm(emp, e)}
-                            style={{ fontSize: 11 }}
-                            title={emp.profile_completed ? 'Profile already complete' : emp.require_profile_completion ? 'Click to stop showing form' : 'Click to require employee to fill profile'}
-                          />
+                          {/* Custom pill toggle */}
+                          <button
+                            onClick={(e) => !emp.profile_completed && handleToggleProfileForm(emp, e)}
+                            disabled={togglingProfileForm === emp.id}
+                            title={emp.profile_completed ? 'Profile already complete' : emp.require_profile_completion ? 'Click to turn OFF' : 'Click to turn ON — employee will be asked to fill profile'}
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 6,
+                              padding: '3px 8px 3px 4px',
+                              borderRadius: 20,
+                              border: 'none',
+                              cursor: emp.profile_completed ? 'not-allowed' : 'pointer',
+                              background: emp.profile_completed
+                                ? '#e2e8f0'
+                                : emp.require_profile_completion
+                                  ? 'linear-gradient(135deg,#22c55e,#16a34a)'
+                                  : '#e2e8f0',
+                              opacity: togglingProfileForm === emp.id ? 0.6 : 1,
+                              transition: 'background 0.25s ease, opacity 0.2s',
+                              boxShadow: emp.require_profile_completion && !emp.profile_completed ? '0 0 0 2px rgba(34,197,94,0.3)' : 'none',
+                            }}
+                          >
+                            {/* Knob */}
+                            <span style={{
+                              width: 16, height: 16, borderRadius: '50%',
+                              background: '#fff',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                              transition: 'transform 0.25s ease',
+                              flexShrink: 0,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 9,
+                            }}>
+                              {togglingProfileForm === emp.id ? '…' : emp.require_profile_completion ? '✓' : ''}
+                            </span>
+                            <span style={{
+                              fontSize: 10, fontWeight: 600,
+                              color: emp.profile_completed ? '#94a3b8' : emp.require_profile_completion ? '#fff' : '#64748b',
+                              whiteSpace: 'nowrap',
+                            }}>
+                              {emp.profile_completed ? 'Done' : emp.require_profile_completion ? 'Form ON' : 'Form OFF'}
+                            </span>
+                          </button>
                         </div>
                       </td>
                       <td onClick={e => e.stopPropagation()}>
