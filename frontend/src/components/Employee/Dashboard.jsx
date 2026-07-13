@@ -1018,7 +1018,35 @@ const EmployeeDashboard = () => {
             {employee?.designation || 'Employee'} • {employee?.department || 'Department'}
           </p>
         </div>
-        <div className="d-flex flex-wrap gap-2 ms-0 ms-md-auto">
+        <div className="d-flex flex-wrap gap-2 ms-0 ms-md-auto align-items-center">
+          {todayEvents?.total > 0 && (
+            <div
+              style={{
+                background: 'linear-gradient(135deg,#667eea,#764ba2)',
+                borderRadius: 20,
+                padding: '4px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 12,
+                color: '#fff',
+                flexWrap: 'wrap',
+                maxWidth: 420,
+              }}
+            >
+              <span>🎉</span>
+              {todayEvents.birthdays?.map(emp => (
+                <span key={`b-${emp.id}`} style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 12, padding: '1px 8px', fontSize: 11 }}>
+                  🎂 {emp.first_name} {emp.last_name}
+                </span>
+              ))}
+              {todayEvents.anniversaries?.map(emp => (
+                <span key={`a-${emp.id}`} style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 12, padding: '1px 8px', fontSize: 11 }}>
+                  🏆 {emp.first_name} {emp.last_name} · {emp.years}yr
+                </span>
+              ))}
+            </div>
+          )}
           <Button variant="outline-primary" size="sm" onClick={refreshData} disabled={refreshing} className="d-inline-flex align-items-center">
             <FaSyncAlt className={`me-2 ${refreshing ? 'fa-spin' : ''}`} size={12} />
             Refresh
@@ -1068,31 +1096,6 @@ const EmployeeDashboard = () => {
         <Alert variant="danger" onClose={() => setError('')} dismissible className="mb-3 py-2">
           <small>{error}</small>
         </Alert>
-      )}
-
-      {/* Today's Events Widget */}
-      {todayEvents?.total > 0 && (
-        <Card className="mb-4 border-0 shadow-sm" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-          <Card.Body className="p-2 p-md-3 text-white">
-            <div className="d-flex align-items-center mb-2">
-              <FaBirthdayCake className="me-2" size={16} />
-              <FaTrophy className="me-2" size={16} />
-              <h6 className="mb-0 small">Today's Celebrations 🎉</h6>
-            </div>
-            <div className="d-flex flex-wrap gap-2">
-              {todayEvents.birthdays?.map(emp => (
-                <Badge key={`birthday-${emp.id}`} bg="light" text="dark" className="p-2 small">
-                  🎂 {emp.first_name} {emp.last_name} ({emp.department})
-                </Badge>
-              ))}
-              {todayEvents.anniversaries?.map(emp => (
-                <Badge key={`anniversary-${emp.id}`} bg="light" text="dark" className="p-2 small">
-                  🏆 {emp.first_name} {emp.last_name} - {emp.years} Years
-                </Badge>
-              ))}
-            </div>
-          </Card.Body>
-        </Card>
       )}
 
       {/* Today's Status Card */}
