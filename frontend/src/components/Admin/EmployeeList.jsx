@@ -499,31 +499,27 @@ const EmployeeList = () => {
                           }
                           {/* Custom pill toggle */}
                           <button
-                            onClick={(e) => !emp.profile_completed && handleToggleProfileForm(emp, e)}
+                            onClick={(e) => handleToggleProfileForm(emp, e)}
                             disabled={togglingProfileForm === emp.id}
-                            title={emp.profile_completed ? 'Profile already complete' : emp.require_profile_completion ? 'Click to turn OFF' : 'Click to turn ON — employee will be asked to fill profile'}
+                            title={emp.require_profile_completion ? 'Click to turn OFF form requirement' : 'Click to require this employee to fill profile form'}
                             style={{
                               display: 'inline-flex', alignItems: 'center', gap: 6,
                               padding: '3px 8px 3px 4px',
                               borderRadius: 20,
                               border: 'none',
-                              cursor: emp.profile_completed ? 'not-allowed' : 'pointer',
-                              background: emp.profile_completed
-                                ? '#e2e8f0'
-                                : emp.require_profile_completion
-                                  ? 'linear-gradient(135deg,#22c55e,#16a34a)'
-                                  : '#e2e8f0',
+                              cursor: 'pointer',
+                              background: emp.require_profile_completion
+                                ? 'linear-gradient(135deg,#22c55e,#16a34a)'
+                                : '#e2e8f0',
                               opacity: togglingProfileForm === emp.id ? 0.6 : 1,
                               transition: 'background 0.25s ease, opacity 0.2s',
-                              boxShadow: emp.require_profile_completion && !emp.profile_completed ? '0 0 0 2px rgba(34,197,94,0.3)' : 'none',
+                              boxShadow: emp.require_profile_completion ? '0 0 0 2px rgba(34,197,94,0.3)' : 'none',
                             }}
                           >
-                            {/* Knob */}
                             <span style={{
                               width: 16, height: 16, borderRadius: '50%',
                               background: '#fff',
                               boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
-                              transition: 'transform 0.25s ease',
                               flexShrink: 0,
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
                               fontSize: 9,
@@ -532,10 +528,10 @@ const EmployeeList = () => {
                             </span>
                             <span style={{
                               fontSize: 10, fontWeight: 600,
-                              color: emp.profile_completed ? '#94a3b8' : emp.require_profile_completion ? '#fff' : '#64748b',
+                              color: emp.require_profile_completion ? '#fff' : '#64748b',
                               whiteSpace: 'nowrap',
                             }}>
-                              {emp.profile_completed ? 'Done' : emp.require_profile_completion ? 'Form ON' : 'Form OFF'}
+                              {emp.require_profile_completion ? 'Form ON' : 'Form OFF'}
                             </span>
                           </button>
                         </div>

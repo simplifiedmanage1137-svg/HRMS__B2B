@@ -36,6 +36,7 @@ const AdminRatings        = lazy(() => import('./components/Admin/AdminRatings')
 const Teams               = lazy(() => import('./components/Admin/Teams'));
 const PayrollAdjustment   = lazy(() => import('./components/Admin/PayrollAdjustment'));
 const DeductionManager    = lazy(() => import('./components/Admin/DeductionManager'));
+const FinanceExport       = lazy(() => import('./components/Admin/FinanceExport'));
 
 // Manager — lazy loaded
 const ManagerDashboard = lazy(() => import('./components/Manager/Dashboard'));
@@ -165,8 +166,8 @@ function AppContent() {
           <Routes>
             {/* Dashboard Route - Conditional based on role */}
             <Route path="/" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'employee', 'desktop_support']}>
-                {user?.role === 'admin' || user?.role === 'desktop_support' ? <AdminDashboard /> : user?.role === 'sub_admin' ? <AdminDashboard /> : user?.role === 'manager' ? <ManagerDashboard /> : <EmployeeDashboard />}
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'employee', 'desktop_support', 'finance']}>
+                {user?.role === 'admin' || user?.role === 'desktop_support' ? <AdminDashboard /> : user?.role === 'sub_admin' ? <AdminDashboard /> : user?.role === 'manager' ? <ManagerDashboard /> : user?.role === 'finance' ? <FinanceExport /> : <EmployeeDashboard />}
               </PrivateRoute>
             } />
 
@@ -360,6 +361,13 @@ function AppContent() {
             <Route path="/performance/history" element={
               <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'employee']}>
                 <PerformanceHistory />
+              </PrivateRoute>
+            } />
+
+            {/* Finance Routes */}
+            <Route path="/finance/export" element={
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'finance']}>
+                <FinanceExport />
               </PrivateRoute>
             } />
 

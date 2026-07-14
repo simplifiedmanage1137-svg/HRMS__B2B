@@ -563,15 +563,19 @@ router.post('/:id/toggle-profile-form', verifyToken, isAdmin, async (req, res) =
         if (fetchErr) return res.status(500).json({ success: false, message: fetchErr.message });
 
         const newValue = !current.require_profile_completion;
+        const patch = { require_profile_completion: newValue, updated_at: new Date().toISOString() };
+        // When turning ON, also reset profile_completed so the popup appears again
+        if (newValue) patch.profile_completed = false;
+
         const { data, error } = await supabase
             .from('employees')
-            .update({ require_profile_completion: newValue, updated_at: new Date().toISOString() })
+            .update(patch)
             .eq('id', id)
             .select()
             .single();
 
         if (error) return res.status(500).json({ success: false, message: error.message });
-        res.json({ success: true, require_profile_completion: newValue, employee: data });
+        res.json({ success: true, require_profile_completion: newValue, profile_completed: data.profile_completed, employee: data });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }

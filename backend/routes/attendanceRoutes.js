@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const attendanceController = require('../controllers/attendanceController');
-const { isAdminOrDesktopSupport } = require('../middleware/auth');
+const { isAdminOrDesktopSupport, isAdminOrFinance } = require('../middleware/auth');
 
 // Note: This module exports a function that takes supabase, authenticateToken, and requireAdmin
 module.exports = (supabase, authenticateToken, requireAdmin) => {
@@ -23,8 +23,8 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
     router.get('/missed-clockouts/:employee_id', attendanceController.getMissedClockOuts);
     router.post('/regularization/:employee_id/request', attendanceController.requestRegularization);
 
-    // Admin-only attendance report (full access — also allowed for desktop_support)
-    router.get('/report', authenticateToken, isAdminOrDesktopSupport, attendanceController.getAttendanceReport);
+    // Admin-only attendance report (also allowed for desktop_support and finance)
+    router.get('/report', authenticateToken, isAdminOrFinance, attendanceController.getAttendanceReport);
 
     // ✅ NEW: Team attendance report for managers
     router.get('/team-report', authenticateToken, attendanceController.getTeamAttendanceReport);

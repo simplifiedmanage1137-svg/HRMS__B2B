@@ -5,7 +5,7 @@ import {
   FaTachometerAlt, FaUsers, FaCalendarAlt, FaMoneyBill,
   FaUserCircle, FaSignOutAlt, FaFingerprint, FaClock,
   FaBell, FaPaperPlane, FaEdit, FaUserTie,
-  FaBullhorn, FaStar, FaChevronRight, FaLayerGroup, FaDesktop, FaChartLine, FaMinusCircle
+  FaBullhorn, FaStar, FaChevronRight, FaLayerGroup, FaDesktop, FaChartLine, FaMinusCircle, FaFileExcel
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -76,7 +76,7 @@ const Sidebar = () => {
         setEmployeeDesignation(res.data.designation || '');
       }
     } catch {
-      setEmployeeName(user?.role === 'admin' ? 'Administrator' : user?.role === 'sub_admin' ? 'Manager' : user?.role === 'desktop_support' ? 'Desktop Support' : 'Employee');
+      setEmployeeName(user?.role === 'admin' ? 'Administrator' : user?.role === 'sub_admin' ? 'Manager' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'finance' ? 'Finance' : 'Employee');
     }
   };
 
@@ -202,7 +202,7 @@ const Sidebar = () => {
             <div className="hrms-sidebar__logo-text">
               <div className="hrms-sidebar__logo-title">EMS Portal</div>
               <div className="hrms-sidebar__logo-sub">
-                {user?.role === 'admin' ? 'Admin Dashboard' : user?.role === 'sub_admin' ? 'Manager Dashboard' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'manager' ? 'TL Dashboard' : 'Employee Dashboard'}
+                {user?.role === 'admin' ? 'Admin Dashboard' : user?.role === 'sub_admin' ? 'Manager Dashboard' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'manager' ? 'TL Dashboard' : user?.role === 'finance' ? 'Finance Dashboard' : 'Employee Dashboard'}
               </div>
             </div>
           )}
@@ -211,7 +211,12 @@ const Sidebar = () => {
         {/* ── Navigation ── */}
         <nav className="hrms-sidebar__nav">
 
-          {user?.role === 'admin' ? (
+          {user?.role === 'finance' ? (
+            <>
+              <Section label="Finance" />
+              <NavItem to="/finance/export" icon={<FaFileExcel />} label="Payroll Export" end />
+            </>
+          ) : user?.role === 'admin' ? (
             <>
               <Section label="Overview" />
               <NavItem to="/admin/dashboard" icon={<FaTachometerAlt />} label="Dashboard" />
@@ -312,7 +317,7 @@ const Sidebar = () => {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="hrms-sidebar__user-name">{employeeName}</div>
                 <div className="hrms-sidebar__user-role">
-                  {user?.role === 'admin' ? 'Admin' : user?.role === 'sub_admin' ? 'Manager' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'manager' ? 'TL' : `ID: ${user?.employeeId}`}
+                  {user?.role === 'admin' ? 'Admin' : user?.role === 'sub_admin' ? 'Manager' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'manager' ? 'TL' : user?.role === 'finance' ? 'Finance' : `ID: ${user?.employeeId}`}
                 </div>
               </div>
               <button className="hrms-logout-btn" onClick={logout} title="Logout">
