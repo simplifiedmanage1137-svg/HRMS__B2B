@@ -624,6 +624,7 @@ const EditEmployee = () => {
                                             <option value="admin">Admin</option>
                                             <option value="sub_admin">Manager</option>
                                             <option value="desktop_support">Desktop Support</option>
+                                            <option value="finance">Finance</option>
                                         </Form.Select>
                                     </Form.Group>
                                 </Col>
