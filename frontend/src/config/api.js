@@ -198,6 +198,7 @@ export const API_ENDPOINTS = {
   TEAMS_EMPLOYEES_UNASSIGNED: ep('/api/teams/employees/unassigned'),
   TEAMS_HIERARCHY:        ep('/api/teams/hierarchy'),
   TEAMS_MANAGER_SETTINGS: (id) => ep(`/api/teams/manager-settings/${id}`),
+  TEAMS_SUB_ADMINS_LIST:  ep('/api/teams/sub-admins/list'),
 
   // Geofence
   GEOFENCE_LIST:   ep('/api/geofence/list'),

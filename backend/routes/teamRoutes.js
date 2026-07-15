@@ -116,13 +116,13 @@ router.get('/hierarchy', verifyToken, isAdminOrDesktopSupport, async (req, res) 
     }
 });
 
-// GET /api/teams/managers/list — employees with role = 'manager'
-// Open to any authenticated user (not just admin) so employees can pick a reporting manager when applying for leave.
+// GET /api/teams/managers/list — TL employees (role = 'manager')
+// Open to any authenticated user so employees can pick a reporting manager.
 router.get('/managers/list', verifyToken, async (req, res) => {
     try {
         const { data, error } = await supabase
             .from('employees')
-            .select('employee_id, first_name, last_name, designation, department')
+            .select('employee_id, first_name, last_name, designation, department, role')
             .eq('role', 'manager')
             .eq('is_active', true)
             .order('first_name');
@@ -130,6 +130,23 @@ router.get('/managers/list', verifyToken, async (req, res) => {
         res.json({ success: true, managers: data || [] });
     } catch (err) {
         console.error('Error fetching managers:', err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// GET /api/teams/sub-admins/list — Manager (sub_admin) employees for team assignment
+router.get('/sub-admins/list', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('employees')
+            .select('employee_id, first_name, last_name, designation, department, role')
+            .eq('role', 'sub_admin')
+            .eq('is_active', true)
+            .order('first_name');
+        if (error) throw error;
+        res.json({ success: true, managers: data || [] });
+    } catch (err) {
+        console.error('Error fetching sub_admins:', err);
         res.status(500).json({ success: false, message: err.message });
     }
 });
@@ -167,9 +184,9 @@ router.get('/', verifyToken, async (req, res) => {
 
         let query = supabase.from('teams').select('*').order('created_at', { ascending: false });
 
-        if (role === 'manager') {
+        if (role === 'manager' || role === 'sub_admin') {
             query = query.eq('manager_id', employeeId);
-        } else if (!['admin', 'sub_admin', 'desktop_support'].includes(role)) {
+        } else if (!['admin', 'desktop_support'].includes(role)) {
             return res.status(403).json({ success: false, message: 'Access denied' });
         }
 

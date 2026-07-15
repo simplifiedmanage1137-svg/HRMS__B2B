@@ -230,7 +230,8 @@ const Sidebar = () => {
               <NavItem to="/admin/deductions"         icon={<FaMinusCircle />} label="Deductions" />
 
               <Section label="Admin Tools" />
-              <NavItem to="/admin/teams"             icon={<FaLayerGroup />}  label="Teams" />
+              <NavItem to="/admin/teams"          icon={<FaLayerGroup />}  label="TL Teams" />
+              <NavItem to="/admin/manager-teams"  icon={<FaUserTie />}     label="Manager Teams" />
               <NavItem to="/admin/send-update-request" icon={<FaPaperPlane />} label="Send Update Request" />
               <NavItem
                 to="/admin/update-approvals"
@@ -255,7 +256,8 @@ const Sidebar = () => {
               <NavItem to="/admin/deductions"         icon={<FaMinusCircle />} label="Deductions" />
 
               <Section label="Admin Tools" />
-              <NavItem to="/admin/teams"             icon={<FaLayerGroup />}  label="Teams" />
+              <NavItem to="/admin/teams"          icon={<FaLayerGroup />}  label="TL Teams" />
+              <NavItem to="/admin/manager-teams"  icon={<FaUserTie />}     label="Manager Teams" />
               <NavItem to="/admin/send-update-request" icon={<FaPaperPlane />} label="Send Update Request" />
               <NavItem
                 to="/admin/update-approvals"
@@ -265,6 +267,9 @@ const Sidebar = () => {
                 onClick={() => { setPendingCount(0); markNotificationsAsRead(); }}
               />
               <NavItem to="/admin/broadcast" icon={<FaBullhorn />} label="Broadcast" />
+
+              <Section label="My Team" />
+              <NavItem to="/manager/my-team" icon={<FaUserTie />} label="My Team" />
 
               <Section label="My Attendance" />
               <NavItem to="/attendance" icon={<FaFingerprint />} label="Daily Attendance" />
