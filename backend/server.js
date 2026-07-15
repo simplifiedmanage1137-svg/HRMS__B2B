@@ -294,8 +294,12 @@ if (require.main === module || process.env.VERCEL) {
 
         // ── Missing clock-out cron (every 15 min) ──────────────────────────
         if (!process.env.VERCEL) {
-            const { scheduleMissingClockOutCheck } = require('./cron/missingClockOutCheck');
+            const { scheduleMissingClockOutCheck, markMissingClockOuts } = require('./cron/missingClockOutCheck');
             scheduleMissingClockOutCheck();
+            // Run immediately on startup to catch records missed while server was down
+            markMissingClockOuts().then(r => {
+                if (r.markedCount > 0) console.log(`✅ Startup missing-clockout fix: ${r.markedCount} record(s) marked`);
+            }).catch(e => console.error('❌ Startup missing-clockout error:', e.message));
         }
 
         // Orphaned-record repair only runs locally — avoid on every Vercel cold start

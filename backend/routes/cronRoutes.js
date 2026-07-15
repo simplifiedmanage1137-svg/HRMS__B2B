@@ -14,6 +14,7 @@ const supabase = require('../config/supabase');
 const attendanceController = require('../controllers/attendanceController');
 const { markAbsentEmployeesAsLeave } = require('../cron/absentEmployeeCheck');
 const { runMonthlyAccrual } = require('../cron/leaveAccrualJob');
+const { markMissingClockOuts } = require('../cron/missingClockOutCheck');
 
 const cronAuth = (req, res, next) => {
     const secret = process.env.CRON_SECRET;
@@ -31,6 +32,18 @@ router.get('/auto-close', cronAuth, async (req, res) => {
         res.json({ success: true, closedCount: result.closedCount ?? 0, ms: Date.now() - t });
     } catch (err) {
         console.error('❌ [CRON auto-close]', err.message);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// GET /api/cron/missing-clockout — every 15 min (external trigger)
+router.get('/missing-clockout', cronAuth, async (req, res) => {
+    const t = Date.now();
+    try {
+        const result = await markMissingClockOuts();
+        res.json({ success: true, markedCount: result.markedCount ?? 0, ms: Date.now() - t });
+    } catch (err) {
+        console.error('❌ [CRON missing-clockout]', err.message);
         res.status(500).json({ success: false, error: err.message });
     }
 });

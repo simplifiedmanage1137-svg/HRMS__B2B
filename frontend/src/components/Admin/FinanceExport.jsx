@@ -57,11 +57,11 @@ export default function FinanceExport() {
       const [empRes, attRes] = await Promise.all([
         axios.get(API_ENDPOINTS.EMPLOYEES),
         axios.get(API_ENDPOINTS.ATTENDANCE_REPORT, {
-          params: { startDate: pad(start), endDate: pad(end) },
+          params: { start: pad(start), end: pad(end) },
         }),
       ]);
 
-      const emps = (empRes.data || []).filter(e => e.is_active !== false);
+      const emps = (empRes.data || []).filter(e => e.is_active !== false && e.role !== 'finance' && e.role !== 'admin' && e.role !== 'sub_admin' && e.role !== 'desktop_support');
       const attRecords = attRes.data?.attendance || attRes.data || [];
 
       // Build per-employee stats

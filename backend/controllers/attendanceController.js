@@ -575,16 +575,25 @@ exports.clockIn = async (req, res) => {
                     // Allow clock-in to proceed
 
                 } else if (!activeSessionForRecord) {
-                    // No session at all → genuinely missed clock-out, block clock-in
-                    console.log(`⚠️ Incomplete attendance for ${incompleteDate} — blocking clock-in.`);
-                    return res.status(400).json({
-                        success: false,
-                        message: `You have an incomplete attendance record from ${incompleteDate}. Please clock out for that day first before clocking in for today.`,
-                        has_missed_clockout: true,
-                        attendance_id:    incompleteRecord.id,
-                        attendance_date:  incompleteDate,
-                        clock_in_time:    incompleteRecord.clock_in_ist || incompleteRecord.clock_in,
-                    });
+                    // No session at all → auto-close as missing (same as cron) and allow clock-in
+                    console.log(`⚠️ [ClockIn] Stale open record for ${incompleteDate} (no session) — auto-closing as missing.`);
+                    const IST_OFFSET_MS_LOCAL = 5.5 * 60 * 60 * 1000;
+                    const MISSING_THRESHOLD_MS_LOCAL = 15 * 60 * 60 * 1000;
+                    const clockInVal = incompleteRecord.clock_in_ist || incompleteRecord.clock_in;
+                    const clockInMs = toUTCMs(clockInVal);
+                    const autoCloseMs = clockInMs ? clockInMs + MISSING_THRESHOLD_MS_LOCAL : Date.now() - IST_OFFSET_MS_LOCAL;
+                    const autoCloseISO = new Date(autoCloseMs).toISOString();
+                    const autoCloseISTDate = new Date(autoCloseMs + IST_OFFSET_MS_LOCAL);
+                    const autoCloseIST = autoCloseISTDate.toISOString().replace('T', ' ').substring(0, 19);
+                    await supabase.from('attendance').update({
+                        status:              'missing',
+                        total_hours:         0,
+                        total_minutes:       0,
+                        total_hours_display: '0h 0m',
+                        clock_out:           autoCloseISO,
+                        clock_out_ist:       autoCloseIST,
+                    }).eq('id', incompleteRecord.id);
+                    console.log(`✅ [ClockIn] Auto-closed ${incompleteDate} as missing. Allowing new clock-in.`);
                 }
                 // else: session.is_active === true → night shift still in progress, allow
             }

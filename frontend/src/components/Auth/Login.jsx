@@ -30,6 +30,7 @@ const Login = () => {
         if (role === 'admin' || role === 'desktop_support') navigate('/admin/dashboard');
         else if (role === 'sub_admin') navigate('/');
         else if (role === 'manager') navigate('/manager/dashboard');
+        else if (role === 'finance') navigate('/finance/export');
         else navigate('/employee/dashboard');
       } else {
         setError(result.message || 'Login failed. Please try again.');
