@@ -249,7 +249,7 @@ router.post('/', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
         const { data: existing } = await supabase.from('teams').select('id').eq('team_name', team_name.trim()).maybeSingle();
         if (existing) return res.status(400).json({ success: false, message: 'Team name already exists' });
 
-        const { data: mgr } = await supabase.from('employees').select('employee_id, role').eq('employee_id', manager_id).maybeSingle();
+        const { data: mgr } = await supabase.from('employees').select('employee_id, role, first_name, last_name').eq('employee_id', manager_id).maybeSingle();
         if (!mgr) return res.status(400).json({ success: false, message: 'Manager not found' });
 
         const { data: team, error } = await supabase
@@ -261,6 +261,9 @@ router.post('/', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
         if (member_ids.length > 0) {
             await supabase.from('team_members').delete().in('employee_id', member_ids);
             await supabase.from('team_members').insert(member_ids.map(eid => ({ team_id: team.id, employee_id: eid })));
+            // Update reporting_manager for all added employees
+            const mgrFullName = `${mgr.first_name} ${mgr.last_name}`.trim();
+            await supabase.from('employees').update({ reporting_manager: mgrFullName }).in('employee_id', member_ids);
         }
 
         res.status(201).json({ success: true, message: 'Team created successfully', team });
@@ -276,7 +279,7 @@ router.put('/:id', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
         const { id } = req.params;
         const { team_name, description, manager_id, status, member_ids } = req.body;
 
-        const { data: existing } = await supabase.from('teams').select('id').eq('id', id).maybeSingle();
+        const { data: existing } = await supabase.from('teams').select('id, manager_id').eq('id', id).maybeSingle();
         if (!existing) return res.status(404).json({ success: false, message: 'Team not found' });
 
         if (team_name) {
@@ -294,10 +297,35 @@ router.put('/:id', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
         if (error) throw error;
 
         if (Array.isArray(member_ids)) {
+            // Get old members before replacing
+            const { data: oldRows } = await supabase.from('team_members').select('employee_id').eq('team_id', id);
+            const oldIds = (oldRows || []).map(r => r.employee_id);
+
+            // Replace team_members
             await supabase.from('team_members').delete().eq('team_id', id);
             if (member_ids.length > 0) {
                 await supabase.from('team_members').delete().in('employee_id', member_ids);
                 await supabase.from('team_members').insert(member_ids.map(eid => ({ team_id: parseInt(id), employee_id: eid })));
+            }
+
+            // Resolve manager full name
+            const activeMgrId = manager_id || existing.manager_id;
+            const { data: mgr } = await supabase.from('employees').select('first_name, last_name').eq('employee_id', activeMgrId).maybeSingle();
+            const mgrFullName = mgr ? `${mgr.first_name} ${mgr.last_name}`.trim() : null;
+
+            // Set reporting_manager for newly added members
+            if (member_ids.length > 0 && mgrFullName) {
+                await supabase.from('employees').update({ reporting_manager: mgrFullName }).in('employee_id', member_ids);
+            }
+
+            // Clear reporting_manager for removed members (those no longer in team)
+            const removedIds = oldIds.filter(eid => !member_ids.includes(eid));
+            if (removedIds.length > 0 && mgrFullName) {
+                // Only clear if their reporting_manager is still this manager (don't overwrite a new assignment)
+                await supabase.from('employees')
+                    .update({ reporting_manager: null })
+                    .in('employee_id', removedIds)
+                    .eq('reporting_manager', mgrFullName);
             }
         }
 
@@ -312,8 +340,29 @@ router.put('/:id', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
 router.delete('/:id', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
     try {
         const { id } = req.params;
+
+        // Get team + members before deleting so we can clear reporting_manager
+        const [{ data: teamRow }, { data: memberRows }] = await Promise.all([
+            supabase.from('teams').select('manager_id').eq('id', id).maybeSingle(),
+            supabase.from('team_members').select('employee_id').eq('team_id', id),
+        ]);
+
         const { error } = await supabase.from('teams').delete().eq('id', id);
         if (error) throw error;
+
+        // Clear reporting_manager for all ex-members (only if it still points to this manager)
+        if (teamRow?.manager_id && memberRows?.length > 0) {
+            const { data: mgr } = await supabase.from('employees').select('first_name, last_name').eq('employee_id', teamRow.manager_id).maybeSingle();
+            if (mgr) {
+                const mgrFullName = `${mgr.first_name} ${mgr.last_name}`.trim();
+                const memberIds = memberRows.map(r => r.employee_id);
+                await supabase.from('employees')
+                    .update({ reporting_manager: null })
+                    .in('employee_id', memberIds)
+                    .eq('reporting_manager', mgrFullName);
+            }
+        }
+
         res.json({ success: true, message: 'Team deleted successfully' });
     } catch (err) {
         console.error('Error deleting team:', err);
