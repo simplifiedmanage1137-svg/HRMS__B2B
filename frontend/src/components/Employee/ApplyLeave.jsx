@@ -45,7 +45,8 @@ const ApplyLeave = () => {
   const [employeeDetails, setEmployeeDetails] = useState({
     joining_date: '',
     reporting_manager: '',
-    months_completed: 0
+    months_completed: 0,
+    dob: ''
   });
   const [formData, setFormData] = useState({
     leave_type: 'Unpaid',
@@ -59,6 +60,16 @@ const ApplyLeave = () => {
   const [calculatedDays, setCalculatedDays] = useState(1);
   const [errors, setErrors] = useState({});
   const [managers, setManagers] = useState([]);
+
+  // Returns this year's birthday as YYYY-MM-DD, or '' if dob not set
+  const getBirthdayThisYear = () => {
+    if (!employeeDetails.dob) return '';
+    const d = new Date(employeeDetails.dob);
+    const year = new Date().getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${year}-${mm}-${dd}`;
+  };
 
   const getAvailableLeaveTypes = () => {
     const types = [];
@@ -76,8 +87,21 @@ const ApplyLeave = () => {
     // Always show Unpaid Leave
     types.push({ value: 'Unpaid', label: 'Unpaid Leave', icon: '💰' });
 
+    // Birthday Leave — always available (no probation restriction)
+    if (employeeDetails.dob) {
+      const birthdayDate = getBirthdayThisYear();
+      const formatted = birthdayDate
+        ? new Date(birthdayDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })
+        : '';
+      types.push({
+        value: 'Birthday',
+        label: `🎂 Birthday Leave${formatted ? ` (${formatted})` : ''}`,
+        icon: '🎂',
+        birthday_date: birthdayDate
+      });
+    }
+
     // Only show paid leaves if probation is complete
-    // ✅ FIX: Use is_probation_complete instead of is_eligible
     const isProbationComplete = leaveBalance.is_probation_complete || leaveBalance.is_eligible;
 
     if (isProbationComplete) {
@@ -148,6 +172,19 @@ const ApplyLeave = () => {
     }
   }, [leaveBalance.is_eligible, leaveBalance.is_probation_complete, leaveBalance.comp_off_balance]);
 
+  // Auto-fill & lock dates when Birthday leave is selected
+  useEffect(() => {
+    if (formData.leave_type === 'Birthday' && employeeDetails.dob) {
+      const bd = getBirthdayThisYear();
+      setFormData(prev => ({
+        ...prev,
+        leave_duration: 'Full Day',
+        start_date: bd,
+        end_date: bd,
+      }));
+    }
+  }, [formData.leave_type, employeeDetails.dob]);
+
   // In ApplyLeave.jsx - Add this helper function
   const calculateMonthsFromJoining = (joiningDate, currentDate = new Date()) => {
     const join = new Date(joiningDate);
@@ -200,7 +237,8 @@ const ApplyLeave = () => {
       setEmployeeDetails({
         joining_date: response.data.joining_date,
         reporting_manager: response.data.reporting_manager || '',
-        months_completed: monthsCompleted
+        months_completed: monthsCompleted,
+        dob: response.data.dob || ''
       });
 
       // Auto-select the employee's assigned reporting manager
@@ -394,8 +432,15 @@ const ApplyLeave = () => {
       newErrors.reporting_manager = 'Reporting manager is required';
     }
 
-    // Check leave balance
-    if (formData.leave_type === 'Comp-Off') {
+    // Check leave balance (Birthday leave has no balance requirement)
+    if (formData.leave_type === 'Birthday') {
+      if (employeeDetails.dob) {
+        const bd = getBirthdayThisYear();
+        if (formData.start_date !== bd) {
+          newErrors.start_date = `Birthday leave must be on your birthday (${new Date(bd + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })})`;
+        }
+      }
+    } else if (formData.leave_type === 'Comp-Off') {
       if (calculatedDays > leaveBalance.comp_off_balance) {
         newErrors.balance = `Insufficient Comp-Off balance. Available: ${leaveBalance.comp_off_balance} days`;
       }
@@ -644,6 +689,21 @@ const ApplyLeave = () => {
                       Using Comp-Off leave - this won't affect your regular leave balance
                     </Form.Text>
                   )}
+                  {formData.leave_type === 'Birthday' && (
+                    <div className="mt-2 px-3 py-2 rounded-3 d-flex align-items-start gap-2"
+                      style={{ background: '#fef9c3', border: '1px solid #fde047' }}>
+                      <span style={{ fontSize: 18 }}>🎂</span>
+                      <div>
+                        <div className="fw-semibold small" style={{ color: '#854d0e' }}>Birthday Leave</div>
+                        <div className="small" style={{ color: '#713f12' }}>
+                          This is a paid day off on your birthday — no balance will be deducted.
+                          {getBirthdayThisYear() && (
+                            <span> Your birthday this year: <strong>{new Date(getBirthdayThisYear() + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>.</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </Form.Group>
 
                 {/* Leave Duration */}
@@ -667,6 +727,7 @@ const ApplyLeave = () => {
                       label="Half Day"
                       name="leave_duration"
                       value="Half Day"
+                      disabled={formData.leave_type === 'Birthday'}
                       checked={formData.leave_duration === 'Half Day'}
                       onChange={handleChange}
                       className="mb-2"
@@ -717,7 +778,9 @@ const ApplyLeave = () => {
                         onChange={handleChange}
                         size="sm"
                         isInvalid={!!errors.start_date}
-                        min={new Date().toISOString().split('T')[0]}
+                        min={formData.leave_type === 'Birthday' ? undefined : new Date().toISOString().split('T')[0]}
+                        readOnly={formData.leave_type === 'Birthday'}
+                        style={formData.leave_type === 'Birthday' ? { background: '#f0fdf4', cursor: 'not-allowed' } : {}}
                       />
                       {errors.start_date && (
                         <Form.Control.Feedback type="invalid">
@@ -739,8 +802,9 @@ const ApplyLeave = () => {
                         onChange={handleChange}
                         size="sm"
                         isInvalid={!!errors.end_date}
-                        disabled={formData.leave_duration === 'Half Day'}
+                        disabled={formData.leave_duration === 'Half Day' || formData.leave_type === 'Birthday'}
                         min={formData.start_date || new Date().toISOString().split('T')[0]}
+                        style={formData.leave_type === 'Birthday' ? { background: '#f0fdf4', cursor: 'not-allowed' } : {}}
                       />
                       {errors.end_date && (
                         <Form.Control.Feedback type="invalid">

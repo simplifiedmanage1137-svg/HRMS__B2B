@@ -132,9 +132,9 @@ exports.getLeaveBalance = async (req, res) => {
             .lte('start_date', `${currentYear}-12-31`);
         if (usedError) throw usedError;
 
-        // Paid leaves used (excludes Unpaid & Comp-Off)
+        // Paid leaves used (excludes Unpaid, Comp-Off & Birthday)
         const used = usedLeaves
-            ?.filter(l => l.leave_type !== 'Unpaid' && l.leave_type !== 'Comp-Off')
+            ?.filter(l => l.leave_type !== 'Unpaid' && l.leave_type !== 'Comp-Off' && l.leave_type !== 'Birthday')
             ?.reduce((sum, l) => sum + (parseFloat(l.days_count) || 0), 0) || 0;
 
         // Unpaid leaves used separately
@@ -153,7 +153,7 @@ exports.getLeaveBalance = async (req, res) => {
         if (pendingError) throw pendingError;
 
         const pending = pendingLeaves
-            ?.filter(l => l.leave_type !== 'Unpaid' && l.leave_type !== 'Comp-Off')
+            ?.filter(l => l.leave_type !== 'Unpaid' && l.leave_type !== 'Comp-Off' && l.leave_type !== 'Birthday')
             ?.reduce((sum, l) => sum + (parseFloat(l.days_count) || 0), 0) || 0;
 
         const unpaidPending = pendingLeaves
@@ -232,42 +232,81 @@ exports.applyLeave = async (req, res) => {
         }
 
         const { data: employee, error: empError } = await supabase
-            .from('employees').select('joining_date, comp_off_balance, first_name, last_name')
+            .from('employees').select('joining_date, comp_off_balance, first_name, last_name, dob')
             .eq('employee_id', employee_id).single();
         if (empError) throw empError;
 
-        const joiningDate = new Date(employee.joining_date);
-        const today = new Date();
-        let totalMonths = (today.getFullYear() - joiningDate.getFullYear()) * 12 +
-                          (today.getMonth() - joiningDate.getMonth());
-        if (today.getDate() < joiningDate.getDate()) totalMonths = Math.max(0, totalMonths - 1);
-        const isProbComplete = totalMonths >= 6;
-
-        if (!isProbComplete && leave_type !== 'Unpaid' && leave_type !== 'Comp-Off') {
-            return res.status(400).json({
-                success: false,
-                message: `During probation (${totalMonths}/6 months), only Unpaid or Comp-Off leave allowed.`
-            });
-        }
-
-        if (isProbComplete && leave_type !== 'Unpaid' && leave_type !== 'Comp-Off') {
-            const { data: balanceData } = await supabase
-                .from('leave_balance').select('current_balance')
-                .eq('employee_id', employee_id).eq('leave_year', today.getFullYear()).maybeSingle();
-            const available = balanceData?.current_balance || 0;
-            if (available < days_count) {
+        // ── Birthday Leave — special handling ────────────────────────────────
+        if (leave_type === 'Birthday') {
+            if (!employee.dob) {
                 return res.status(400).json({
                     success: false,
-                    message: `Insufficient leave balance. Available: ${available.toFixed(1)} days.`
+                    message: 'Your date of birth is not on record. Please contact admin to update your profile.'
                 });
             }
-        }
+            const dob     = new Date(employee.dob);
+            const leaveStart = new Date(start_date);
+            if (dob.getMonth() !== leaveStart.getMonth() || dob.getDate() !== leaveStart.getDate()) {
+                const dobFormatted = dob.toLocaleString('en-IN', { month: 'long', day: 'numeric' });
+                return res.status(400).json({
+                    success: false,
+                    message: `Birthday leave must be on your birthday (${dobFormatted}).`
+                });
+            }
+            if (end_date && start_date !== end_date) {
+                return res.status(400).json({ success: false, message: 'Birthday leave is only 1 day.' });
+            }
+            const leaveYear = leaveStart.getFullYear();
+            const { data: existing } = await supabase
+                .from('leaves')
+                .select('id, status')
+                .eq('employee_id', employee_id)
+                .eq('leave_type', 'Birthday')
+                .gte('start_date', `${leaveYear}-01-01`)
+                .lte('start_date', `${leaveYear}-12-31`)
+                .in('status', ['pending', 'approved'])
+                .maybeSingle();
+            if (existing) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'You have already applied for Birthday leave this year.'
+                });
+            }
+            // Birthday leave skips all probation/balance checks — fall through to insert
+        } else {
+            const joiningDate = new Date(employee.joining_date);
+            const today = new Date();
+            let totalMonths = (today.getFullYear() - joiningDate.getFullYear()) * 12 +
+                              (today.getMonth() - joiningDate.getMonth());
+            if (today.getDate() < joiningDate.getDate()) totalMonths = Math.max(0, totalMonths - 1);
+            const isProbComplete = totalMonths >= 6;
 
-        if (leave_type === 'Comp-Off' && (employee.comp_off_balance || 0) < days_count) {
-            return res.status(400).json({
-                success: false,
-                message: `Insufficient Comp-Off balance. Available: ${employee.comp_off_balance || 0} days`
-            });
+            if (!isProbComplete && leave_type !== 'Unpaid' && leave_type !== 'Comp-Off') {
+                return res.status(400).json({
+                    success: false,
+                    message: `During probation (${totalMonths}/6 months), only Unpaid or Comp-Off leave allowed.`
+                });
+            }
+
+            if (isProbComplete && leave_type !== 'Unpaid' && leave_type !== 'Comp-Off') {
+                const { data: balanceData } = await supabase
+                    .from('leave_balance').select('current_balance')
+                    .eq('employee_id', employee_id).eq('leave_year', today.getFullYear()).maybeSingle();
+                const available = balanceData?.current_balance || 0;
+                if (available < days_count) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Insufficient leave balance. Available: ${available.toFixed(1)} days.`
+                    });
+                }
+            }
+
+            if (leave_type === 'Comp-Off' && (employee.comp_off_balance || 0) < days_count) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Insufficient Comp-Off balance. Available: ${employee.comp_off_balance || 0} days`
+                });
+            }
         }
 
         // IST timestamp for created_at
@@ -490,8 +529,8 @@ exports.updateLeaveStatus = async (req, res) => {
                 await supabase.from('employees')
                     .update({ comp_off_balance: newBalance })
                     .eq('employee_id', leave.employee_id);
-            } else if (leave.leave_type !== 'Unpaid') {
-                // Deduct from leave_balance
+            } else if (leave.leave_type !== 'Unpaid' && leave.leave_type !== 'Birthday') {
+                // Deduct from leave_balance (Birthday leave is a free benefit — no deduction)
                 const { data: bal } = await supabase
                     .from('leave_balance').select('*')
                     .eq('employee_id', leave.employee_id).eq('leave_year', leaveYear).maybeSingle();
@@ -545,7 +584,7 @@ exports.getLeaveTypes = async (req, res) => {
         if (employee_id) {
             const { data: employee, error } = await supabase
                 .from('employees')
-                .select('comp_off_balance, joining_date')
+                .select('comp_off_balance, joining_date, dob')
                 .eq('employee_id', employee_id)
                 .single();
 
@@ -558,11 +597,26 @@ exports.getLeaveTypes = async (req, res) => {
                     });
                 }
 
+                // Birthday Leave — available to all employees (no probation restriction)
+                if (employee.dob) {
+                    const today = new Date();
+                    const dob = new Date(employee.dob);
+                    const mm = String(dob.getMonth() + 1).padStart(2, '0');
+                    const dd = String(dob.getDate()).padStart(2, '0');
+                    const birthdayThisYear = `${today.getFullYear()}-${mm}-${dd}`;
+                    availableTypes.push({
+                        value: 'Birthday',
+                        label: '🎂 Birthday Leave',
+                        icon: '🎂',
+                        birthday_date: birthdayThisYear
+                    });
+                }
+
                 if (employee.joining_date) {
                     const joiningDate = new Date(employee.joining_date);
                     const today = new Date();
-                    
-                    let totalMonths = (today.getFullYear() - joiningDate.getFullYear()) * 12 + 
+
+                    let totalMonths = (today.getFullYear() - joiningDate.getFullYear()) * 12 +
                                       (today.getMonth() - joiningDate.getMonth());
                     if (today.getDate() < joiningDate.getDate()) {
                         totalMonths = Math.max(0, totalMonths - 1);

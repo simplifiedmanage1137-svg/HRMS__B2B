@@ -222,7 +222,7 @@ router.get('/:id', verifyToken, async (req, res) => {
         if (memberIds.length > 0) {
             const { data: emps } = await supabase
                 .from('employees')
-                .select('employee_id, first_name, last_name, designation, department')
+                .select('employee_id, first_name, last_name, designation, department, role')
                 .in('employee_id', memberIds);
             members = emps || [];
         }

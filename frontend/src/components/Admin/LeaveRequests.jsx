@@ -201,8 +201,16 @@ const LeaveRequests = () => {
       'Maternity': 'warning',
       'Paternity': 'secondary',
       'Bereavement': 'dark',
-      'Unpaid': 'danger'
+      'Unpaid': 'danger',
+      'Birthday': 'warning'
     };
+    if (type === 'Birthday') {
+      return (
+        <Badge className="px-2 py-1 text-nowrap" style={{ background: '#f59e0b', color: '#fff' }}>
+          🎂 {type}
+        </Badge>
+      );
+    }
     return (
       <Badge bg={colors[type] || 'light'} className="px-2 py-1 text-nowrap">
         {type}

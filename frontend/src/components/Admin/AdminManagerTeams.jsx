@@ -55,7 +55,7 @@ export default function AdminManagerTeams() {
 
             setTeams(managerTeams);
             setManagers(mgrRes.data.managers || []);
-            setEmployees((empRes.data || []).filter(e => e.is_active !== false && e.role === 'employee'));
+            setEmployees((empRes.data || []).filter(e => e.is_active !== false && (e.role === 'employee' || e.role === 'manager')));
         } catch {
             showNotification('Failed to load data', 'danger');
         } finally {
@@ -269,7 +269,10 @@ export default function AdminManagerTeams() {
                                                         <div className="d-flex align-items-center gap-2 p-2 bg-white rounded-3 shadow-sm">
                                                             <Avatar name={`${m.first_name} ${m.last_name}`} size={34} />
                                                             <div className="min-w-0">
-                                                                <div className="fw-semibold text-truncate" style={{ fontSize: 13 }}>{m.first_name} {m.last_name}</div>
+                                                                <div className="d-flex align-items-center gap-1 flex-wrap">
+                                                                    <span className="fw-semibold text-truncate" style={{ fontSize: 13 }}>{m.first_name} {m.last_name}</span>
+                                                                    {m.role === 'manager' && <span style={{ fontSize: 10, fontWeight: 700, background: '#dbeafe', color: '#1d4ed8', borderRadius: 4, padding: '1px 5px', whiteSpace: 'nowrap' }}>TL</span>}
+                                                                </div>
                                                                 <div className="text-muted text-truncate" style={{ fontSize: 11 }}>{m.designation || m.department || m.employee_id}</div>
                                                             </div>
                                                         </div>
@@ -355,7 +358,10 @@ export default function AdminManagerTeams() {
                                     }}>
                                     <Avatar name={`${emp.first_name} ${emp.last_name}`} size={32} />
                                     <div className="flex-grow-1 min-w-0">
-                                        <div className="fw-semibold" style={{ fontSize: 13 }}>{emp.first_name} {emp.last_name}</div>
+                                        <div className="d-flex align-items-center gap-2">
+                                            <span className="fw-semibold" style={{ fontSize: 13 }}>{emp.first_name} {emp.last_name}</span>
+                                            {emp.role === 'manager' && <span style={{ fontSize: 10, fontWeight: 700, background: '#dbeafe', color: '#1d4ed8', borderRadius: 4, padding: '1px 5px' }}>TL</span>}
+                                        </div>
                                         <div className="text-muted" style={{ fontSize: 11 }}>{emp.employee_id}{emp.designation ? ` · ${emp.designation}` : ''}{emp.department ? ` · ${emp.department}` : ''}</div>
                                     </div>
                                     <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${selected ? '#3b82f6' : '#cbd5e1'}`,
