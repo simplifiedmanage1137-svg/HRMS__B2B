@@ -254,15 +254,21 @@ const Teams = () => {
     const fetchHierarchy = useCallback(async () => {
         setLoading(true);
         try {
-            const [hierRes, mgrRes, subRes] = await Promise.all([
+            const [hierRes, mgrRes] = await Promise.all([
                 axios.get(API_ENDPOINTS.TEAMS_HIERARCHY),
                 axios.get(API_ENDPOINTS.TEAMS_MANAGERS_LIST),
-                axios.get(API_ENDPOINTS.TEAMS_SUB_ADMINS_LIST),
             ]);
             setHierarchy(hierRes.data.hierarchy || []);
             setUnassigned(hierRes.data.unassigned || []);
             setManagers(mgrRes.data.managers || []);
-            setSubAdmins(subRes.data.managers || []);
+
+            // Non-fatal — sub-admins list might not be available yet
+            try {
+                const subRes = await axios.get(API_ENDPOINTS.TEAMS_SUB_ADMINS_LIST);
+                setSubAdmins(subRes.data.managers || []);
+            } catch {
+                setSubAdmins([]);
+            }
         } catch {
             showNotification('Failed to load manager hierarchy', 'danger');
         } finally {
