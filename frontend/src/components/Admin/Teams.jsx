@@ -236,6 +236,7 @@ const Teams = () => {
     const [hierarchy, setHierarchy]     = useState([]);
     const [unassigned, setUnassigned]   = useState([]);
     const [managers, setManagers]       = useState([]);
+    const [subAdmins, setSubAdmins]     = useState([]);
     const [loading, setLoading]         = useState(true);
     const [saving, setSaving]           = useState(false);
 
@@ -246,19 +247,22 @@ const Teams = () => {
     // Assign modal
     const [assignModal, setAssignModal] = useState(false);
     const [assignEmp, setAssignEmp]     = useState(null);
+    const [assignType, setAssignType]   = useState('tl'); // 'tl' | 'manager'
     const [newMgrId, setNewMgrId]       = useState('');
     const [assignError, setAssignError] = useState('');
 
     const fetchHierarchy = useCallback(async () => {
         setLoading(true);
         try {
-            const [hierRes, mgrRes] = await Promise.all([
+            const [hierRes, mgrRes, subRes] = await Promise.all([
                 axios.get(API_ENDPOINTS.TEAMS_HIERARCHY),
                 axios.get(API_ENDPOINTS.TEAMS_MANAGERS_LIST),
+                axios.get(API_ENDPOINTS.TEAMS_SUB_ADMINS_LIST),
             ]);
             setHierarchy(hierRes.data.hierarchy || []);
             setUnassigned(hierRes.data.unassigned || []);
             setManagers(mgrRes.data.managers || []);
+            setSubAdmins(subRes.data.managers || []);
         } catch {
             showNotification('Failed to load manager hierarchy', 'danger');
         } finally {
@@ -272,13 +276,15 @@ const Teams = () => {
     const openAssign = (emp, currentMgr = null) => {
         setAssignEmp(emp);
         setNewMgrId(currentMgr?.employee_id || '');
+        setAssignType('tl');
         setAssignError('');
         setAssignModal(true);
     };
 
     const handleAssignSave = async () => {
-        if (!newMgrId) return setAssignError('Please select a manager');
-        const mgr = managers.find(m => m.employee_id === newMgrId);
+        if (!newMgrId) return setAssignError('Please select a reporting manager');
+        const pool = assignType === 'tl' ? managers : subAdmins;
+        const mgr = pool.find(m => m.employee_id === newMgrId);
         if (!mgr) return;
         setSaving(true);
         try {
@@ -488,21 +494,52 @@ const Teams = () => {
             <Modal show={assignModal} onHide={() => setAssignModal(false)} centered size="sm">
                 <Modal.Header closeButton className="py-2">
                     <Modal.Title as="h6" className="fw-semibold">
-                        {assignEmp ? `Assign Manager — ${assignEmp.first_name} ${assignEmp.last_name}` : 'Assign Manager'}
+                        {assignEmp ? `Assign — ${assignEmp.first_name} ${assignEmp.last_name}` : 'Assign Reporting Manager'}
                     </Modal.Title>
                 </Modal.Header>
                 <Modal.Body className="p-3">
                     {assignError && <Alert variant="danger" className="py-2 small mb-2">{assignError}</Alert>}
+
+                    {/* Toggle: TL / Manager */}
+                    <div className="mb-3">
+                        <div className="small fw-semibold mb-2">Assign as</div>
+                        <div className="d-flex" style={{ background: '#f1f5f9', borderRadius: 10, padding: 3 }}>
+                            {[{ key: 'tl', label: 'TL' }, { key: 'manager', label: 'Manager' }].map(opt => (
+                                <button
+                                    key={opt.key}
+                                    onClick={() => { setAssignType(opt.key); setNewMgrId(''); }}
+                                    style={{
+                                        flex: 1, border: 'none', borderRadius: 8, padding: '6px 0',
+                                        fontWeight: 600, fontSize: 13, cursor: 'pointer',
+                                        background: assignType === opt.key ? '#3b82f6' : 'transparent',
+                                        color: assignType === opt.key ? '#fff' : '#64748b',
+                                        transition: 'all 0.2s',
+                                    }}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
                     <Form.Group>
-                        <Form.Label className="small fw-semibold">Reporting Manager</Form.Label>
+                        <Form.Label className="small fw-semibold">
+                            {assignType === 'tl' ? 'Select TL' : 'Select Manager'}
+                        </Form.Label>
                         <Form.Select size="sm" value={newMgrId} onChange={e => setNewMgrId(e.target.value)}>
-                            <option value="">-- Select TL --</option>
-                            {managers.map(m => (
+                            <option value="">-- {assignType === 'tl' ? 'Select TL' : 'Select Manager'} --</option>
+                            {(assignType === 'tl' ? managers : subAdmins).map(m => (
                                 <option key={m.employee_id} value={m.employee_id}>
                                     {m.first_name} {m.last_name}{m.designation ? ` (${m.designation})` : ''}
                                 </option>
                             ))}
                         </Form.Select>
+                        {assignType === 'tl' && managers.length === 0 && (
+                            <div className="text-muted small mt-1">No TLs found.</div>
+                        )}
+                        {assignType === 'manager' && subAdmins.length === 0 && (
+                            <div className="text-muted small mt-1">No Managers found.</div>
+                        )}
                     </Form.Group>
                 </Modal.Body>
                 <Modal.Footer className="py-2">
