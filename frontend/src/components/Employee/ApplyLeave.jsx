@@ -327,8 +327,17 @@ const ApplyLeave = () => {
 
   const fetchManagers = async () => {
     try {
-      const response = await axios.get(API_ENDPOINTS.TEAMS_MANAGERS_LIST);
-      setManagers(response.data.managers || []);
+      const [tlRes, mgrRes] = await Promise.allSettled([
+        axios.get(API_ENDPOINTS.TEAMS_MANAGERS_LIST),
+        axios.get(API_ENDPOINTS.TEAMS_SUB_ADMINS_LIST),
+      ]);
+      const tls  = (tlRes.status  === 'fulfilled' ? tlRes.value.data.managers  : []) || [];
+      const mgrs = (mgrRes.status === 'fulfilled' ? mgrRes.value.data.managers : []) || [];
+      // tag each entry so the dropdown can group them
+      setManagers([
+        ...tls.map(m  => ({ ...m, _group: 'TL' })),
+        ...mgrs.map(m => ({ ...m, _group: 'Manager' })),
+      ]);
     } catch (error) {
       console.error('Error fetching managers:', error);
     }
@@ -852,13 +861,21 @@ const ApplyLeave = () => {
                     size="sm"
                     isInvalid={!!errors.reporting_manager}
                   >
-                    <option value="">-- Select TL --</option>
-                    {managers.map(m => {
-                      const fullName = `${m.first_name} ${m.last_name}`.trim();
+                    <option value="">-- Select Reporting Manager --</option>
+                    {['Manager', 'TL'].map(group => {
+                      const group_members = managers.filter(m => m._group === group);
+                      if (group_members.length === 0) return null;
                       return (
-                        <option key={m.employee_id} value={fullName}>
-                          {fullName} ({m.designation})
-                        </option>
+                        <optgroup key={group} label={group === 'Manager' ? '👔 Managers' : '👤 Team Leads (TL)'}>
+                          {group_members.map(m => {
+                            const fullName = `${m.first_name} ${m.last_name}`.trim();
+                            return (
+                              <option key={m.employee_id} value={fullName}>
+                                {fullName}{m.designation ? ` (${m.designation})` : ''}
+                              </option>
+                            );
+                          })}
+                        </optgroup>
                       );
                     })}
                   </Form.Select>

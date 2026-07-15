@@ -134,8 +134,8 @@ router.get('/managers/list', verifyToken, async (req, res) => {
     }
 });
 
-// GET /api/teams/sub-admins/list — Manager (sub_admin) employees for team assignment
-router.get('/sub-admins/list', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
+// GET /api/teams/sub-admins/list — Manager (sub_admin) employees; open to all authenticated users so employees can pick a reporting manager
+router.get('/sub-admins/list', verifyToken, async (req, res) => {
     try {
         const { data, error } = await supabase
             .from('employees')
