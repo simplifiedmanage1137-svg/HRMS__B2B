@@ -201,6 +201,18 @@ export const API_ENDPOINTS = {
   TEAMS_MANAGER_SETTINGS: (id) => ep(`/api/teams/manager-settings/${id}`),
   TEAMS_SUB_ADMINS_LIST:  ep('/api/teams/sub-admins/list'),
 
+  // Onboarding (self-service)
+  ONBOARDING_GENERATE:          ep('/api/onboarding/generate'),
+  ONBOARDING_LINKS:             ep('/api/onboarding/links'),
+  ONBOARDING_LINK_EXPIRE:       (id) => ep(`/api/onboarding/links/${id}/expire`),
+  ONBOARDING_LINK_DELETE:       (id) => ep(`/api/onboarding/links/${id}`),
+  ONBOARDING_LINK_APPROVE:      (id) => ep(`/api/onboarding/links/${id}/approve`),
+  ONBOARDING_LINK_SUBMISSION:   (id) => ep(`/api/onboarding/links/${id}/submission`),
+  ONBOARDING_BY_TOKEN:          (token) => ep(`/api/onboarding/${token}`),
+  ONBOARDING_ACCEPT:            (token) => ep(`/api/onboarding/${token}/accept`),
+  ONBOARDING_REJECT:            (token) => ep(`/api/onboarding/${token}/reject`),
+  ONBOARDING_SUBMIT:            (token) => ep(`/api/onboarding/${token}/submit`),
+
   // Geofence
   GEOFENCE_LIST:   ep('/api/geofence/list'),
   GEOFENCE_CREATE: ep('/api/geofence'),

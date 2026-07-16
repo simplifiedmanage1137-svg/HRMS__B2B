@@ -813,117 +813,20 @@ router.get('/', async (req, res) => {
     }
 });
 
-// Delete employee (Admin only - HARD DELETE)
-router.delete('/:id', verifyToken, isAdmin, async (req, res) => {
-    try {
-        const { id } = req.params;
-
-        // First get the employee to know their employee_id
-        const { data: employee, error: fetchError } = await supabase
-            .from('employees')
-            .select('employee_id')
-            .eq('id', id);
-
-        if (fetchError) throw fetchError;
-
-        if (!employee || employee.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Employee not found'
-            });
-        }
-
-        const employeeId = employee[0].employee_id;
-
-        // Delete from users table first (due to foreign key)
-        const { error: userError } = await supabase
-            .from('users')
-            .delete()
-            .eq('employee_id', employeeId);
-
-        if (userError) {
-            console.error('Error deleting from users:', userError);
-            // Continue even if user delete fails
-        }
-
-        // Delete from leave_balance
-        const { error: leaveError } = await supabase
-            .from('leave_balance')
-            .delete()
-            .eq('employee_id', employeeId);
-
-        if (leaveError) {
-            console.error('Error deleting leave balance:', leaveError);
-        }
-
-        // Delete from leaves
-        const { error: leavesError } = await supabase
-            .from('leaves')
-            .delete()
-            .eq('employee_id', employeeId);
-
-        if (leavesError) {
-            console.error('Error deleting leaves:', leavesError);
-        }
-
-        // Delete from attendance
-        const { error: attendanceError } = await supabase
-            .from('attendance')
-            .delete()
-            .eq('employee_id', employeeId);
-
-        if (attendanceError) {
-            console.error('Error deleting attendance:', attendanceError);
-        }
-
-        // Finally delete from employees table
-        const { error: empError } = await supabase
-            .from('employees')
-            .delete()
-            .eq('id', id);
-
-        if (empError) throw empError;
-
-        res.json({
-            success: true,
-            message: 'Employee permanently deleted successfully',
-            employeeId: employeeId
-        });
-
-    } catch (error) {
-        console.error('Error deleting employee:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to delete employee',
-            error: error.message
-        });
-    }
+// Employee deletion is disabled — use PATCH /:id/toggle-status to deactivate instead
+router.delete('/:id', verifyToken, isAdmin, (req, res) => {
+    res.status(403).json({
+        success: false,
+        message: 'Permanent deletion is disabled. Use the deactivate feature to disable an employee account.',
+    });
 });
 
-// Hard delete (Admin only - use with caution)
-router.delete('/:id/hard', verifyToken, isAdmin, async (req, res) => {
-    try {
-        const { id } = req.params;
-
-        const { error } = await supabase
-            .from('employees')
-            .delete()
-            .eq('id', id);
-
-        if (error) throw error;
-
-        res.json({
-            success: true,
-            message: 'Employee permanently deleted'
-        });
-    } catch (error) {
-        console.error('Error hard deleting employee:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to delete employee',
-            error: error.message
-        });
-    }
+// Hard delete disabled — deactivate instead
+router.delete('/:id/hard', verifyToken, isAdmin, (req, res) => {
+    res.status(403).json({
+        success: false,
+        message: 'Permanent deletion is disabled. Use the deactivate feature to disable an employee account.',
+    });
 });
 
 // Admin / Desktop Support can reset an employee's password

@@ -2,17 +2,18 @@
 import React, { useState, useEffect } from 'react';
 import { Spinner, Modal, Table, Button } from 'react-bootstrap';
 import {
-  FaEdit, FaTrash, FaEye, FaPlus, FaDownload, FaFilePdf, FaFileImage, FaFileAlt,
+  FaEdit, FaEye, FaPlus, FaDownload, FaFilePdf, FaFileImage, FaFileAlt,
   FaSearch, FaTimes, FaSyncAlt, FaArrowLeft, FaCheckCircle, FaUserSlash,
   FaUser, FaEnvelope, FaPhone, FaBuilding, FaBriefcase, FaCalendarAlt, FaUserTie,
-  FaClock, FaHistory, FaTimesCircle, FaHourglassHalf, FaCreditCard, FaUsers, FaStar,
-  FaChartBar,
+  FaClock, FaCreditCard, FaUsers,
 } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
+import GenerateLinkModal from './GenerateLinkModal';
+import OfferLinksManager from './OfferLinksManager';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const getInitials = (emp) =>
@@ -117,7 +118,7 @@ const StatMini = ({ label, value, color }) => (
 );
 
 // ── EmpQuickView ──────────────────────────────────────────────────────────────
-const EmpQuickView = ({ emp, onClose, navigate, user, onToggleStatus, togglingStatus, onDeleteClick, onViewDocs }) => {
+const EmpQuickView = ({ emp, onClose, navigate, user, onToggleStatus, togglingStatus, onViewDocs }) => {
   const [tab, setTab] = useState('overview');
   const [attSummary, setAttSummary] = useState(null);
   const [leaveBalance, setLeaveBalance] = useState(null);
@@ -291,37 +292,23 @@ const EmpQuickView = ({ emp, onClose, navigate, user, onToggleStatus, togglingSt
               ))}
             </div>
 
-            {/* Action buttons */}
+            {/* Activate / Deactivate */}
             {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'manager') && (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => onToggleStatus(emp)}
-                  disabled={togglingStatus === emp.id}
-                  style={{
-                    flex: 1, border: `1px solid ${isActive ? '#fde68a' : '#bbf7d0'}`, borderRadius: 8,
-                    background: isActive ? '#fffbeb' : '#f0fdf4', color: isActive ? '#d97706' : '#16a34a',
-                    padding: '8px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                  }}>
-                  {togglingStatus === emp.id
-                    ? <Spinner size="sm" animation="border" />
-                    : isActive
-                      ? <><FaUserSlash size={11} /> Deactivate</>
-                      : <><FaCheckCircle size={11} /> Activate</>}
-                </button>
-                {(user?.role === 'admin' || user?.role === 'sub_admin') && (
-                  <button
-                    onClick={() => onDeleteClick(emp)}
-                    style={{
-                      flex: 1, border: '1px solid #fecaca', borderRadius: 8,
-                      background: '#fff5f5', color: '#dc2626', padding: '8px',
-                      fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                    }}>
-                    <FaTrash size={11} /> Delete
-                  </button>
-                )}
-              </div>
+              <button
+                onClick={() => onToggleStatus(emp)}
+                disabled={togglingStatus === emp.id}
+                style={{
+                  width: '100%', border: `1px solid ${isActive ? '#fde68a' : '#bbf7d0'}`, borderRadius: 8,
+                  background: isActive ? '#fffbeb' : '#f0fdf4', color: isActive ? '#d97706' : '#16a34a',
+                  padding: '9px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                }}>
+                {togglingStatus === emp.id
+                  ? <Spinner size="sm" animation="border" />
+                  : isActive
+                    ? <><FaUserSlash size={11} /> Deactivate Account</>
+                    : <><FaCheckCircle size={11} /> Activate Account</>}
+              </button>
             )}
           </>
         )}
@@ -464,10 +451,9 @@ const EmployeeList = () => {
   const [activeTab, setActiveTab] = useState('active');
   const [selectedEmpId, setSelectedEmpId] = useState(null);
 
-  // delete modal
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [selectedEmployee, setSelectedEmployee] = useState(null);
-  const [deleting, setDeleting] = useState(false);
+  // onboarding
+  const [showGenLink, setShowGenLink] = useState(false);
+  const [view, setView] = useState('employees'); // 'employees' | 'offerLinks'
 
   // docs modal
   const [showDocumentModal, setShowDocumentModal] = useState(false);
@@ -596,23 +582,6 @@ const EmployeeList = () => {
     }
   };
 
-  const handleDelete = async () => {
-    if (!selectedEmployee) return;
-    setDeleting(true);
-    try {
-      await axios.delete(API_ENDPOINTS.EMPLOYEE_DELETE(selectedEmployee.id));
-      setShowDeleteModal(false);
-      if (selectedEmpId === selectedEmployee.id) setSelectedEmpId(null);
-      await fetchEmployees();
-      showNotification(`${selectedEmployee.first_name} ${selectedEmployee.last_name} deleted`, 'success');
-      setSelectedEmployee(null);
-    } catch (err) {
-      showNotification(err.response?.data?.message || 'Failed to delete', 'danger');
-    } finally {
-      setDeleting(false);
-    }
-  };
-
   const handleToggleStatus = async (emp) => {
     const action = emp.is_active !== false ? 'Deactivate' : 'Activate';
     if (!window.confirm(`${action} account for ${emp.first_name} ${emp.last_name}?`)) return;
@@ -663,13 +632,22 @@ const EmployeeList = () => {
             <option value="incomplete">⚠️ Incomplete</option>
           </select>
           {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'desktop_support') && (
-            <button onClick={() => navigate('/admin/add-employee')} style={{
-              background: '#1e293b', color: '#fff', border: 'none', borderRadius: 7,
-              padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 5,
-            }}>
-              <FaPlus size={10} /> Add Employee
-            </button>
+            <>
+              <button onClick={() => setShowGenLink(true)} style={{
+                background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', border: 'none', borderRadius: 7,
+                padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 5,
+              }}>
+                <FaUsers size={10} /> Offer Link
+              </button>
+              <button onClick={() => navigate('/admin/add-employee')} style={{
+                background: '#1e293b', color: '#fff', border: 'none', borderRadius: 7,
+                padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 5,
+              }}>
+                <FaPlus size={10} /> Add Employee
+              </button>
+            </>
           )}
           <button onClick={fetchEmployees} title="Refresh" style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 7, padding: '6px 10px', cursor: 'pointer', color: '#6b7280' }}>
             <FaSyncAlt size={12} />
@@ -680,8 +658,25 @@ const EmployeeList = () => {
         </div>
       </div>
 
+      {/* ── View Toggle ── */}
+      <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', background: '#fff', flexShrink: 0 }}>
+        {[
+          { key: 'employees', label: 'Employees' },
+          { key: 'offerLinks', label: 'Offer Links' },
+        ].map(v => (
+          <button key={v.key} onClick={() => setView(v.key)} style={{ padding: '8px 18px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, fontWeight: view === v.key ? 700 : 500, color: view === v.key ? '#6366f1' : '#6b7280', borderBottom: view === v.key ? '2px solid #6366f1' : '2px solid transparent' }}>
+            {v.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Offer Links View ── */}
+      <div style={{ flex: 1, display: view === 'offerLinks' ? 'flex' : 'none', overflow: 'hidden' }}>
+        <OfferLinksManager />
+      </div>
+
       {/* ── Split Pane ── */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: view === 'employees' ? 'flex' : 'none', overflow: 'hidden' }}>
 
         {/* ── Left Panel ── */}
         <div style={{ width: 290, flexShrink: 0, borderRight: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', background: '#fff', overflow: 'hidden' }}>
@@ -760,7 +755,6 @@ const EmployeeList = () => {
               user={user}
               onToggleStatus={handleToggleStatus}
               togglingStatus={togglingStatus}
-              onDeleteClick={(emp) => { setSelectedEmployee(emp); setShowDeleteModal(true); }}
               onViewDocs={fetchEmployeeDocuments}
             />
           ) : (
@@ -788,6 +782,13 @@ const EmployeeList = () => {
           )}
         </div>
       </div>
+
+      {/* ── Generate Link Modal ── */}
+      <GenerateLinkModal
+        show={showGenLink}
+        onHide={() => setShowGenLink(false)}
+        onGenerated={() => {}}
+      />
 
       {/* ── Documents Modal ── */}
       <Modal show={showDocumentModal} onHide={() => setShowDocumentModal(false)} size="lg" centered>
@@ -838,29 +839,6 @@ const EmployeeList = () => {
         </Modal.Footer>
       </Modal>
 
-      {/* ── Delete Modal ── */}
-      <Modal show={showDeleteModal} onHide={() => { setShowDeleteModal(false); setSelectedEmployee(null); }} centered backdrop="static">
-        <Modal.Header closeButton className="bg-danger text-white py-2">
-          <Modal.Title as="h6" className="mb-0 small fw-semibold"><FaTrash className="me-2" size={12} />Confirm Delete</Modal.Title>
-        </Modal.Header>
-        <Modal.Body className="p-3">
-          <div className="text-center mb-3"><FaTrash size={40} className="text-danger mb-2" /></div>
-          {selectedEmployee && (
-            <div className="alert alert-warning py-2 small">
-              <strong>{selectedEmployee.first_name} {selectedEmployee.last_name}</strong><br />
-              ID: {selectedEmployee.employee_id} · Dept: {selectedEmployee.department}
-            </div>
-          )}
-          <p className="text-danger small fw-bold mb-0">⚠️ This action cannot be undone.</p>
-        </Modal.Body>
-        <Modal.Footer className="py-2">
-          <Button variant="secondary" size="sm" onClick={() => { setShowDeleteModal(false); setSelectedEmployee(null); }} disabled={deleting}>Cancel</Button>
-          <Button variant="danger" size="sm" onClick={handleDelete} disabled={deleting}>
-            {deleting ? <Spinner size="sm" animation="border" className="me-1" /> : <FaTrash className="me-1" size={10} />}
-            Delete
-          </Button>
-        </Modal.Footer>
-      </Modal>
     </div>
   );
 };

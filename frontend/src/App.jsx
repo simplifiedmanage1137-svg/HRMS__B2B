@@ -60,6 +60,10 @@ const ManagerLeaveRequests   = lazy(() => import('./components/Employee/ManagerL
 const ManagerShiftUpdate     = lazy(() => import('./components/Employee/ManagerShiftUpdate'));
 const ManagerPanel           = lazy(() => import('./components/Employee/ManagerPanel'));
 
+// Onboarding — public pages (no auth required)
+const OnboardingPage    = lazy(() => import('./pages/OnboardingPage'));
+const OnboardingFormPage = lazy(() => import('./pages/OnboardingFormPage'));
+
 // Shared fallback shown while a lazy chunk is being fetched
 const PageLoader = () => (
   <div style={{
@@ -112,6 +116,19 @@ function AppContent() {
   const location = useLocation();
   const isLoginPage = location.pathname === '/login';
   const isUnauthorizedPage = location.pathname === '/unauthorized';
+  const isOnboardingPage = location.pathname.startsWith('/onboarding/');
+
+  // Public onboarding pages — render immediately, no auth check needed
+  if (isOnboardingPage) {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          <Route path="/onboarding/:token/form" element={<OnboardingFormPage />} />
+          <Route path="/onboarding/:token" element={<OnboardingPage />} />
+        </Routes>
+      </Suspense>
+    );
+  }
 
   if (loading) {
     return (
@@ -135,6 +152,7 @@ function AppContent() {
   // If on login/unauthorized page, render without layout
   if (isLoginPage) return <Login />;
   if (isUnauthorizedPage) return <Unauthorized />;
+
 
   // For all other pages, render with sidebar and navbar
   return (

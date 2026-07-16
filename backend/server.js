@@ -40,6 +40,7 @@ const loginFeedRoutes     = require('./routes/loginFeedRoutes');
 const noticeBoardRoutes   = require('./routes/noticeBoardRoutes');
 const teamRoutes          = require('./routes/teamRoutes');
 const deductionRoutes     = require('./routes/deductionRoutes');
+const onboardingRoutes    = require('./routes/onboardingRoutes');
 
 const attendanceController = require('./controllers/attendanceController');
 const cronRoutes           = require('./routes/cronRoutes');
@@ -197,10 +198,12 @@ const requireAdmin = (req, res, next) => {
 
 // ─── Public routes ────────────────────────────────────────────────────────────
 console.log('Auth routes mounted at /api/auth');
-app.use('/api/auth',   authRoutes);
-app.use('/api/public', loginFeedRoutes);
+app.use('/api/auth',        authRoutes);
+app.use('/api/public',      loginFeedRoutes);
 // Cron endpoints — no JWT, auth via CRON_SECRET (called by Vercel scheduler)
-app.use('/api/cron',   cronRoutes);
+app.use('/api/cron',        cronRoutes);
+// Onboarding — mixed auth (public token routes + protected admin routes both in same file)
+app.use('/api/onboarding',  onboardingRoutes);
 
 // ─── Protected routes ─────────────────────────────────────────────────────────
 app.use('/api/employees',        authenticateToken, employeeRoutes);
