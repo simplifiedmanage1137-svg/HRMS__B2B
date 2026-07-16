@@ -2,10 +2,23 @@
 const express = require('express');
 const router  = express.Router();
 const crypto  = require('crypto');
+const path    = require('path');
+const multer  = require('multer');
 const supabase = require('../config/supabase');
 const { verifyToken, isAdmin, isAdminOrDesktopSupport } = require('../middleware/auth');
+const { uploadFile } = require('../lib/supabaseStorage');
 
 const BUCKET = 'hrms-documents';
+
+// 4 MB per file — keeps each multipart request well under Vercel's 4.5 MB payload cap.
+const uploadSingle = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 4 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+        const allowed = /\.(jpe?g|png|pdf|docx?)$/i.test(path.extname(file.originalname));
+        cb(null, allowed);
+    },
+});
 
 // ── POST /api/onboarding/generate ─────────────────────────────────────────────
 router.post('/generate', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
@@ -292,6 +305,49 @@ router.post('/:token/reject', async (req, res) => {
     }
 });
 
+// ── POST /api/onboarding/:token/upload-file ───────────────────────────────────
+// Public: accepts ONE document file (≤ 4 MB) via multipart, uploads it to
+// Supabase Storage using the service role key (bypasses all RLS), and returns
+// the public URL. Keeps each request well under Vercel's 4.5 MB payload cap.
+router.post('/:token/upload-file', (req, res) => {
+    uploadSingle.single('file')(req, res, async (err) => {
+        if (err) {
+            const msg = err.code === 'LIMIT_FILE_SIZE'
+                ? 'File exceeds the 4 MB limit. Please compress it and try again.'
+                : (err.message || 'File upload error');
+            return res.status(400).json({ success: false, message: msg });
+        }
+
+        try {
+            const { field } = req.body;
+            if (!field) return res.status(400).json({ success: false, message: '"field" body param is required' });
+            if (!req.file) return res.status(400).json({ success: false, message: 'No file received' });
+
+            // Validate the offer token before storing anything
+            const { data: offer } = await supabase.from('employee_offer_links')
+                .select('id, status, expiry_date').eq('token', req.params.token).maybeSingle();
+            if (!offer) return res.status(404).json({ success: false, message: 'Offer not found' });
+            if (!['pending', 'accepted'].includes(offer.status))
+                return res.status(400).json({ success: false, message: `Cannot upload: offer is ${offer.status}` });
+            if (new Date(offer.expiry_date) < new Date())
+                return res.status(410).json({ success: false, message: 'Offer has expired' });
+
+            const { publicUrl } = await uploadFile(
+                req.file.buffer,
+                req.file.originalname,
+                'onboarding',
+                req.file.mimetype,
+            );
+
+            console.log(`[onboarding] uploaded ${field} → ${publicUrl}`);
+            return res.json({ success: true, publicUrl, field });
+        } catch (uploadErr) {
+            console.error('[onboarding] upload-file error:', uploadErr);
+            return res.status(500).json({ success: false, message: uploadErr.message });
+        }
+    });
+});
+
 // ── POST /api/onboarding/:token/presign ───────────────────────────────────────
 // Validates the offer token and returns a unique storage path so the browser
 // can upload the file directly to Supabase Storage using the anon key.
@@ -347,7 +403,7 @@ router.post('/:token/submit', async (req, res) => {
             pan_number, aadhar_number, uan,
             emergency_contact, emergency_contact_name, emergency_contact_relation,
             joining_date,
-            // Document URLs — uploaded directly to Supabase by the browser
+            // Document URLs — uploaded via POST /:token/upload-file (service role key)
             passport_photo, aadhar_card_doc, pan_card_doc, offer_letter_doc,
         } = req.body;
 

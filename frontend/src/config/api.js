@@ -211,6 +211,7 @@ export const API_ENDPOINTS = {
   ONBOARDING_BY_TOKEN:          (token) => ep(`/api/onboarding/${token}`),
   ONBOARDING_ACCEPT:            (token) => ep(`/api/onboarding/${token}/accept`),
   ONBOARDING_REJECT:            (token) => ep(`/api/onboarding/${token}/reject`),
+  ONBOARDING_UPLOAD_FILE:       (token) => ep(`/api/onboarding/${token}/upload-file`),
   ONBOARDING_PRESIGN:           (token) => ep(`/api/onboarding/${token}/presign`),
   ONBOARDING_SUBMIT:            (token) => ep(`/api/onboarding/${token}/submit`),
 

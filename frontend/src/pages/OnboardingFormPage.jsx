@@ -18,51 +18,67 @@ const TABS = [
     { key: 'documents', label: 'Documents',  icon: FileUp },
 ];
 
+// maxMB enforced client-side before any upload attempt; server also enforces 4 MB.
 const DOC_FIELDS = [
     {
         key: 'passport_photo',
         label: 'Passport Size Photo',
         required: true,
+        maxMB: 4,
         accept: 'image/jpeg,image/jpg,image/png',
-        hint: 'Clear front-facing photo · JPG or PNG · max 10 MB',
+        hint: 'Clear front-facing photo · JPG or PNG · max 4 MB',
     },
     {
         key: 'aadhar_card_doc',
         label: 'Aadhar Card',
         required: true,
+        maxMB: 4,
         accept: 'image/jpeg,image/jpg,image/png,application/pdf',
-        hint: 'Both sides on one file · JPG, PNG or PDF · max 10 MB',
+        hint: 'Both sides on one file · JPG, PNG or PDF · max 4 MB',
     },
     {
         key: 'pan_card_doc',
         label: 'PAN Card',
         required: true,
+        maxMB: 4,
         accept: 'image/jpeg,image/jpg,image/png,application/pdf',
-        hint: 'Clear scan or photo · JPG, PNG or PDF · max 10 MB',
+        hint: 'Clear scan or photo · JPG, PNG or PDF · max 4 MB',
     },
     {
         key: 'offer_letter_doc',
         label: 'Offer Letter / Experience Letter',
         required: false,
+        maxMB: 4,
         accept: 'image/jpeg,image/jpg,image/png,application/pdf,.doc,.docx',
-        hint: 'Previous experience letter if applicable · optional · max 10 MB',
+        hint: 'Previous experience letter if applicable · optional · max 4 MB',
     },
 ];
 
-// ── File upload field component ───────────────────────────────────────────────
-function FileField({ label, required, accept, hint, file, onChange }) {
+const fmtSize = (bytes) => {
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+};
+
+// ── File upload field ─────────────────────────────────────────────────────────
+function FileField({ label, required, accept, hint, maxMB, file, onChange, sizeError }) {
     const inputRef = useRef(null);
+
+    const handleChange = (f) => {
+        if (!f) { onChange(null); return; }
+        if (maxMB && f.size > maxMB * 1024 * 1024) {
+            onChange(null, `"${f.name}" is ${fmtSize(f.size)} — max allowed is ${maxMB} MB. Please compress the file and try again.`);
+            return;
+        }
+        onChange(f, null);
+    };
 
     const handleDrop = (e) => {
         e.preventDefault();
         const f = e.dataTransfer.files[0];
-        if (f) onChange(f);
+        if (f) handleChange(f);
     };
 
-    const fmtSize = (bytes) => {
-        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-        return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-    };
+    const hasError = !!sizeError;
 
     return (
         <div>
@@ -75,10 +91,10 @@ function FileField({ label, required, accept, hint, file, onChange }) {
                 onDragOver={e => e.preventDefault()}
                 onClick={() => inputRef.current?.click()}
                 style={{
-                    border: `2px dashed ${file ? '#10b981' : '#c7d2fe'}`,
+                    border: `2px dashed ${hasError ? '#ef4444' : file ? '#10b981' : '#c7d2fe'}`,
                     borderRadius: 10,
                     padding: '14px 16px',
-                    background: file ? '#f0fdf4' : '#f8f9ff',
+                    background: hasError ? '#fff5f5' : file ? '#f0fdf4' : '#f8f9ff',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -88,17 +104,21 @@ function FileField({ label, required, accept, hint, file, onChange }) {
             >
                 <div style={{
                     width: 36, height: 36, borderRadius: 8, flexShrink: 0,
-                    background: file ? '#d1fae5' : '#e0e7ff',
+                    background: hasError ? '#fee2e2' : file ? '#d1fae5' : '#e0e7ff',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
-                    {file ? <CheckCircle size={18} color="#10b981" /> : <Upload size={18} color="#6366f1" />}
+                    {hasError
+                        ? <AlertTriangle size={18} color="#ef4444" />
+                        : file
+                            ? <CheckCircle size={18} color="#10b981" />
+                            : <Upload size={18} color="#6366f1" />}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                    {file ? (
+                    {hasError ? (
+                        <div style={{ fontSize: 12, color: '#dc2626', fontWeight: 500, lineHeight: 1.4 }}>{sizeError}</div>
+                    ) : file ? (
                         <>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: '#065f46', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {file.name}
-                            </div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: '#065f46', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.name}</div>
                             <div style={{ fontSize: 11, color: '#6b7280', marginTop: 1 }}>{fmtSize(file.size)}</div>
                         </>
                     ) : (
@@ -108,10 +128,10 @@ function FileField({ label, required, accept, hint, file, onChange }) {
                         </>
                     )}
                 </div>
-                {file && (
+                {(file || hasError) && (
                     <button
                         type="button"
-                        onClick={e => { e.stopPropagation(); onChange(null); }}
+                        onClick={e => { e.stopPropagation(); onChange(null, null); }}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#9ca3af', flexShrink: 0 }}
                     >
                         <X size={16} />
@@ -123,7 +143,7 @@ function FileField({ label, required, accept, hint, file, onChange }) {
                 type="file"
                 accept={accept}
                 style={{ display: 'none' }}
-                onChange={e => onChange(e.target.files[0] || null)}
+                onChange={e => handleChange(e.target.files[0] || null)}
             />
         </div>
     );
@@ -149,9 +169,9 @@ export default function OnboardingFormPage() {
         emergency_contact_name: '', emergency_contact: '', emergency_contact_relation: '',
     });
 
-    const [files, setFiles] = useState({
-        passport_photo: null, aadhar_card_doc: null, pan_card_doc: null, offer_letter_doc: null,
-    });
+    // files[key] = File | null,  fileSizeErrors[key] = string | null
+    const [files, setFiles]           = useState({ passport_photo: null, aadhar_card_doc: null, pan_card_doc: null, offer_letter_doc: null });
+    const [fileSizeErrors, setFileSizeErrors] = useState({ passport_photo: null, aadhar_card_doc: null, pan_card_doc: null, offer_letter_doc: null });
 
     const [submitting, setSubmitting]         = useState(false);
     const [submitErr, setSubmitErr]           = useState('');
@@ -185,60 +205,56 @@ export default function OnboardingFormPage() {
         })();
     }, [token]);
 
-    const set     = (k, v) => setForm(f => ({ ...f, [k]: v }));
-    const setFile = (k, v) => setFiles(f => ({ ...f, [k]: v }));
+    const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-    // Upload one file directly to Supabase Storage using the anon key.
-    // Files never pass through Vercel — only a tiny JSON presign request does.
-    // The anon key is public by design; storage RLS limits it to INSERT on onboarding/*.
-    const SUPABASE_URL     = import.meta.env.VITE_SUPABASE_URL;
-    const SUPABASE_ANON    = import.meta.env.VITE_SUPABASE_ANON_KEY;
-    const STORAGE_BUCKET   = 'hrms-documents';
+    const handleFileChange = (key, file, sizeErr) => {
+        setFiles(f => ({ ...f, [key]: file }));
+        setFileSizeErrors(e => ({ ...e, [key]: sizeErr || null }));
+    };
 
-    const uploadFileDirect = async (fieldKey, file) => {
-        // 1. Ask backend to validate the token and generate a unique storage path
-        const presignRes = await fetch(API_ENDPOINTS.ONBOARDING_PRESIGN(token), {
+    // Upload one file to the backend (one at a time, each ≤ 4 MB).
+    // The backend uses the service role key to upload to Supabase — no RLS policy needed.
+    const uploadOneFile = async (fieldKey, file, label) => {
+        const fd = new FormData();
+        fd.append('file', file, file.name);
+        fd.append('field', fieldKey);
+
+        const res = await fetch(API_ENDPOINTS.ONBOARDING_UPLOAD_FILE(token), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ field: fieldKey, filename: file.name }),
-        });
-        const raw1 = await presignRes.text();
-        let presignData;
-        try { presignData = JSON.parse(raw1); } catch {
-            throw new Error(`Could not prepare upload (${presignRes.status})`);
-        }
-        if (!presignData.success) throw new Error(`Upload prepare failed: ${presignData.message}`);
-
-        // 2. POST the file directly to Supabase Storage REST API
-        //    No SDK needed — just a standard fetch with the anon key as Bearer token.
-        const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${presignData.storagePath}`;
-        const uploadRes = await fetch(uploadUrl, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${SUPABASE_ANON}`,
-                'Content-Type': file.type || 'application/octet-stream',
-                'x-upsert': 'false',
-            },
-            body: file,
+            body: fd,
+            // No Content-Type — browser sets multipart/form-data + boundary automatically
         });
 
-        if (!uploadRes.ok) {
-            const errBody = await uploadRes.text().catch(() => '');
-            let errMsg = `Upload failed (HTTP ${uploadRes.status})`;
-            try {
-                const parsed = JSON.parse(errBody);
-                if (parsed.message) errMsg += `: ${parsed.message}`;
-            } catch { /* not JSON */ }
-            throw new Error(errMsg);
+        const raw = await res.text();
+        let data;
+        try {
+            data = JSON.parse(raw);
+        } catch {
+            const preview = raw.replace(/<[^>]*>/g, '').trim().substring(0, 150);
+            throw new Error(`Upload of ${label} failed (HTTP ${res.status}): ${preview || 'Unexpected server response'}`);
         }
 
-        return presignData.publicUrl;
+        if (!data.success) {
+            throw new Error(`Upload of ${label} failed: ${data.message}`);
+        }
+
+        console.log(`[onboarding] ${fieldKey} uploaded →`, data.publicUrl);
+        return data.publicUrl;
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSubmitErr('');
 
+        // Block if any file has a size error
+        const sizeErrField = Object.entries(fileSizeErrors).find(([, v]) => v);
+        if (sizeErrField) {
+            setSubmitErr(fileSizeErrors[sizeErrField[0]]);
+            setTab('documents');
+            return;
+        }
+
+        // Validate required documents
         if (!files.passport_photo)  { setSubmitErr('Passport size photo is required — go to Documents tab.'); setTab('documents'); return; }
         if (!files.aadhar_card_doc) { setSubmitErr('Aadhar card is required — go to Documents tab.'); setTab('documents'); return; }
         if (!files.pan_card_doc)    { setSubmitErr('PAN card is required — go to Documents tab.'); setTab('documents'); return; }
@@ -246,7 +262,6 @@ export default function OnboardingFormPage() {
         setSubmitting(true);
 
         try {
-            // Step 1: upload each file directly to Supabase (bypasses Vercel 4.5 MB limit)
             const docUrls  = {};
             const required = [
                 { key: 'passport_photo',  label: 'Passport Photo' },
@@ -257,20 +272,21 @@ export default function OnboardingFormPage() {
             const total = required.length + optional.filter(o => files[o.key]).length;
             let count = 0;
 
+            // Step 1 — upload each file one at a time via backend endpoint
             for (const { key, label } of required) {
                 count++;
                 setUploadProgress(`Uploading ${label}… (${count}/${total})`);
-                docUrls[key] = await uploadFileDirect(key, files[key]);
+                docUrls[key] = await uploadOneFile(key, files[key], label);
             }
             for (const { key, label } of optional) {
                 if (files[key]) {
                     count++;
                     setUploadProgress(`Uploading ${label}… (${count}/${total})`);
-                    docUrls[key] = await uploadFileDirect(key, files[key]);
+                    docUrls[key] = await uploadOneFile(key, files[key], label);
                 }
             }
 
-            // Step 2: submit form fields + public URLs as JSON (tiny payload, Vercel-safe)
+            // Step 2 — submit form fields + public URLs as JSON (tiny payload)
             setUploadProgress('Saving your details…');
             const res = await fetch(API_ENDPOINTS.ONBOARDING_SUBMIT(token), {
                 method: 'POST',
@@ -287,6 +303,7 @@ export default function OnboardingFormPage() {
             if (!d.success) throw new Error(d.message);
             setDone(true);
         } catch (err) {
+            console.error('[onboarding] submit error:', err);
             setSubmitErr(err.message);
         } finally {
             setSubmitting(false);
@@ -328,7 +345,8 @@ export default function OnboardingFormPage() {
         </div>
     );
 
-    const docsDone = DOC_FIELDS.filter(d => d.required && !files[d.key]).length === 0;
+    const docsDone = DOC_FIELDS.filter(d => d.required && !files[d.key]).length === 0
+        && !Object.values(fileSizeErrors).some(Boolean);
 
     return (
         <div style={pageStyle}>
@@ -453,18 +471,19 @@ export default function OnboardingFormPage() {
                     {tab === 'documents' && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                             <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>
-                                Upload clear scans or photos. Files go directly to secure storage — not through the server.
+                                Upload clear scans or photos. Max 4 MB per file — if your file is larger, please compress it before uploading.
                             </p>
                             {DOC_FIELDS.map(d => (
                                 <FileField
                                     key={d.key}
-                                    fieldKey={d.key}
                                     label={d.label}
                                     required={d.required}
                                     accept={d.accept}
                                     hint={d.hint}
+                                    maxMB={d.maxMB}
                                     file={files[d.key]}
-                                    onChange={f => setFile(d.key, f)}
+                                    sizeError={fileSizeErrors[d.key]}
+                                    onChange={(f, err) => handleFileChange(d.key, f, err)}
                                 />
                             ))}
                         </div>

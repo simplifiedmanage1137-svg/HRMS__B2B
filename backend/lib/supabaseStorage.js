@@ -35,7 +35,19 @@ async function uploadFile(buffer, originalName, folder, mimeType) {
             upsert: false,
         });
 
-    if (error) throw new Error(`Supabase Storage upload failed: ${error.message}`);
+    if (error) {
+        console.error('[supabaseStorage] upload failed:', {
+            bucket:    BUCKET,
+            path:      storagePath,
+            fileName:  originalName,
+            fileSize:  buffer.length,
+            mimeType,
+            errorCode: error.statusCode || error.status,
+            errorMsg:  error.message,
+            errorFull: JSON.stringify(error, null, 2),
+        });
+        throw new Error(`Supabase Storage upload failed: ${error.message}`);
+    }
 
     const { data: { publicUrl } } = supabase.storage
         .from(BUCKET)
