@@ -293,12 +293,12 @@ router.post('/:token/reject', async (req, res) => {
 });
 
 // ── POST /api/onboarding/:token/presign ───────────────────────────────────────
-// Public: returns a one-time Supabase signed upload URL so the candidate's
-// browser can push each document file directly to storage (bypasses Vercel's
-// 4.5 MB payload limit — only tiny JSON goes through the serverless function).
+// Validates the offer token and returns a unique storage path so the browser
+// can upload the file directly to Supabase Storage using the anon key.
+// No files pass through this server — only the tiny path JSON response does.
 router.post('/:token/presign', async (req, res) => {
     try {
-        const { field, filename, mimeType } = req.body;
+        const { field, filename } = req.body;
         if (!field || !filename) {
             return res.status(400).json({ success: false, message: 'field and filename are required' });
         }
@@ -314,12 +314,9 @@ router.post('/:token/presign', async (req, res) => {
         const ext = (filename.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
         const unique = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
         const storagePath = `onboarding/${field}-${unique}.${ext}`;
+        const publicUrl   = `${process.env.SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${storagePath}`;
 
-        const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(storagePath);
-        if (error) throw new Error(`Could not create upload URL: ${error.message}`);
-
-        const publicUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${storagePath}`;
-        res.json({ success: true, signedUrl: data.signedUrl, storagePath, publicUrl });
+        res.json({ success: true, storagePath, publicUrl });
     } catch (err) {
         console.error('[onboarding] presign:', err);
         res.status(500).json({ success: false, message: err.message });

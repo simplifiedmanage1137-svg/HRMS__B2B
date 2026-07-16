@@ -188,13 +188,19 @@ export default function OnboardingFormPage() {
     const set     = (k, v) => setForm(f => ({ ...f, [k]: v }));
     const setFile = (k, v) => setFiles(f => ({ ...f, [k]: v }));
 
-    // Upload one file directly to Supabase Storage via a backend-issued signed URL.
-    // The file never passes through Vercel — only a small JSON presign request does.
+    // Upload one file directly to Supabase Storage using the anon key.
+    // Files never pass through Vercel — only a tiny JSON presign request does.
+    // The anon key is public by design; storage RLS limits it to INSERT on onboarding/*.
+    const SUPABASE_URL     = import.meta.env.VITE_SUPABASE_URL;
+    const SUPABASE_ANON    = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const STORAGE_BUCKET   = 'hrms-documents';
+
     const uploadFileDirect = async (fieldKey, file) => {
+        // 1. Ask backend to validate the token and generate a unique storage path
         const presignRes = await fetch(API_ENDPOINTS.ONBOARDING_PRESIGN(token), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ field: fieldKey, filename: file.name, mimeType: file.type }),
+            body: JSON.stringify({ field: fieldKey, filename: file.name }),
         });
         const raw1 = await presignRes.text();
         let presignData;
@@ -203,15 +209,29 @@ export default function OnboardingFormPage() {
         }
         if (!presignData.success) throw new Error(`Upload prepare failed: ${presignData.message}`);
 
-        const uploadRes = await fetch(presignData.signedUrl, {
-            method: 'PUT',
+        // 2. POST the file directly to Supabase Storage REST API
+        //    No SDK needed — just a standard fetch with the anon key as Bearer token.
+        const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${presignData.storagePath}`;
+        const uploadRes = await fetch(uploadUrl, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${SUPABASE_ANON}`,
+                'Content-Type': file.type || 'application/octet-stream',
+                'x-upsert': 'false',
+            },
             body: file,
-            headers: { 'Content-Type': file.type || 'application/octet-stream' },
         });
+
         if (!uploadRes.ok) {
-            const errText = await uploadRes.text().catch(() => '');
-            throw new Error(`Upload failed for ${fieldKey}: HTTP ${uploadRes.status}${errText ? ' — ' + errText.substring(0, 80) : ''}`);
+            const errBody = await uploadRes.text().catch(() => '');
+            let errMsg = `Upload failed (HTTP ${uploadRes.status})`;
+            try {
+                const parsed = JSON.parse(errBody);
+                if (parsed.message) errMsg += `: ${parsed.message}`;
+            } catch { /* not JSON */ }
+            throw new Error(errMsg);
         }
+
         return presignData.publicUrl;
     };
 
