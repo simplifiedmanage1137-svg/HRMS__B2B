@@ -2,23 +2,10 @@
 const express = require('express');
 const router  = express.Router();
 const crypto  = require('crypto');
-const path    = require('path');
-const multer  = require('multer');
 const supabase = require('../config/supabase');
 const { verifyToken, isAdmin, isAdminOrDesktopSupport } = require('../middleware/auth');
-const { uploadFile } = require('../lib/supabaseStorage');
 
-// Multer — memory storage, no local disk (serverless safe)
-const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB per file
-    fileFilter: (_req, file, cb) => {
-        const ok = /jpeg|jpg|png|pdf|doc|docx/.test(
-            path.extname(file.originalname).toLowerCase()
-        );
-        cb(ok ? null : new Error('Only JPG, PNG, PDF, DOC or DOCX files are allowed'), ok);
-    },
-});
+const BUCKET = 'hrms-documents';
 
 // ── POST /api/onboarding/generate ─────────────────────────────────────────────
 router.post('/generate', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
@@ -305,13 +292,44 @@ router.post('/:token/reject', async (req, res) => {
     }
 });
 
+// ── POST /api/onboarding/:token/presign ───────────────────────────────────────
+// Public: returns a one-time Supabase signed upload URL so the candidate's
+// browser can push each document file directly to storage (bypasses Vercel's
+// 4.5 MB payload limit — only tiny JSON goes through the serverless function).
+router.post('/:token/presign', async (req, res) => {
+    try {
+        const { field, filename, mimeType } = req.body;
+        if (!field || !filename) {
+            return res.status(400).json({ success: false, message: 'field and filename are required' });
+        }
+
+        const { data: offer } = await supabase.from('employee_offer_links')
+            .select('id, status, expiry_date').eq('token', req.params.token).maybeSingle();
+        if (!offer) return res.status(404).json({ success: false, message: 'Offer not found' });
+        if (!['pending', 'accepted'].includes(offer.status))
+            return res.status(400).json({ success: false, message: `Cannot upload: offer is ${offer.status}` });
+        if (new Date(offer.expiry_date) < new Date())
+            return res.status(410).json({ success: false, message: 'Offer has expired' });
+
+        const ext = (filename.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const unique = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+        const storagePath = `onboarding/${field}-${unique}.${ext}`;
+
+        const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(storagePath);
+        if (error) throw new Error(`Could not create upload URL: ${error.message}`);
+
+        const publicUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${storagePath}`;
+        res.json({ success: true, signedUrl: data.signedUrl, storagePath, publicUrl });
+    } catch (err) {
+        console.error('[onboarding] presign:', err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 // ── POST /api/onboarding/:token/submit ────────────────────────────────────────
-router.post('/:token/submit', upload.fields([
-    { name: 'passport_photo',   maxCount: 1 },
-    { name: 'aadhar_card_doc',  maxCount: 1 },
-    { name: 'pan_card_doc',     maxCount: 1 },
-    { name: 'offer_letter_doc', maxCount: 1 },
-]), async (req, res) => {
+// Accepts JSON only — document URLs are already stored in Supabase (uploaded
+// directly by the browser via the /presign endpoint above).
+router.post('/:token/submit', async (req, res) => {
     try {
         const { data: offer } = await supabase.from('employee_offer_links')
             .select('*').eq('token', req.params.token).maybeSingle();
@@ -332,32 +350,19 @@ router.post('/:token/submit', upload.fields([
             pan_number, aadhar_number, uan,
             emergency_contact, emergency_contact_name, emergency_contact_relation,
             joining_date,
+            // Document URLs — uploaded directly to Supabase by the browser
+            passport_photo, aadhar_card_doc, pan_card_doc, offer_letter_doc,
         } = req.body;
 
-        if (!first_name?.trim())    return res.status(400).json({ success: false, message: 'First name is required' });
-        if (!last_name?.trim())     return res.status(400).json({ success: false, message: 'Last name is required' });
-        if (!email?.trim())         return res.status(400).json({ success: false, message: 'Email is required' });
+        if (!first_name?.trim())        return res.status(400).json({ success: false, message: 'First name is required' });
+        if (!last_name?.trim())         return res.status(400).json({ success: false, message: 'Last name is required' });
+        if (!email?.trim())             return res.status(400).json({ success: false, message: 'Email is required' });
         if (!bank_account_name?.trim()) return res.status(400).json({ success: false, message: 'Account holder name is required' });
         if (!account_number?.trim())    return res.status(400).json({ success: false, message: 'Account number is required' });
         if (!ifsc_code?.trim())         return res.status(400).json({ success: false, message: 'IFSC code is required' });
-        if (!req.files?.passport_photo)  return res.status(400).json({ success: false, message: 'Passport size photo is required' });
-        if (!req.files?.aadhar_card_doc) return res.status(400).json({ success: false, message: 'Aadhar card document is required' });
-        if (!req.files?.pan_card_doc)    return res.status(400).json({ success: false, message: 'PAN card document is required' });
-
-        // Upload documents to Supabase Storage (onboarding/ folder)
-        const uploadDoc = async (fieldName) => {
-            const [file] = req.files[fieldName] || [];
-            if (!file) return null;
-            const { publicUrl } = await uploadFile(file.buffer, file.originalname, 'onboarding', file.mimetype);
-            return publicUrl;
-        };
-
-        const [passport_photo_url, aadhar_card_doc_url, pan_card_doc_url, offer_letter_doc_url] = await Promise.all([
-            uploadDoc('passport_photo'),
-            uploadDoc('aadhar_card_doc'),
-            uploadDoc('pan_card_doc'),
-            uploadDoc('offer_letter_doc'),
-        ]);
+        if (!passport_photo)            return res.status(400).json({ success: false, message: 'Passport size photo is required' });
+        if (!aadhar_card_doc)           return res.status(400).json({ success: false, message: 'Aadhar card document is required' });
+        if (!pan_card_doc)              return res.status(400).json({ success: false, message: 'PAN card document is required' });
 
         const { error } = await supabase.from('employee_onboarding_submissions').insert([{
             offer_id:      offer.id,
@@ -380,10 +385,10 @@ router.post('/:token/submit', upload.fields([
             emergency_contact: emergency_contact || null,
             emergency_contact_name: emergency_contact_name || null,
             emergency_contact_relation: emergency_contact_relation || null,
-            passport_photo:   passport_photo_url,
-            aadhar_card_doc:  aadhar_card_doc_url,
-            pan_card_doc:     pan_card_doc_url,
-            offer_letter_doc: offer_letter_doc_url,
+            passport_photo,
+            aadhar_card_doc,
+            pan_card_doc,
+            offer_letter_doc: offer_letter_doc || null,
         }]);
         if (error) throw error;
 
@@ -393,10 +398,10 @@ router.post('/:token/submit', upload.fields([
             updated_at: new Date().toISOString(),
         }).eq('token', req.params.token);
 
-        res.status(201).json({ success: true, message: 'Onboarding form submitted successfully' });
+        return res.status(201).json({ success: true, message: 'Onboarding form submitted successfully' });
     } catch (err) {
         console.error('[onboarding] submit:', err);
-        res.status(500).json({ success: false, message: err.message });
+        return res.status(500).json({ success: false, message: err.message });
     }
 });
 

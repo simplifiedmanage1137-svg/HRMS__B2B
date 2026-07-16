@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Form, Button, Spinner, Alert } from 'react-bootstrap';
+import { Form, Spinner, Alert } from 'react-bootstrap';
 import {
     CheckCircle, AlertTriangle, User, CreditCard, ShieldCheck, Phone, FileUp, Upload, X,
 } from 'lucide-react';
@@ -11,32 +11,32 @@ const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
 const RELATIONS    = ['Father', 'Mother', 'Spouse', 'Sibling', 'Friend', 'Other'];
 
 const TABS = [
-    { key: 'personal',   label: 'Personal',   icon: User },
-    { key: 'bank',       label: 'Bank',        icon: CreditCard },
-    { key: 'ids',        label: 'IDs',         icon: ShieldCheck },
-    { key: 'emergency',  label: 'Emergency',   icon: Phone },
-    { key: 'documents',  label: 'Documents',   icon: FileUp },
+    { key: 'personal',  label: 'Personal',  icon: User },
+    { key: 'bank',      label: 'Bank',       icon: CreditCard },
+    { key: 'ids',       label: 'IDs',        icon: ShieldCheck },
+    { key: 'emergency', label: 'Emergency',  icon: Phone },
+    { key: 'documents', label: 'Documents',  icon: FileUp },
 ];
 
 const DOC_FIELDS = [
     {
         key: 'passport_photo',
         label: 'Passport Size Photo',
-        // required: true,
+        required: true,
         accept: 'image/jpeg,image/jpg,image/png',
-        hint: 'Clear front-facing photo · JPG or PNG · max 5 MB',
+        hint: 'Clear front-facing photo · JPG or PNG · max 10 MB',
     },
     {
         key: 'aadhar_card_doc',
         label: 'Aadhar Card',
-        // required: true,
+        required: true,
         accept: 'image/jpeg,image/jpg,image/png,application/pdf',
         hint: 'Both sides on one file · JPG, PNG or PDF · max 10 MB',
     },
     {
         key: 'pan_card_doc',
         label: 'PAN Card',
-        // required: true,
+        required: true,
         accept: 'image/jpeg,image/jpg,image/png,application/pdf',
         hint: 'Clear scan or photo · JPG, PNG or PDF · max 10 MB',
     },
@@ -50,7 +50,7 @@ const DOC_FIELDS = [
 ];
 
 // ── File upload field component ───────────────────────────────────────────────
-function FileField({ fieldKey, label, required, accept, hint, file, onChange }) {
+function FileField({ label, required, accept, hint, file, onChange }) {
     const inputRef = useRef(null);
 
     const handleDrop = (e) => {
@@ -70,7 +70,6 @@ function FileField({ fieldKey, label, required, accept, hint, file, onChange }) 
                 {label}
                 {required && <span style={{ color: '#ef4444', marginLeft: 2 }}>*</span>}
             </div>
-
             <div
                 onDrop={handleDrop}
                 onDragOver={e => e.preventDefault()}
@@ -92,11 +91,8 @@ function FileField({ fieldKey, label, required, accept, hint, file, onChange }) 
                     background: file ? '#d1fae5' : '#e0e7ff',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
-                    {file
-                        ? <CheckCircle size={18} color="#10b981" />
-                        : <Upload size={18} color="#6366f1" />}
+                    {file ? <CheckCircle size={18} color="#10b981" /> : <Upload size={18} color="#6366f1" />}
                 </div>
-
                 <div style={{ flex: 1, minWidth: 0 }}>
                     {file ? (
                         <>
@@ -107,14 +103,11 @@ function FileField({ fieldKey, label, required, accept, hint, file, onChange }) 
                         </>
                     ) : (
                         <>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: '#4338ca' }}>
-                                Click to upload or drag & drop
-                            </div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: '#4338ca' }}>Click to upload or drag &amp; drop</div>
                             <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>{hint}</div>
                         </>
                     )}
                 </div>
-
                 {file && (
                     <button
                         type="button"
@@ -125,7 +118,6 @@ function FileField({ fieldKey, label, required, accept, hint, file, onChange }) 
                     </button>
                 )}
             </div>
-
             <input
                 ref={inputRef}
                 type="file"
@@ -139,8 +131,8 @@ function FileField({ fieldKey, label, required, accept, hint, file, onChange }) 
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function OnboardingFormPage() {
-    const { token }  = useParams();
-    const navigate   = useNavigate();
+    const { token } = useParams();
+    const navigate  = useNavigate();
 
     const [offer, setOffer]       = useState(null);
     const [loading, setLoading]   = useState(true);
@@ -158,15 +150,12 @@ export default function OnboardingFormPage() {
     });
 
     const [files, setFiles] = useState({
-        passport_photo:   null,
-        aadhar_card_doc:  null,
-        pan_card_doc:     null,
-        offer_letter_doc: null,
+        passport_photo: null, aadhar_card_doc: null, pan_card_doc: null, offer_letter_doc: null,
     });
 
-    const [submitting, setSubmitting] = useState(false);
-    const [submitErr, setSubmitErr]   = useState('');
-    const [done, setDone]             = useState(false);
+    const [submitting, setSubmitting]         = useState(false);
+    const [submitErr, setSubmitErr]           = useState('');
+    const [done, setDone]                     = useState(false);
     const [uploadProgress, setUploadProgress] = useState('');
 
     useEffect(() => {
@@ -196,49 +185,85 @@ export default function OnboardingFormPage() {
         })();
     }, [token]);
 
-    const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+    const set     = (k, v) => setForm(f => ({ ...f, [k]: v }));
     const setFile = (k, v) => setFiles(f => ({ ...f, [k]: v }));
+
+    // Upload one file directly to Supabase Storage via a backend-issued signed URL.
+    // The file never passes through Vercel — only a small JSON presign request does.
+    const uploadFileDirect = async (fieldKey, file) => {
+        const presignRes = await fetch(API_ENDPOINTS.ONBOARDING_PRESIGN(token), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ field: fieldKey, filename: file.name, mimeType: file.type }),
+        });
+        const raw1 = await presignRes.text();
+        let presignData;
+        try { presignData = JSON.parse(raw1); } catch {
+            throw new Error(`Could not prepare upload (${presignRes.status})`);
+        }
+        if (!presignData.success) throw new Error(`Upload prepare failed: ${presignData.message}`);
+
+        const uploadRes = await fetch(presignData.signedUrl, {
+            method: 'PUT',
+            body: file,
+            headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        });
+        if (!uploadRes.ok) {
+            const errText = await uploadRes.text().catch(() => '');
+            throw new Error(`Upload failed for ${fieldKey}: HTTP ${uploadRes.status}${errText ? ' — ' + errText.substring(0, 80) : ''}`);
+        }
+        return presignData.publicUrl;
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSubmitErr('');
 
-        // Validate required documents
-        if (!files.passport_photo) {
-            setSubmitErr('Passport size photo is required — go to the Documents tab to upload it.');
-            setTab('documents');
-            return;
-        }
-        if (!files.aadhar_card_doc) {
-            setSubmitErr('Aadhar card is required — go to the Documents tab to upload it.');
-            setTab('documents');
-            return;
-        }
-        if (!files.pan_card_doc) {
-            setSubmitErr('PAN card is required — go to the Documents tab to upload it.');
-            setTab('documents');
-            return;
-        }
+        if (!files.passport_photo)  { setSubmitErr('Passport size photo is required — go to Documents tab.'); setTab('documents'); return; }
+        if (!files.aadhar_card_doc) { setSubmitErr('Aadhar card is required — go to Documents tab.'); setTab('documents'); return; }
+        if (!files.pan_card_doc)    { setSubmitErr('PAN card is required — go to Documents tab.'); setTab('documents'); return; }
 
         setSubmitting(true);
-        setUploadProgress('Uploading documents and saving your details…');
 
         try {
-            const fd = new FormData();
+            // Step 1: upload each file directly to Supabase (bypasses Vercel 4.5 MB limit)
+            const docUrls  = {};
+            const required = [
+                { key: 'passport_photo',  label: 'Passport Photo' },
+                { key: 'aadhar_card_doc', label: 'Aadhar Card' },
+                { key: 'pan_card_doc',    label: 'PAN Card' },
+            ];
+            const optional = [{ key: 'offer_letter_doc', label: 'Offer / Experience Letter' }];
+            const total = required.length + optional.filter(o => files[o.key]).length;
+            let count = 0;
 
-            // Append all text fields
-            Object.entries(form).forEach(([k, v]) => { if (v !== '' && v != null) fd.append(k, v); });
+            for (const { key, label } of required) {
+                count++;
+                setUploadProgress(`Uploading ${label}… (${count}/${total})`);
+                docUrls[key] = await uploadFileDirect(key, files[key]);
+            }
+            for (const { key, label } of optional) {
+                if (files[key]) {
+                    count++;
+                    setUploadProgress(`Uploading ${label}… (${count}/${total})`);
+                    docUrls[key] = await uploadFileDirect(key, files[key]);
+                }
+            }
 
-            // Append files
-            Object.entries(files).forEach(([k, f]) => { if (f) fd.append(k, f, f.name); });
-
+            // Step 2: submit form fields + public URLs as JSON (tiny payload, Vercel-safe)
+            setUploadProgress('Saving your details…');
             const res = await fetch(API_ENDPOINTS.ONBOARDING_SUBMIT(token), {
                 method: 'POST',
-                body: fd,
-                // No Content-Type header — browser sets multipart/form-data + boundary automatically
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...form, ...docUrls }),
             });
 
-            const d = await res.json();
+            const raw = await res.text();
+            let d;
+            try { d = JSON.parse(raw); } catch {
+                const preview = raw.replace(/<[^>]*>/g, '').trim().substring(0, 180);
+                throw new Error(`Server error (${res.status}): ${preview || 'Unexpected response'}`);
+            }
             if (!d.success) throw new Error(d.message);
             setDone(true);
         } catch (err) {
@@ -249,7 +274,7 @@ export default function OnboardingFormPage() {
         }
     };
 
-    // ── Loading / error / done states ─────────────────────────────────────────
+    // ── States ────────────────────────────────────────────────────────────────
     if (loading) return (
         <div style={pageStyle}>
             <Spinner animation="border" variant="primary" />
@@ -300,7 +325,7 @@ export default function OnboardingFormPage() {
 
                 {/* Progress chips */}
                 <div style={{ display: 'flex', gap: 6, marginBottom: 20, overflowX: 'auto' }}>
-                    {TABS.map((t, i) => {
+                    {TABS.map((t) => {
                         const Icon = t.icon;
                         const isActive = tab === t.key;
                         const isDone = (() => {
@@ -368,11 +393,11 @@ export default function OnboardingFormPage() {
                         </div>
                     )}
 
-                    {/* ── Bank Details (required) ── */}
+                    {/* ── Bank Details ── */}
                     {tab === 'bank' && (
                         <div style={gridStyle}>
                             <div style={{ gridColumn: '1 / -1', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#92400e', marginBottom: 4 }}>
-                                Bank details are mandatory for salary disbursement and are kept securely encrypted.
+                                Bank details are mandatory for salary disbursement and are kept securely.
                             </div>
                             <FieldGroup label="Account Holder Name" required><Form.Control size="sm" value={form.bank_account_name} onChange={e => set('bank_account_name', e.target.value)} required style={inputStyle} /></FieldGroup>
                             <FieldGroup label="Account Number" required><Form.Control size="sm" value={form.account_number} onChange={e => set('account_number', e.target.value)} required style={inputStyle} /></FieldGroup>
@@ -408,7 +433,7 @@ export default function OnboardingFormPage() {
                     {tab === 'documents' && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                             <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>
-                                Upload clear scans or photos. Files are stored securely and used only for verification purposes.
+                                Upload clear scans or photos. Files go directly to secure storage — not through the server.
                             </p>
                             {DOC_FIELDS.map(d => (
                                 <FileField
