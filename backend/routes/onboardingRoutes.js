@@ -2,8 +2,23 @@
 const express = require('express');
 const router  = express.Router();
 const crypto  = require('crypto');
+const path    = require('path');
+const multer  = require('multer');
 const supabase = require('../config/supabase');
 const { verifyToken, isAdmin, isAdminOrDesktopSupport } = require('../middleware/auth');
+const { uploadFile } = require('../lib/supabaseStorage');
+
+// Multer — memory storage, no local disk (serverless safe)
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB per file
+    fileFilter: (_req, file, cb) => {
+        const ok = /jpeg|jpg|png|pdf|doc|docx/.test(
+            path.extname(file.originalname).toLowerCase()
+        );
+        cb(ok ? null : new Error('Only JPG, PNG, PDF, DOC or DOCX files are allowed'), ok);
+    },
+});
 
 // ── POST /api/onboarding/generate ─────────────────────────────────────────────
 router.post('/generate', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
@@ -291,7 +306,12 @@ router.post('/:token/reject', async (req, res) => {
 });
 
 // ── POST /api/onboarding/:token/submit ────────────────────────────────────────
-router.post('/:token/submit', async (req, res) => {
+router.post('/:token/submit', upload.fields([
+    { name: 'passport_photo',   maxCount: 1 },
+    { name: 'aadhar_card_doc',  maxCount: 1 },
+    { name: 'pan_card_doc',     maxCount: 1 },
+    { name: 'offer_letter_doc', maxCount: 1 },
+]), async (req, res) => {
     try {
         const { data: offer } = await supabase.from('employee_offer_links')
             .select('*').eq('token', req.params.token).maybeSingle();
@@ -314,9 +334,30 @@ router.post('/:token/submit', async (req, res) => {
             joining_date,
         } = req.body;
 
-        if (!first_name?.trim()) return res.status(400).json({ success: false, message: 'First name is required' });
-        if (!last_name?.trim())  return res.status(400).json({ success: false, message: 'Last name is required' });
-        if (!email?.trim())      return res.status(400).json({ success: false, message: 'Email is required' });
+        if (!first_name?.trim())    return res.status(400).json({ success: false, message: 'First name is required' });
+        if (!last_name?.trim())     return res.status(400).json({ success: false, message: 'Last name is required' });
+        if (!email?.trim())         return res.status(400).json({ success: false, message: 'Email is required' });
+        if (!bank_account_name?.trim()) return res.status(400).json({ success: false, message: 'Account holder name is required' });
+        if (!account_number?.trim())    return res.status(400).json({ success: false, message: 'Account number is required' });
+        if (!ifsc_code?.trim())         return res.status(400).json({ success: false, message: 'IFSC code is required' });
+        if (!req.files?.passport_photo)  return res.status(400).json({ success: false, message: 'Passport size photo is required' });
+        if (!req.files?.aadhar_card_doc) return res.status(400).json({ success: false, message: 'Aadhar card document is required' });
+        if (!req.files?.pan_card_doc)    return res.status(400).json({ success: false, message: 'PAN card document is required' });
+
+        // Upload documents to Supabase Storage (onboarding/ folder)
+        const uploadDoc = async (fieldName) => {
+            const [file] = req.files[fieldName] || [];
+            if (!file) return null;
+            const { publicUrl } = await uploadFile(file.buffer, file.originalname, 'onboarding', file.mimetype);
+            return publicUrl;
+        };
+
+        const [passport_photo_url, aadhar_card_doc_url, pan_card_doc_url, offer_letter_doc_url] = await Promise.all([
+            uploadDoc('passport_photo'),
+            uploadDoc('aadhar_card_doc'),
+            uploadDoc('pan_card_doc'),
+            uploadDoc('offer_letter_doc'),
+        ]);
 
         const { error } = await supabase.from('employee_onboarding_submissions').insert([{
             offer_id:      offer.id,
@@ -333,12 +374,16 @@ router.post('/:token/submit', async (req, res) => {
             in_hand_salary: Math.max(0, offer.salary - 200),
             reporting_manager: offer.reporting_manager || null,
             joining_date:  joining_date || null,
-            bank_account_name: bank_account_name || null, account_number: account_number || null,
-            ifsc_code:     ifsc_code || null, branch_name: branch_name || null,
+            bank_account_name: bank_account_name.trim(), account_number: account_number.trim(),
+            ifsc_code:     ifsc_code.trim(), branch_name: branch_name || null,
             pan_number:    pan_number || null, aadhar_number: aadhar_number || null, uan: uan || null,
             emergency_contact: emergency_contact || null,
             emergency_contact_name: emergency_contact_name || null,
             emergency_contact_relation: emergency_contact_relation || null,
+            passport_photo:   passport_photo_url,
+            aadhar_card_doc:  aadhar_card_doc_url,
+            pan_card_doc:     pan_card_doc_url,
+            offer_letter_doc: offer_letter_doc_url,
         }]);
         if (error) throw error;
 

@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Form, Button, Spinner, Alert } from 'react-bootstrap';
-import { CheckCircle, AlertTriangle, User, CreditCard, Building, Phone, ShieldCheck } from 'lucide-react';
+import {
+    CheckCircle, AlertTriangle, User, CreditCard, ShieldCheck, Phone, FileUp, Upload, X,
+} from 'lucide-react';
 import API_ENDPOINTS from '../config/api';
 
 const GENDERS      = ['Male', 'Female', 'Other', 'Prefer not to say'];
@@ -9,21 +11,143 @@ const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
 const RELATIONS    = ['Father', 'Mother', 'Spouse', 'Sibling', 'Friend', 'Other'];
 
 const TABS = [
-    { key: 'personal', label: 'Personal', icon: User },
-    { key: 'bank',     label: 'Bank',     icon: CreditCard },
-    { key: 'ids',      label: 'IDs',      icon: ShieldCheck },
-    { key: 'emergency',label: 'Emergency', icon: Phone },
+    { key: 'personal',   label: 'Personal',   icon: User },
+    { key: 'bank',       label: 'Bank',        icon: CreditCard },
+    { key: 'ids',        label: 'IDs',         icon: ShieldCheck },
+    { key: 'emergency',  label: 'Emergency',   icon: Phone },
+    { key: 'documents',  label: 'Documents',   icon: FileUp },
 ];
 
+const DOC_FIELDS = [
+    {
+        key: 'passport_photo',
+        label: 'Passport Size Photo',
+        required: true,
+        accept: 'image/jpeg,image/jpg,image/png',
+        hint: 'Clear front-facing photo · JPG or PNG · max 5 MB',
+    },
+    {
+        key: 'aadhar_card_doc',
+        label: 'Aadhar Card',
+        required: true,
+        accept: 'image/jpeg,image/jpg,image/png,application/pdf',
+        hint: 'Both sides on one file · JPG, PNG or PDF · max 10 MB',
+    },
+    {
+        key: 'pan_card_doc',
+        label: 'PAN Card',
+        required: true,
+        accept: 'image/jpeg,image/jpg,image/png,application/pdf',
+        hint: 'Clear scan or photo · JPG, PNG or PDF · max 10 MB',
+    },
+    {
+        key: 'offer_letter_doc',
+        label: 'Offer Letter / Experience Letter',
+        required: false,
+        accept: 'image/jpeg,image/jpg,image/png,application/pdf,.doc,.docx',
+        hint: 'Previous experience letter if applicable · optional · max 10 MB',
+    },
+];
+
+// ── File upload field component ───────────────────────────────────────────────
+function FileField({ fieldKey, label, required, accept, hint, file, onChange }) {
+    const inputRef = useRef(null);
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        const f = e.dataTransfer.files[0];
+        if (f) onChange(f);
+    };
+
+    const fmtSize = (bytes) => {
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+        return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    };
+
+    return (
+        <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
+                {label}
+                {required && <span style={{ color: '#ef4444', marginLeft: 2 }}>*</span>}
+            </div>
+
+            <div
+                onDrop={handleDrop}
+                onDragOver={e => e.preventDefault()}
+                onClick={() => inputRef.current?.click()}
+                style={{
+                    border: `2px dashed ${file ? '#10b981' : '#c7d2fe'}`,
+                    borderRadius: 10,
+                    padding: '14px 16px',
+                    background: file ? '#f0fdf4' : '#f8f9ff',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    transition: 'border-color 0.15s, background 0.15s',
+                }}
+            >
+                <div style={{
+                    width: 36, height: 36, borderRadius: 8, flexShrink: 0,
+                    background: file ? '#d1fae5' : '#e0e7ff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                    {file
+                        ? <CheckCircle size={18} color="#10b981" />
+                        : <Upload size={18} color="#6366f1" />}
+                </div>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    {file ? (
+                        <>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: '#065f46', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {file.name}
+                            </div>
+                            <div style={{ fontSize: 11, color: '#6b7280', marginTop: 1 }}>{fmtSize(file.size)}</div>
+                        </>
+                    ) : (
+                        <>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: '#4338ca' }}>
+                                Click to upload or drag & drop
+                            </div>
+                            <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>{hint}</div>
+                        </>
+                    )}
+                </div>
+
+                {file && (
+                    <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); onChange(null); }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#9ca3af', flexShrink: 0 }}
+                    >
+                        <X size={16} />
+                    </button>
+                )}
+            </div>
+
+            <input
+                ref={inputRef}
+                type="file"
+                accept={accept}
+                style={{ display: 'none' }}
+                onChange={e => onChange(e.target.files[0] || null)}
+            />
+        </div>
+    );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function OnboardingFormPage() {
     const { token }  = useParams();
     const navigate   = useNavigate();
 
-    const [offer, setOffer]     = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [offer, setOffer]       = useState(null);
+    const [loading, setLoading]   = useState(true);
     const [offerErr, setOfferErr] = useState('');
-    const [tab, setTab]         = useState('personal');
-    const [form, setForm]       = useState({
+    const [tab, setTab]           = useState('personal');
+
+    const [form, setForm] = useState({
         first_name: '', middle_name: '', last_name: '', email: '',
         phone: '', dob: '', gender: '', blood_group: '',
         address: '', city: '', state: '', pincode: '',
@@ -32,9 +156,18 @@ export default function OnboardingFormPage() {
         pan_number: '', aadhar_number: '', uan: '',
         emergency_contact_name: '', emergency_contact: '', emergency_contact_relation: '',
     });
+
+    const [files, setFiles] = useState({
+        passport_photo:   null,
+        aadhar_card_doc:  null,
+        pan_card_doc:     null,
+        offer_letter_doc: null,
+    });
+
     const [submitting, setSubmitting] = useState(false);
     const [submitErr, setSubmitErr]   = useState('');
     const [done, setDone]             = useState(false);
+    const [uploadProgress, setUploadProgress] = useState('');
 
     useEffect(() => {
         (async () => {
@@ -48,12 +181,11 @@ export default function OnboardingFormPage() {
                     return;
                 }
                 setOffer(o);
-                // Pre-fill name fields from offer
                 const parts = (o.employee_name || '').trim().split(/\s+/);
                 setForm(f => ({
                     ...f,
-                    first_name: parts[0] || '',
-                    last_name:  parts.length > 1 ? parts[parts.length - 1] : '',
+                    first_name:  parts[0] || '',
+                    last_name:   parts.length > 1 ? parts[parts.length - 1] : '',
                     middle_name: parts.length > 2 ? parts.slice(1, -1).join(' ') : '',
                 }));
             } catch {
@@ -65,27 +197,59 @@ export default function OnboardingFormPage() {
     }, [token]);
 
     const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+    const setFile = (k, v) => setFiles(f => ({ ...f, [k]: v }));
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setSubmitErr(''); setSubmitting(true);
+        setSubmitErr('');
+
+        // Validate required documents
+        if (!files.passport_photo) {
+            setSubmitErr('Passport size photo is required — go to the Documents tab to upload it.');
+            setTab('documents');
+            return;
+        }
+        if (!files.aadhar_card_doc) {
+            setSubmitErr('Aadhar card is required — go to the Documents tab to upload it.');
+            setTab('documents');
+            return;
+        }
+        if (!files.pan_card_doc) {
+            setSubmitErr('PAN card is required — go to the Documents tab to upload it.');
+            setTab('documents');
+            return;
+        }
+
+        setSubmitting(true);
+        setUploadProgress('Uploading documents and saving your details…');
+
         try {
+            const fd = new FormData();
+
+            // Append all text fields
+            Object.entries(form).forEach(([k, v]) => { if (v !== '' && v != null) fd.append(k, v); });
+
+            // Append files
+            Object.entries(files).forEach(([k, f]) => { if (f) fd.append(k, f, f.name); });
+
             const res = await fetch(API_ENDPOINTS.ONBOARDING_SUBMIT(token), {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(form),
+                body: fd,
+                // No Content-Type header — browser sets multipart/form-data + boundary automatically
             });
+
             const d = await res.json();
             if (!d.success) throw new Error(d.message);
             setDone(true);
         } catch (err) {
             setSubmitErr(err.message);
-            setTab('personal');
         } finally {
             setSubmitting(false);
+            setUploadProgress('');
         }
     };
 
+    // ── Loading / error / done states ─────────────────────────────────────────
     if (loading) return (
         <div style={pageStyle}>
             <Spinner animation="border" variant="primary" />
@@ -113,40 +277,65 @@ export default function OnboardingFormPage() {
                 <CheckCircle size={60} color="#10b981" style={{ marginBottom: 16 }} />
                 <h4 style={{ fontWeight: 800, color: '#111827' }}>Onboarding Form Submitted!</h4>
                 <p style={{ color: '#6b7280', fontSize: 14, marginTop: 8, maxWidth: 380, margin: '8px auto 0' }}>
-                    Thank you! HR will review your information and create your account. You'll be contacted with your login credentials shortly.
+                    Thank you! HR will review your information and documents, then create your employee account. You'll be contacted with your login credentials shortly.
                 </p>
             </div>
         </div>
     );
 
+    const docsDone = DOC_FIELDS.filter(d => d.required && !files[d.key]).length === 0;
+
     return (
         <div style={pageStyle}>
-            <div style={{ ...cardStyle, maxWidth: 640 }}>
+            <div style={{ ...cardStyle, maxWidth: 660 }}>
+
                 {/* Header */}
-                <div style={{ marginBottom: 24, borderBottom: '1px solid #f3f4f6', paddingBottom: 16 }}>
-                    <div style={{ fontSize: 12, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>B2B InDemand — Employee Onboarding</div>
+                <div style={{ marginBottom: 20, borderBottom: '1px solid #f3f4f6', paddingBottom: 14 }}>
+                    <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>B2B InDemand — Employee Onboarding</div>
                     <h4 style={{ fontWeight: 800, color: '#111827', margin: 0 }}>Complete Your Onboarding</h4>
-                    <p style={{ fontSize: 13, color: '#6b7280', margin: '6px 0 0' }}>
+                    <p style={{ fontSize: 13, color: '#6b7280', margin: '5px 0 0' }}>
                         {offer.designation} · {offer.department} · ₹{Number(offer.salary).toLocaleString('en-IN')}/month
                     </p>
                 </div>
 
-                {/* Tabs */}
-                <div style={{ display: 'flex', gap: 4, marginBottom: 24, background: '#f3f4f6', borderRadius: 10, padding: 4 }}>
-                    {TABS.map(t => {
+                {/* Progress chips */}
+                <div style={{ display: 'flex', gap: 6, marginBottom: 20, overflowX: 'auto' }}>
+                    {TABS.map((t, i) => {
                         const Icon = t.icon;
+                        const isActive = tab === t.key;
+                        const isDone = (() => {
+                            if (t.key === 'documents') return docsDone;
+                            if (t.key === 'bank') return !!(form.bank_account_name && form.account_number && form.ifsc_code);
+                            if (t.key === 'personal') return !!(form.first_name && form.last_name && form.email);
+                            return false;
+                        })();
                         return (
-                            <button key={t.key} type="button" onClick={() => setTab(t.key)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 4px', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: tab === t.key ? 700 : 500, background: tab === t.key ? '#fff' : 'transparent', color: tab === t.key ? '#6366f1' : '#6b7280', boxShadow: tab === t.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.15s' }}>
-                                <Icon size={14} /> {t.label}
+                            <button
+                                key={t.key} type="button" onClick={() => setTab(t.key)}
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px',
+                                    border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 12,
+                                    fontWeight: isActive ? 700 : 500, whiteSpace: 'nowrap',
+                                    background: isActive ? '#6366f1' : isDone ? '#d1fae5' : '#f3f4f6',
+                                    color: isActive ? '#fff' : isDone ? '#065f46' : '#6b7280',
+                                    transition: 'all 0.15s',
+                                }}
+                            >
+                                {isDone && !isActive ? <CheckCircle size={12} /> : <Icon size={12} />}
+                                {t.label}
                             </button>
                         );
                     })}
                 </div>
 
                 <Form onSubmit={handleSubmit}>
-                    {submitErr && <Alert variant="danger" style={{ fontSize: 13 }}>{submitErr}</Alert>}
+                    {submitErr && (
+                        <Alert variant="danger" style={{ fontSize: 13, marginBottom: 16 }} dismissible onClose={() => setSubmitErr('')}>
+                            {submitErr}
+                        </Alert>
+                    )}
 
-                    {/* Personal Info */}
+                    {/* ── Personal Info ── */}
                     {tab === 'personal' && (
                         <div style={gridStyle}>
                             <FieldGroup label="First Name" required><Form.Control size="sm" value={form.first_name} onChange={e => set('first_name', e.target.value)} required style={inputStyle} /></FieldGroup>
@@ -179,28 +368,29 @@ export default function OnboardingFormPage() {
                         </div>
                     )}
 
-                    {/* Bank Details */}
+                    {/* ── Bank Details (required) ── */}
                     {tab === 'bank' && (
                         <div style={gridStyle}>
-                            <FieldGroup label="Account Holder Name"><Form.Control size="sm" value={form.bank_account_name} onChange={e => set('bank_account_name', e.target.value)} style={inputStyle} /></FieldGroup>
-                            <FieldGroup label="Account Number"><Form.Control size="sm" value={form.account_number} onChange={e => set('account_number', e.target.value)} style={inputStyle} /></FieldGroup>
-                            <FieldGroup label="IFSC Code"><Form.Control size="sm" value={form.ifsc_code} onChange={e => set('ifsc_code', e.target.value)} style={inputStyle} /></FieldGroup>
+                            <div style={{ gridColumn: '1 / -1', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#92400e', marginBottom: 4 }}>
+                                Bank details are mandatory for salary disbursement and are kept securely encrypted.
+                            </div>
+                            <FieldGroup label="Account Holder Name" required><Form.Control size="sm" value={form.bank_account_name} onChange={e => set('bank_account_name', e.target.value)} required style={inputStyle} /></FieldGroup>
+                            <FieldGroup label="Account Number" required><Form.Control size="sm" value={form.account_number} onChange={e => set('account_number', e.target.value)} required style={inputStyle} /></FieldGroup>
+                            <FieldGroup label="IFSC Code" required><Form.Control size="sm" value={form.ifsc_code} onChange={e => set('ifsc_code', e.target.value.toUpperCase())} required maxLength={11} style={inputStyle} /></FieldGroup>
                             <FieldGroup label="Branch Name"><Form.Control size="sm" value={form.branch_name} onChange={e => set('branch_name', e.target.value)} style={inputStyle} /></FieldGroup>
-                            <p style={{ gridColumn: '1 / -1', fontSize: 12, color: '#9ca3af', marginTop: 8 }}>Bank details are used for salary disbursement and kept securely encrypted.</p>
                         </div>
                     )}
 
-                    {/* IDs */}
+                    {/* ── IDs ── */}
                     {tab === 'ids' && (
                         <div style={gridStyle}>
                             <FieldGroup label="PAN Number"><Form.Control size="sm" value={form.pan_number} onChange={e => set('pan_number', e.target.value.toUpperCase())} maxLength={10} style={inputStyle} /></FieldGroup>
                             <FieldGroup label="Aadhar Number"><Form.Control size="sm" value={form.aadhar_number} onChange={e => set('aadhar_number', e.target.value)} maxLength={12} style={inputStyle} /></FieldGroup>
                             <FieldGroup label="UAN (PF Number)"><Form.Control size="sm" value={form.uan} onChange={e => set('uan', e.target.value)} style={inputStyle} /></FieldGroup>
-                            <p style={{ gridColumn: '1 / -1', fontSize: 12, color: '#9ca3af', marginTop: 8 }}>Government ID numbers are required for compliance, payroll, and PF deductions.</p>
                         </div>
                     )}
 
-                    {/* Emergency Contact */}
+                    {/* ── Emergency Contact ── */}
                     {tab === 'emergency' && (
                         <div style={gridStyle}>
                             <FieldGroup label="Contact Person Name"><Form.Control size="sm" value={form.emergency_contact_name} onChange={e => set('emergency_contact_name', e.target.value)} style={inputStyle} /></FieldGroup>
@@ -214,27 +404,69 @@ export default function OnboardingFormPage() {
                         </div>
                     )}
 
-                    {/* Navigation */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 28 }}>
-                        <button type="button" onClick={() => {
-                            const idx = TABS.findIndex(t => t.key === tab);
-                            if (idx > 0) setTab(TABS[idx - 1].key);
-                        }} disabled={tab === TABS[0].key} style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', fontWeight: 600, color: '#374151', opacity: tab === TABS[0].key ? 0.4 : 1 }}>
+                    {/* ── Documents ── */}
+                    {tab === 'documents' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                            <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>
+                                Upload clear scans or photos. Files are stored securely and used only for verification purposes.
+                            </p>
+                            {DOC_FIELDS.map(d => (
+                                <FileField
+                                    key={d.key}
+                                    fieldKey={d.key}
+                                    label={d.label}
+                                    required={d.required}
+                                    accept={d.accept}
+                                    hint={d.hint}
+                                    file={files[d.key]}
+                                    onChange={f => setFile(d.key, f)}
+                                />
+                            ))}
+                        </div>
+                    )}
+
+                    {/* ── Navigation ── */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 28, alignItems: 'center' }}>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const idx = TABS.findIndex(t => t.key === tab);
+                                if (idx > 0) setTab(TABS[idx - 1].key);
+                            }}
+                            disabled={tab === TABS[0].key}
+                            style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', fontWeight: 600, color: '#374151', opacity: tab === TABS[0].key ? 0.4 : 1 }}
+                        >
                             ← Back
                         </button>
 
                         {tab !== TABS[TABS.length - 1].key ? (
-                            <button type="button" onClick={() => {
-                                const idx = TABS.findIndex(t => t.key === tab);
-                                setTab(TABS[idx + 1].key);
-                            }} style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', cursor: 'pointer', fontWeight: 700 }}>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const idx = TABS.findIndex(t => t.key === tab);
+                                    setTab(TABS[idx + 1].key);
+                                }}
+                                style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', cursor: 'pointer', fontWeight: 700 }}
+                            >
                                 Next →
                             </button>
                         ) : (
-                            <button type="submit" disabled={submitting} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 24px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', cursor: 'pointer', fontWeight: 700 }}>
-                                {submitting ? <Spinner size="sm" animation="border" /> : <CheckCircle size={16} />}
-                                {submitting ? 'Submitting…' : 'Submit Onboarding Form'}
-                            </button>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                                {uploadProgress && (
+                                    <div style={{ fontSize: 12, color: '#6366f1', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <Spinner size="sm" animation="border" style={{ width: 14, height: 14 }} />
+                                        {uploadProgress}
+                                    </div>
+                                )}
+                                <button
+                                    type="submit"
+                                    disabled={submitting}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 24px', borderRadius: 8, border: 'none', background: submitting ? '#9ca3af' : 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', cursor: submitting ? 'not-allowed' : 'pointer', fontWeight: 700 }}
+                                >
+                                    {submitting ? <Spinner size="sm" animation="border" /> : <CheckCircle size={16} />}
+                                    {submitting ? 'Submitting…' : 'Submit Onboarding Form'}
+                                </button>
+                            </div>
                         )}
                     </div>
                 </Form>
@@ -278,6 +510,4 @@ const gridStyle = {
     gap: '14px',
 };
 
-const inputStyle = {
-    borderRadius: 8,
-};
+const inputStyle = { borderRadius: 8 };
