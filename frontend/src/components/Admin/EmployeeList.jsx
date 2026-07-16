@@ -1,205 +1,574 @@
-// components/Admin/EmployeeList.jsx - Fixed Header
+// components/Admin/EmployeeList.jsx
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Card, Modal, Alert, Badge, Spinner, Form, InputGroup } from 'react-bootstrap';
-import { FaEdit, FaTrash, FaEye, FaPlus, FaDownload, FaFilePdf, FaFileImage, FaFileAlt, FaSearch, FaTimes, FaSyncAlt, FaArrowLeft } from 'react-icons/fa';
+import { Spinner, Modal, Table, Button } from 'react-bootstrap';
+import {
+  FaEdit, FaTrash, FaEye, FaPlus, FaDownload, FaFilePdf, FaFileImage, FaFileAlt,
+  FaSearch, FaTimes, FaSyncAlt, FaArrowLeft, FaCheckCircle, FaUserSlash,
+  FaUser, FaEnvelope, FaPhone, FaBuilding, FaBriefcase, FaCalendarAlt, FaUserTie,
+  FaClock, FaHistory, FaTimesCircle, FaHourglassHalf, FaCreditCard, FaUsers, FaStar,
+  FaChartBar,
+} from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
-import EmployeeProfileView from './EmployeeProfileView';
 
+// ── helpers ───────────────────────────────────────────────────────────────────
+const getInitials = (emp) =>
+  `${(emp?.first_name || '')[0] || ''}${(emp?.last_name || '')[0] || ''}`.toUpperCase() || '?';
+
+const getFullName = (emp) =>
+  `${emp?.first_name || ''} ${emp?.middle_name || ''} ${emp?.last_name || ''}`.trim().replace(/  +/g, ' ');
+
+const fmtDate = (d) => {
+  if (!d) return 'N/A';
+  return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+const fmtCurrency = (v) => {
+  if (!v) return '—';
+  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(v);
+};
+
+const getProfilePct = (emp) => {
+  if (!emp) return 0;
+  const fields = [
+    emp.email, emp.phone, emp.department, emp.designation,
+    emp.joining_date, emp.employment_type, emp.reporting_manager,
+    emp.gender, emp.dob, emp.blood_group,
+    emp.address, emp.bank_name || emp.bank_account_name,
+    emp.account_number, emp.ifsc_code, emp.pan_number, emp.aadhar_number,
+  ];
+  return Math.round((fields.filter(Boolean).length / fields.length) * 100);
+};
+
+const AVATAR_COLORS = ['#6366f1', '#0ea5e9', '#22c55e', '#f97316', '#8b5cf6', '#ec4899', '#14b8a6'];
+const getAvatarColor = (emp) =>
+  AVATAR_COLORS[(emp?.first_name || 'A').charCodeAt(0) % AVATAR_COLORS.length];
+
+// ── CompletionRing ────────────────────────────────────────────────────────────
+const CompletionRing = ({ pct = 0, size = 52 }) => {
+  const r = (size - 10) / 2;
+  const circ = 2 * Math.PI * r;
+  const color = pct >= 80 ? '#22c55e' : pct >= 50 ? '#f97316' : '#ef4444';
+  const label = pct >= 80 ? 'Good' : pct >= 50 ? 'Pending' : 'Low';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+        <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e5e7eb" strokeWidth={7} />
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={7}
+            strokeDasharray={`${(pct / 100) * circ} ${circ}`} strokeLinecap="round" />
+        </svg>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color }}>{pct}%</span>
+        </div>
+      </div>
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>Profile Completion</div>
+        <span style={{ fontSize: 10, background: `${color}18`, color, borderRadius: 10, padding: '1px 7px', fontWeight: 700 }}>{label}</span>
+      </div>
+    </div>
+  );
+};
+
+// ── InfoRow ───────────────────────────────────────────────────────────────────
+const InfoRow = ({ icon: Icon, label, value, badge, badgeColor }) => (
+  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '7px 0', borderBottom: '1px solid #f8fafc' }}>
+    <div style={{ width: 28, height: 28, borderRadius: 7, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <Icon size={11} color="#6366f1" />
+    </div>
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
+      {badge ? (
+        <span style={{ fontSize: 11, background: `${badgeColor || '#22c55e'}18`, color: badgeColor || '#22c55e', borderRadius: 20, padding: '2px 9px', fontWeight: 700 }}>
+          {value || 'N/A'}
+        </span>
+      ) : (
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', wordBreak: 'break-word' }}>{value || 'N/A'}</div>
+      )}
+    </div>
+  </div>
+);
+
+// ── QuickActionBtn ────────────────────────────────────────────────────────────
+const QuickActionBtn = ({ icon: Icon, label, color, onClick }) => (
+  <button onClick={onClick} style={{
+    background: '#fff', border: `1px solid ${color}25`, borderRadius: 10, padding: '8px 2px',
+    cursor: 'pointer', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+    flex: 1, transition: 'background 0.15s',
+  }}
+    onMouseEnter={e => e.currentTarget.style.background = `${color}10`}
+    onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+    <div style={{ width: 30, height: 30, borderRadius: 8, background: `${color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Icon size={13} color={color} />
+    </div>
+    <span style={{ fontSize: 9, fontWeight: 700, color: '#374151', lineHeight: 1.2, whiteSpace: 'nowrap' }}>{label}</span>
+  </button>
+);
+
+// ── StatMini ──────────────────────────────────────────────────────────────────
+const StatMini = ({ label, value, color }) => (
+  <div style={{ background: '#fff', borderRadius: 10, padding: '10px 12px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', borderLeft: `3px solid ${color}` }}>
+    <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase' }}>{label}</div>
+    <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginTop: 2 }}>{value ?? '—'}</div>
+  </div>
+);
+
+// ── EmpQuickView ──────────────────────────────────────────────────────────────
+const EmpQuickView = ({ emp, onClose, navigate, user, onToggleStatus, togglingStatus, onDeleteClick, onViewDocs }) => {
+  const [tab, setTab] = useState('overview');
+  const [attSummary, setAttSummary] = useState(null);
+  const [leaveBalance, setLeaveBalance] = useState(null);
+  const [dataLoading, setDataLoading] = useState(false);
+
+  const name = getFullName(emp);
+  const ini = getInitials(emp);
+  const pct = getProfilePct(emp);
+  const avatarColor = getAvatarColor(emp);
+  const isActive = emp.is_active !== false;
+
+  useEffect(() => {
+    setTab('overview');
+    setAttSummary(null);
+    setLeaveBalance(null);
+    if (!emp.employee_id) return;
+    setDataLoading(true);
+    const today = new Date();
+    const yr = today.getFullYear(), mo = today.getMonth();
+    const cycleStart = today.getDate() >= 26 ? new Date(yr, mo, 26) : new Date(yr, mo - 1, 26);
+    const start = cycleStart.toISOString().split('T')[0];
+    const end = today.toISOString().split('T')[0];
+    Promise.all([
+      axios.get(API_ENDPOINTS.ATTENDANCE_EMPLOYEE_REPORT(emp.employee_id, start, end)).catch(() => null),
+      axios.get(API_ENDPOINTS.LEAVE_BALANCE(emp.employee_id)).catch(() => null),
+    ]).then(([attRes, balRes]) => {
+      if (attRes) {
+        const recs = attRes.data.attendance || [];
+        let present = 0, absent = 0, late = 0, totalHours = 0;
+        let d = new Date(cycleStart);
+        while (d <= today) {
+          const ds = d.toISOString().split('T')[0];
+          const dow = d.getDay();
+          if (dow !== 0 && dow !== 6) {
+            const r = recs.find(x => x.attendance_date === ds);
+            if (r && (r.clock_in || r.status === 'present')) { present++; totalHours += parseFloat(r.total_hours) || 0; }
+            else absent++;
+            if (r && parseFloat(r.late_minutes) > 0) late++;
+          }
+          d.setDate(d.getDate() + 1);
+        }
+        const wd = present + absent;
+        setAttSummary({ present, absent, late, totalHours: Math.round(totalHours * 10) / 10, pct: wd > 0 ? Math.round((present / wd) * 100) : 0, wd });
+      }
+      if (balRes) setLeaveBalance(balRes.data);
+    }).finally(() => setDataLoading(false));
+  }, [emp.id]);
+
+  const TABS = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'attendance', label: 'Attendance' },
+    { id: 'leave', label: 'Leave' },
+    { id: 'payroll', label: 'Payroll' },
+    { id: 'documents', label: 'Documents' },
+  ];
+
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#f8fafc' }}>
+
+      {/* ── Header ── */}
+      <div style={{
+        background: 'linear-gradient(135deg,#1e1b4b 0%,#312e81 60%,#4338ca 100%)',
+        padding: '16px 16px 16px', position: 'relative', flexShrink: 0,
+      }}>
+        <button onClick={onClose} style={{
+          position: 'absolute', top: 10, right: 10, background: 'rgba(255,255,255,0.15)',
+          border: 'none', color: '#fff', borderRadius: 6, width: 26, height: 26,
+          cursor: 'pointer', fontSize: 18, lineHeight: '24px', textAlign: 'center', padding: 0,
+        }}>×</button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{
+            width: 52, height: 52, borderRadius: '50%', background: avatarColor,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 18, fontWeight: 800, color: '#fff', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0,
+          }}>
+            {emp.profile_image
+              ? <img src={emp.profile_image} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+              : ini}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ color: '#fff', fontWeight: 800, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+              <span style={{ background: 'rgba(255,255,255,0.15)', color: '#e0e7ff', borderRadius: 20, padding: '1px 8px', fontSize: 9, fontWeight: 600 }}>{emp.employee_id}</span>
+              <span style={{ background: isActive ? '#22c55e' : '#ef4444', color: '#fff', borderRadius: 20, padding: '1px 8px', fontSize: 9, fontWeight: 700 }}>
+                {isActive ? '● Active' : '● Inactive'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Tab bar ── */}
+      <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', background: '#fff', flexShrink: 0, overflowX: 'auto' }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            border: 'none', background: 'none', cursor: 'pointer',
+            padding: '9px 14px', fontSize: 11, fontWeight: 600,
+            color: tab === t.id ? '#6366f1' : '#6b7280',
+            borderBottom: tab === t.id ? '2px solid #6366f1' : '2px solid transparent',
+            whiteSpace: 'nowrap', transition: 'all 0.15s',
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {/* ── Content area ── */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
+
+        {/* ═══ OVERVIEW ═══ */}
+        {tab === 'overview' && (
+          <>
+            {/* Info card */}
+            <div style={{ background: '#fff', borderRadius: 12, padding: '10px 14px', marginBottom: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+              <InfoRow icon={FaEnvelope} label="Email" value={emp.email} />
+              <InfoRow icon={FaCalendarAlt} label="Joining Date" value={fmtDate(emp.joining_date)} />
+              <InfoRow icon={FaPhone} label="Phone" value={emp.phone} />
+              <InfoRow icon={FaBuilding} label="Department" value={emp.department} />
+              <InfoRow icon={FaBriefcase} label="Employment Type" value={emp.employment_type}
+                badge badgeColor={emp.employment_type === 'Full Time' ? '#22c55e' : '#0ea5e9'} />
+              <InfoRow icon={FaUserTie} label="Designation" value={emp.designation} />
+              <InfoRow icon={FaUser} label="Reports To" value={emp.reporting_manager} />
+            </div>
+
+            {/* Profile % + Attendance */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+              <div style={{ background: '#fff', borderRadius: 12, padding: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                <CompletionRing pct={pct} size={52} />
+              </div>
+              <div style={{ background: '#fff', borderRadius: 12, padding: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', marginBottom: 6 }}>Attendance</div>
+                {dataLoading ? <Spinner size="sm" animation="border" /> : attSummary ? (
+                  <>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: attSummary.pct >= 80 ? '#22c55e' : '#f97316' }}>{attSummary.pct}%</div>
+                    <div style={{ fontSize: 10, color: '#6b7280', fontWeight: 600 }}>{attSummary.present}P · {attSummary.absent}A · {attSummary.late}L</div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: 11, color: '#22c55e', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} /> Enabled
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div style={{ background: '#fff', borderRadius: 12, padding: '12px 14px', marginBottom: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', marginBottom: 10 }}>Quick Actions</div>
+              <div style={{ display: 'flex', gap: 5 }}>
+                <QuickActionBtn icon={FaEye} label="View Full Profile" color="#6366f1" onClick={() => navigate(`/admin/employees/${emp.employee_id}`)} />
+                {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'desktop_support') && (
+                  <QuickActionBtn icon={FaEdit} label="Edit Details" color="#0ea5e9" onClick={() => navigate(`/admin/edit-employee/${emp.id}`)} />
+                )}
+                <QuickActionBtn icon={FaClock} label="Attendance" color="#22c55e" onClick={() => navigate(`/admin/employees/${emp.employee_id}`)} />
+                <QuickActionBtn icon={FaCreditCard} label="Salary / Payroll" color="#f97316" onClick={() => navigate(`/admin/employees/${emp.employee_id}`)} />
+                <QuickActionBtn icon={FaFileAlt} label="Documents" color="#8b5cf6" onClick={() => onViewDocs(emp)} />
+              </div>
+            </div>
+
+            {/* Account info */}
+            <div style={{ background: '#fff', borderRadius: 12, padding: '12px 14px', marginBottom: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', marginBottom: 8 }}>Account Info</div>
+              {[
+                { label: 'Company', value: emp.pf_amount != null && parseInt(emp.pf_amount) === 0 ? 'PropCulture' : 'B2B InDemand', color: '#6366f1' },
+                { label: 'Profile Status', value: emp.profile_completed ? 'Completed' : 'Pending', color: emp.profile_completed ? '#22c55e' : '#f97316' },
+                { label: 'Account Status', value: isActive ? 'Active' : 'Inactive', color: isActive ? '#22c55e' : '#ef4444' },
+                { label: 'Profile Form', value: emp.require_profile_completion ? 'Required' : 'Not Required', color: emp.require_profile_completion ? '#0ea5e9' : '#9ca3af' },
+              ].map((item, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: i < 3 ? '1px solid #f8fafc' : 'none' }}>
+                  <span style={{ fontSize: 11, color: '#6b7280' }}>{item.label}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, background: `${item.color}15`, color: item.color, borderRadius: 10, padding: '2px 8px' }}>{item.value}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Action buttons */}
+            {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'manager') && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => onToggleStatus(emp)}
+                  disabled={togglingStatus === emp.id}
+                  style={{
+                    flex: 1, border: `1px solid ${isActive ? '#fde68a' : '#bbf7d0'}`, borderRadius: 8,
+                    background: isActive ? '#fffbeb' : '#f0fdf4', color: isActive ? '#d97706' : '#16a34a',
+                    padding: '8px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                  }}>
+                  {togglingStatus === emp.id
+                    ? <Spinner size="sm" animation="border" />
+                    : isActive
+                      ? <><FaUserSlash size={11} /> Deactivate</>
+                      : <><FaCheckCircle size={11} /> Activate</>}
+                </button>
+                {(user?.role === 'admin' || user?.role === 'sub_admin') && (
+                  <button
+                    onClick={() => onDeleteClick(emp)}
+                    style={{
+                      flex: 1, border: '1px solid #fecaca', borderRadius: 8,
+                      background: '#fff5f5', color: '#dc2626', padding: '8px',
+                      fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                    }}>
+                    <FaTrash size={11} /> Delete
+                  </button>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ═══ ATTENDANCE ═══ */}
+        {tab === 'attendance' && (
+          <>
+            {dataLoading ? (
+              <div style={{ textAlign: 'center', padding: 40 }}><Spinner animation="border" size="sm" /></div>
+            ) : attSummary ? (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                  <StatMini label="Present" value={attSummary.present} color="#22c55e" />
+                  <StatMini label="Absent" value={attSummary.absent} color="#ef4444" />
+                  <StatMini label="Late Arrivals" value={attSummary.late} color="#f97316" />
+                  <StatMini label="Total Hours" value={`${attSummary.totalHours}h`} color="#6366f1" />
+                </div>
+                <div style={{ background: '#fff', borderRadius: 12, padding: '14px', marginBottom: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', textAlign: 'center' }}>
+                  <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>Attendance Rate (Current Cycle)</div>
+                  <div style={{ fontSize: 32, fontWeight: 800, color: attSummary.pct >= 80 ? '#22c55e' : attSummary.pct >= 60 ? '#f97316' : '#ef4444' }}>
+                    {attSummary.pct}%
+                  </div>
+                  <div style={{ fontSize: 11, color: '#9ca3af' }}>{attSummary.wd} working days tracked</div>
+                </div>
+              </>
+            ) : (
+              <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af', fontSize: 12 }}>No attendance data for current cycle</div>
+            )}
+            <button onClick={() => navigate(`/admin/employees/${emp.employee_id}`)} style={{ width: '100%', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <FaEye size={12} /> View Full Attendance History
+            </button>
+          </>
+        )}
+
+        {/* ═══ LEAVE ═══ */}
+        {tab === 'leave' && (
+          <>
+            {dataLoading ? (
+              <div style={{ textAlign: 'center', padding: 40 }}><Spinner animation="border" size="sm" /></div>
+            ) : leaveBalance ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <StatMini label="Total Accrued" value={parseFloat(leaveBalance.total_accrued || 0).toFixed(1)} color="#6366f1" />
+                <StatMini label="Used" value={parseFloat(leaveBalance.used || 0).toFixed(1)} color="#ef4444" />
+                <StatMini label="Available" value={parseFloat(leaveBalance.available || 0).toFixed(1)} color="#22c55e" />
+                <StatMini label="Comp-Off" value={parseFloat(leaveBalance.comp_off_balance || 0).toFixed(1)} color="#8b5cf6" />
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af', fontSize: 12 }}>No leave data available</div>
+            )}
+            <button onClick={() => navigate(`/admin/employees/${emp.employee_id}`)} style={{ width: '100%', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <FaEye size={12} /> View Full Leave History
+            </button>
+          </>
+        )}
+
+        {/* ═══ PAYROLL ═══ */}
+        {tab === 'payroll' && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10, marginBottom: 12 }}>
+              <div style={{ background: '#fff', borderRadius: 12, padding: '14px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', borderLeft: '3px solid #22c55e' }}>
+                <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase' }}>Gross Salary</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: '#111827', marginTop: 2 }}>{fmtCurrency(emp.gross_salary)}</div>
+              </div>
+              <div style={{ background: '#fff', borderRadius: 12, padding: '14px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', borderLeft: '3px solid #6366f1' }}>
+                <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase' }}>In-Hand Salary</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: '#111827', marginTop: 2 }}>{fmtCurrency(emp.in_hand_salary)}</div>
+              </div>
+            </div>
+            <button onClick={() => navigate(`/admin/employees/${emp.employee_id}`)} style={{ width: '100%', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <FaEye size={12} /> View Full Payroll & Salary Slips
+            </button>
+          </>
+        )}
+
+        {/* ═══ DOCUMENTS ═══ */}
+        {tab === 'documents' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <button onClick={() => onViewDocs(emp)} style={{ width: '100%', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <FaFileAlt size={12} /> View Documents
+            </button>
+            <button onClick={() => navigate(`/admin/employees/${emp.employee_id}`)} style={{ width: '100%', background: '#fff', color: '#6366f1', border: '1px solid #6366f1', borderRadius: 8, padding: '10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <FaEye size={12} /> Full Profile Documents
+            </button>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+};
+
+// ── EmpListItem ───────────────────────────────────────────────────────────────
+const EmpListItem = ({ emp, selected, onClick }) => {
+  const name = getFullName(emp);
+  const ini = getInitials(emp);
+  const isActive = emp.is_active !== false;
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        padding: '9px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9,
+        background: selected ? '#eff0ff' : 'transparent',
+        borderLeft: `3px solid ${selected ? '#6366f1' : 'transparent'}`,
+        borderBottom: '1px solid #f1f5f9',
+        opacity: isActive ? 1 : 0.65,
+        transition: 'background 0.12s, border-color 0.12s',
+      }}
+      onMouseEnter={e => { if (!selected) e.currentTarget.style.background = '#f8fafc'; }}
+      onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'transparent'; }}
+    >
+      <div style={{
+        width: 34, height: 34, borderRadius: '50%',
+        background: isActive ? getAvatarColor(emp) : '#9ca3af',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 11, fontWeight: 800, color: '#fff', flexShrink: 0,
+      }}>{ini}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: selected ? '#4338ca' : '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {name}
+        </div>
+        <div style={{ fontSize: 10, color: '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {emp.employee_id}{emp.designation ? ` · ${emp.designation}` : ''}
+        </div>
+      </div>
+      {!isActive && (
+        <span style={{ fontSize: 8, background: '#fee2e2', color: '#ef4444', borderRadius: 4, padding: '1px 4px', fontWeight: 700, flexShrink: 0 }}>OFF</span>
+      )}
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ══════════════════════════════════════════════════════════════════════════════
 const EmployeeList = () => {
   const [employees, setEmployees] = useState([]);
   const [filteredEmployees, setFilteredEmployees] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [profileFilter, setProfileFilter] = useState('all');
+  const [activeTab, setActiveTab] = useState('active');
+  const [selectedEmpId, setSelectedEmpId] = useState(null);
+
+  // delete modal
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
-  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  // docs modal
   const [showDocumentModal, setShowDocumentModal] = useState(false);
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
   const [selectedEmployeeForDocs, setSelectedEmployeeForDocs] = useState(null);
   const [employeeDocuments, setEmployeeDocuments] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [docLoading, setDocLoading] = useState(false);
+
+  // global
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [deleting, setDeleting] = useState(false);
-  const [togglingProfileForm, setTogglingProfileForm] = useState(null);
+  const [togglingStatus, setTogglingStatus] = useState(null);
 
   const navigate = useNavigate();
   const { user } = useAuth();
   const { employeeUpdate, showNotification } = useNotification();
 
-  useEffect(() => {
-    fetchEmployees();
-  }, []);
-
-  // Filter employees whenever searchTerm, profileFilter, or employees change
-  useEffect(() => {
-    filterEmployees();
-  }, [searchTerm, profileFilter, employees]);
-
-  // Refresh employees when update occurs
-  useEffect(() => {
-    if (employeeUpdate) {
-      fetchEmployees();
-    }
-  }, [employeeUpdate]);
+  useEffect(() => { fetchEmployees(); }, []);
+  useEffect(() => { filterEmployees(); }, [searchTerm, profileFilter, activeTab, employees]);
+  useEffect(() => { if (employeeUpdate) fetchEmployees(); }, [employeeUpdate]);
 
   const fetchEmployees = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API_ENDPOINTS.EMPLOYEES}?active=true`);
-
-      console.log('🔍 API Response:', response);
-
-      let employeesData = [];
-
-      if (Array.isArray(response.data)) {
-        employeesData = response.data;
-      } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
-        employeesData = response.data.data;
-      } else {
-        employeesData = [];
-      }
-
-      // Filter out inactive employees
-      employeesData = employeesData.filter(emp => emp.is_active !== false);
-
-      console.log('✅ Active employees:', employeesData.length);
-      setEmployees(employeesData);
-      setFilteredEmployees(employeesData);
+      const response = await axios.get(API_ENDPOINTS.EMPLOYEES);
+      const data = Array.isArray(response.data) ? response.data
+        : Array.isArray(response.data?.data) ? response.data.data : [];
+      setEmployees(data);
       setError('');
-    } catch (error) {
-      console.error('❌ Error fetching employees:', error);
-      setError(error.response?.data?.message || 'Failed to load employees');
-      showNotification(error.response?.data?.message || 'Failed to load employees', 'danger');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to load employees');
+      showNotification(err.response?.data?.message || 'Failed to load employees', 'danger');
     } finally {
       setLoading(false);
     }
   };
 
   const filterEmployees = () => {
-    let filtered = employees;
+    let filtered = activeTab === 'inactive'
+      ? employees.filter(e => e.is_active === false)
+      : employees.filter(e => e.is_active !== false);
 
-    if (profileFilter === 'completed')  filtered = filtered.filter(e => e.profile_completed === true);
+    if (profileFilter === 'completed') filtered = filtered.filter(e => e.profile_completed === true);
     if (profileFilter === 'incomplete') filtered = filtered.filter(e => e.profile_completed !== true);
 
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase().trim();
       filtered = filtered.filter(emp =>
-        (emp.employee_id  || '').toLowerCase().includes(q) ||
-        (emp.first_name   || '').toLowerCase().includes(q) ||
-        (emp.last_name    || '').toLowerCase().includes(q) ||
+        (emp.employee_id || '').toLowerCase().includes(q) ||
+        (emp.first_name || '').toLowerCase().includes(q) ||
+        (emp.last_name || '').toLowerCase().includes(q) ||
         `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase().includes(q) ||
-        (emp.middle_name  || '').toLowerCase().includes(q) ||
-        (emp.department   || '').toLowerCase().includes(q) ||
-        (emp.designation  || '').toLowerCase().includes(q)
+        (emp.middle_name || '').toLowerCase().includes(q) ||
+        (emp.department || '').toLowerCase().includes(q) ||
+        (emp.designation || '').toLowerCase().includes(q)
       );
     }
-
     setFilteredEmployees(filtered);
-  };
-
-  const clearSearch = () => {
-    setSearchTerm('');
   };
 
   const fetchEmployeeDocuments = async (employee) => {
     try {
       setDocLoading(true);
       setSelectedEmployeeForDocs(employee);
-
-      console.log('Fetching documents for employee:', employee.employee_id);
       const response = await axios.get(API_ENDPOINTS.EMPLOYEE_DOCUMENTS(employee.employee_id));
-      console.log('Documents received:', response.data);
-
       const docs = Object.entries(response.data)
-        .filter(([key, value]) => value && value !== 'null' && value !== '')
+        .filter(([, value]) => value && value !== 'null' && value !== '')
         .map(([key, value]) => ({
-          type: key,
-          filename: value,
-          displayName: formatDocumentName(key),
-          icon: getDocumentIcon(key, value)
+          type: key, filename: value,
+          displayName: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          icon: getDocumentIcon(key, value),
         }));
-
-      console.log('Processed documents:', docs);
       setEmployeeDocuments(docs);
       setShowDocumentModal(true);
-    } catch (error) {
-      console.error('Error fetching documents:', error);
-      showNotification(error.response?.data?.message || 'Failed to load documents', 'danger');
+    } catch (err) {
+      showNotification(err.response?.data?.message || 'Failed to load documents', 'danger');
     } finally {
       setDocLoading(false);
     }
   };
 
-  const formatDocumentName = (type) => {
-    const names = {
-      'profile_image': 'Profile Image',
-      'appointment_letter': 'Appointment Letter',
-      'offer_letter': 'Offer Letter',
-      'contract_document': 'Contract Document',
-      'aadhar_card': 'Aadhar Card',
-      'pan_card': 'PAN Card',
-      'resume': 'Resume',
-      'salary_slip': 'Salary Slip',
-      'bank_proof': 'Bank Proof',
-      'education_certificates': 'Education Certificates',
-      'experience_certificates': 'Experience Certificates'
-    };
-    return names[type] || type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-  };
-
   const getDocumentIcon = (type, filename) => {
     if (!filename) return <FaFileAlt className="text-secondary" size={20} />;
-
     const ext = filename.split('.').pop().toLowerCase();
-
-    if (type.includes('image') || ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+    if (type.includes('image') || ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext))
       return <FaFileImage className="text-primary" size={20} />;
-    }
-    if (ext === 'pdf') {
-      return <FaFilePdf className="text-danger" size={20} />;
-    }
+    if (ext === 'pdf') return <FaFilePdf className="text-danger" size={20} />;
     return <FaFileAlt className="text-secondary" size={20} />;
   };
 
   const handleViewDocument = async (doc) => {
     try {
-      if (!selectedEmployeeForDocs) {
-        showNotification('Employee information not found', 'danger');
-        return;
-      }
-
-      console.log('Viewing document:', doc);
-      console.log('Employee ID:', selectedEmployeeForDocs.employee_id);
-
       setDocLoading(true);
-
       const response = await axios.get(
         API_ENDPOINTS.EMPLOYEE_DOCUMENT_BY_TYPE(selectedEmployeeForDocs.employee_id, doc.type),
-        {
-          responseType: 'blob',
-          params: { inline: true }
-        }
+        { responseType: 'blob', params: { inline: true } }
       );
-
-      const blob = new Blob([response.data], {
-        type: response.headers['content-type'] || 'application/octet-stream'
-      });
-
-      const url = window.URL.createObjectURL(blob);
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: response.headers['content-type'] }));
       window.open(url, '_blank');
-
-      setTimeout(() => {
-        window.URL.revokeObjectURL(url);
-      }, 1000);
-
-    } catch (error) {
-      console.error('Error viewing document:', error);
-      showNotification(error.response?.data?.message || 'Failed to view document', 'danger');
+      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      showNotification('Failed to view document', 'danger');
     } finally {
       setDocLoading(false);
     }
@@ -207,44 +576,21 @@ const EmployeeList = () => {
 
   const handleDownloadDocument = async (doc) => {
     try {
-      if (!selectedEmployeeForDocs) {
-        showNotification('Employee information not found', 'danger');
-        return;
-      }
-
       setDocLoading(true);
-      console.log('Downloading document:', doc);
-
       const response = await axios.get(
         API_ENDPOINTS.EMPLOYEE_DOCUMENT_BY_TYPE(selectedEmployeeForDocs.employee_id, doc.type),
-        {
-          responseType: 'blob',
-          headers: {
-            'Accept': '*/*'
-          }
-        }
+        { responseType: 'blob' }
       );
-
-      const blob = new Blob([response.data], {
-        type: response.headers['content-type'] || 'application/octet-stream'
-      });
-
-      const url = window.URL.createObjectURL(blob);
+      const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = window.document.createElement('a');
       link.href = url;
       link.setAttribute('download', doc.filename);
       window.document.body.appendChild(link);
       link.click();
-
-      setTimeout(() => {
-        window.URL.revokeObjectURL(url);
-        window.document.body.removeChild(link);
-      }, 100);
-
-      showNotification('Document downloaded successfully!', 'success');
-    } catch (error) {
-      console.error('Error downloading document:', error);
-      showNotification(error.response?.data?.message || 'Failed to download document', 'danger');
+      setTimeout(() => { window.URL.revokeObjectURL(url); window.document.body.removeChild(link); }, 100);
+      showNotification('Document downloaded!', 'success');
+    } catch {
+      showNotification('Failed to download document', 'danger');
     } finally {
       setDocLoading(false);
     }
@@ -252,452 +598,227 @@ const EmployeeList = () => {
 
   const handleDelete = async () => {
     if (!selectedEmployee) return;
-
     setDeleting(true);
     try {
       await axios.delete(API_ENDPOINTS.EMPLOYEE_DELETE(selectedEmployee.id));
       setShowDeleteModal(false);
+      if (selectedEmpId === selectedEmployee.id) setSelectedEmpId(null);
       await fetchEmployees();
-      showNotification(`Employee "${selectedEmployee.first_name} ${selectedEmployee.last_name}" deleted successfully!`, 'success');
+      showNotification(`${selectedEmployee.first_name} ${selectedEmployee.last_name} deleted`, 'success');
       setSelectedEmployee(null);
-    } catch (error) {
-      console.error('Error deleting employee:', error);
-      setError(error.response?.data?.message || 'Failed to delete employee');
-      showNotification(error.response?.data?.message || 'Failed to delete employee', 'danger');
+    } catch (err) {
+      showNotification(err.response?.data?.message || 'Failed to delete', 'danger');
     } finally {
       setDeleting(false);
     }
   };
 
-  const handleEdit = (employee) => {
-    if (user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'desktop_support') {
-      navigate(`/admin/edit-employee/${employee.id}`);
-    }
-  };
-
-  const handleViewProfile = (employee) => {
-    setSelectedEmployeeId(employee.id);
-    setShowProfileModal(true);
-  };
-
-  const handleViewDocuments = (employee) => {
-    fetchEmployeeDocuments(employee);
-  };
-
-  const handleDeleteClick = (employee) => {
-    setSelectedEmployee(employee);
-    setShowDeleteModal(true);
-  };
-
-  const handleCancelDelete = () => {
-    setShowDeleteModal(false);
-    setSelectedEmployee(null);
-  };
-
-  const handleToggleProfileForm = async (emp, e) => {
-    e.stopPropagation();
-    setTogglingProfileForm(emp.id);
+  const handleToggleStatus = async (emp) => {
+    const action = emp.is_active !== false ? 'Deactivate' : 'Activate';
+    if (!window.confirm(`${action} account for ${emp.first_name} ${emp.last_name}?`)) return;
+    setTogglingStatus(emp.id);
     try {
-      const res = await axios.post(API_ENDPOINTS.EMPLOYEE_TOGGLE_PROFILE_FORM(emp.id));
+      const res = await axios.patch(API_ENDPOINTS.EMPLOYEE_TOGGLE_STATUS(emp.id));
       if (res.data.success) {
-        setEmployees(prev => prev.map(e =>
-          e.id === emp.id ? { ...e, require_profile_completion: res.data.require_profile_completion } : e
-        ));
+        setEmployees(prev => prev.map(e => e.id === emp.id ? { ...e, is_active: res.data.is_active } : e));
+        showNotification(`${emp.first_name} ${emp.last_name} ${res.data.is_active ? 'activated' : 'deactivated'}`, res.data.is_active ? 'success' : 'warning');
       }
-    } catch {
-      // silent — toggle snaps back via state
+    } catch (err) {
+      showNotification(err.response?.data?.message || 'Failed to update status', 'danger');
     } finally {
-      setTogglingProfileForm(null);
+      setTogglingStatus(null);
     }
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
+  const selectedEmp = employees.find(e => e.id === selectedEmpId) || null;
+  const activeCount = employees.filter(e => e.is_active !== false).length;
+  const inactiveCount = employees.filter(e => e.is_active === false).length;
 
   if (loading) {
     return (
-      <div className="d-flex justify-content-center align-items-center min-vh-100">
-        <div className="text-center">
-          <Spinner animation="border" variant="primary" style={{ width: '3rem', height: '3rem' }} />
-          <p className="mt-3 text-muted small">Loading employees...</p>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+        <div style={{ textAlign: 'center' }}>
+          <Spinner animation="border" variant="primary" style={{ width: 40, height: 40 }} />
+          <p style={{ marginTop: 12, color: '#6b7280', fontSize: 13 }}>Loading employees...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-2 p-md-3 p-lg-4">
-      {/* Header - Responsive */}
-      <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-4 gap-3">
-        <h4 className="mb-0">Employee Management</h4>
-        <div className="d-flex gap-2 ms-0 ms-sm-auto">
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 60px)', overflow: 'hidden', background: '#f8fafc' }}>
+
+      {/* ── Page Header ── */}
+      <div style={{
+        padding: '10px 16px', borderBottom: '1px solid #e5e7eb', background: '#fff',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 8,
+      }}>
+        <h5 style={{ margin: 0, fontWeight: 700, fontSize: 16, color: '#111827' }}>Employee Management</h5>
+        <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
+          {error && <span style={{ fontSize: 11, color: '#ef4444' }}>{error}</span>}
+          <select value={profileFilter} onChange={e => setProfileFilter(e.target.value)}
+            style={{ fontSize: 11, padding: '5px 8px', border: '1px solid #e5e7eb', borderRadius: 7, background: '#f8fafc', cursor: 'pointer' }}>
+            <option value="all">All Profiles</option>
+            <option value="completed">✅ Completed</option>
+            <option value="incomplete">⚠️ Incomplete</option>
+          </select>
           {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'desktop_support') && (
-            <Button variant="dark" size="sm" onClick={() => navigate('/admin/add-employee')}>
-              <FaPlus className="me-2" size={12} /> Add Employee
-            </Button>
+            <button onClick={() => navigate('/admin/add-employee')} style={{
+              background: '#1e293b', color: '#fff', border: 'none', borderRadius: 7,
+              padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 5,
+            }}>
+              <FaPlus size={10} /> Add Employee
+            </button>
           )}
-          <button
-            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
-            onClick={() => navigate(-1)}
-          >
-            <FaArrowLeft size={12} /> Back
+          <button onClick={fetchEmployees} title="Refresh" style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 7, padding: '6px 10px', cursor: 'pointer', color: '#6b7280' }}>
+            <FaSyncAlt size={12} />
+          </button>
+          <button onClick={() => navigate(-1)} style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 7, padding: '6px 10px', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+            <FaArrowLeft size={11} /> Back
           </button>
         </div>
       </div>
 
-      {error && (
-        <Alert variant="danger" onClose={() => setError('')} dismissible className="mb-3 py-2">
-          <small>{error}</small>
-        </Alert>
-      )}
+      {/* ── Split Pane ── */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-      <Card className="border-0 shadow-sm">
-        <Card.Header className="bg-light py-2">
-          {/* FIXED: Single line header with Employee List and Search */}
-          <div className="d-flex justify-content-between align-items-center gap-2">
-            <h5 className="mb-0 fw-semibold text-nowrap">Employee List</h5>
-            <div className="d-flex gap-2 flex-shrink-0">
-              <InputGroup size="sm" style={{ width: '280px' }}>
-                <InputGroup.Text className="bg-white">
-                  <FaSearch size={12} className="text-muted" />
-                </InputGroup.Text>
-                <Form.Control
-                  type="text"
-                  placeholder="Search by ID, Name, Department..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="border-start-0"
-                />
-                {searchTerm && (
-                  <Button
-                    variant="outline-secondary"
-                    size="sm"
-                    onClick={clearSearch}
-                    className="border-start-0"
-                  >
-                    <FaTimes size={12} />
-                  </Button>
-                )}
-              </InputGroup>
-              <Form.Select
-                size="sm"
-                value={profileFilter}
-                onChange={e => setProfileFilter(e.target.value)}
-                style={{ width: 160, flexShrink: 0 }}
-                title="Filter by profile status"
-              >
-                <option value="all">All Profiles</option>
-                <option value="completed">✅ Completed</option>
-                <option value="incomplete">⚠️ Incomplete</option>
-              </Form.Select>
-              <Button
-                variant="outline-primary"
-                size="sm"
-                onClick={fetchEmployees}
-                title="Refresh List"
-                className="flex-shrink-0"
-              >
-                <FaSyncAlt size={12} />
-              </Button>
+        {/* ── Left Panel ── */}
+        <div style={{ width: 290, flexShrink: 0, borderRight: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', background: '#fff', overflow: 'hidden' }}>
+
+          {/* Search */}
+          <div style={{ padding: '10px 10px 8px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
+            <div style={{ position: 'relative' }}>
+              <FaSearch size={11} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#9ca3af', pointerEvents: 'none' }} />
+              <input
+                type="text"
+                placeholder="Search by name, ID, dept..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                style={{ width: '100%', padding: '7px 28px', border: '1px solid #e5e7eb', borderRadius: 7, fontSize: 12, outline: 'none', background: '#f8fafc', boxSizing: 'border-box' }}
+              />
+              {searchTerm && (
+                <button onClick={() => setSearchTerm('')} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: 0, lineHeight: 1 }}>
+                  <FaTimes size={10} />
+                </button>
+              )}
             </div>
           </div>
-        </Card.Header>
-        <Card.Body className="p-0">
-          {/* Search Result Summary */}
-          {searchTerm && (
-            <div className="px-3 py-2 bg-light border-bottom">
-              <small className="text-muted">
-                <FaSearch className="me-1" size={10} />
-                Found <strong>{filteredEmployees.length}</strong> employee{filteredEmployees.length !== 1 ? 's' : ''} matching "{searchTerm}"
-                <Button
-                  variant="link"
-                  size="sm"
-                  onClick={clearSearch}
-                  className="p-0 ms-2 text-decoration-none"
-                >
-                  Clear search
-                </Button>
-              </small>
-            </div>
-          )}
 
-          {/* Table with Vertical Scroll */}
-          <div 
-            className="table-responsive" 
-            style={{ 
-              maxHeight: 'calc(100vh - 320px)', 
-              minHeight: '400px',
-              overflowY: 'auto',
-              overflowX: 'auto'
-            }}
-          >
-            <Table hover striped className="mb-0 small">
-              <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
-                <tr>
-                  <th className="text-nowrap text-dark fw-normal text-center" style={{ width: '5%' }}>Sr No</th>
-                  <th className="text-nowrap text-dark fw-normal" style={{ width: '12%' }}>Employee ID</th>
-                  <th className="text-nowrap text-dark fw-normal" style={{ width: '15%' }}>Name</th>
-                  <th className="text-nowrap text-dark fw-normal d-none d-md-table-cell" style={{ width: '12%' }}>Department</th>
-                  <th className="text-nowrap text-dark fw-normal d-none d-lg-table-cell" style={{ width: '15%' }}>Designation</th>
-                  <th className="text-nowrap text-dark fw-normal d-none d-sm-table-cell" style={{ width: '10%' }}>Employment Type</th>
-                  <th className="text-nowrap text-dark fw-normal d-none d-xl-table-cell" style={{ width: '10%' }}>Joining Date</th>
-                  <th className="text-nowrap text-dark fw-normal d-none d-lg-table-cell" style={{ width: '10%' }}>Company</th>
-                  <th className="text-nowrap text-dark fw-normal d-none d-md-table-cell" style={{ width: '10%' }}>Profile</th>
-                  <th className="text-nowrap text-dark fw-normal text-center" style={{ width: '15%' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredEmployees.length > 0 ? (
-                  filteredEmployees.map((emp, index) => (
-                    <tr
-                      key={emp.id}
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => navigate(`/admin/employees/${emp.employee_id}`)}
-                      className="align-middle"
-                    >
-                      <td className="text-center">{index + 1}</td>
-                      <td>
-                        <Badge bg="light" text="dark" className="small">
-                          {emp.employee_id}
-                        </Badge>
-                      </td>
-                      <td className="text-truncate" style={{ maxWidth: '150px' }} title={`${emp.first_name} ${emp.middle_name || ''} ${emp.last_name}`}>
-                        {emp.first_name} {emp.middle_name} {emp.last_name}
-                      </td>
-                      <td className="text-truncate d-none d-md-table-cell" style={{ maxWidth: '120px' }} title={emp.department}>
-                        {emp.department}
-                      </td>
-                      <td className="text-truncate d-none d-lg-table-cell" style={{ maxWidth: '150px' }} title={emp.designation}>
-                        {emp.designation}
-                      </td>
-                      <td className="d-none d-sm-table-cell">
-                        <Badge bg={emp.employment_type === 'Full Time' ? 'success' : 'info'} className="px-2 py-1">
-                          {emp.employment_type === 'Full Time' ? 'Full Time' : emp.employment_type}
-                        </Badge>
-                      </td>
-                      <td className="text-truncate d-none d-xl-table-cell" style={{ maxWidth: '100px' }} title={formatDate(emp.joining_date)}>
-                        {formatDate(emp.joining_date)}
-                      </td>
-                      <td className="d-none d-lg-table-cell">
-                        {emp.pf_amount != null && parseInt(emp.pf_amount) === 0 ? (
-                          <Badge style={{ background: '#0d7b6f' }} className="px-2 py-1">PropCulture</Badge>
-                        ) : (
-                          <Badge style={{ background: '#1e3a5f' }} className="px-2 py-1">B2B InDemand</Badge>
-                        )}
-                      </td>
-                      <td className="d-none d-md-table-cell">
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
-                          {emp.profile_completed
-                            ? <Badge bg="success" className="px-2 py-1" style={{ fontSize: 10 }}>✓ Complete</Badge>
-                            : <Badge bg="warning" text="dark" className="px-2 py-1" style={{ fontSize: 10 }}>⚠ Pending</Badge>
-                          }
-                          {/* Custom pill toggle */}
-                          <button
-                            onClick={(e) => handleToggleProfileForm(emp, e)}
-                            disabled={togglingProfileForm === emp.id}
-                            title={emp.require_profile_completion ? 'Click to turn OFF form requirement' : 'Click to require this employee to fill profile form'}
-                            style={{
-                              display: 'inline-flex', alignItems: 'center', gap: 6,
-                              padding: '3px 8px 3px 4px',
-                              borderRadius: 20,
-                              border: 'none',
-                              cursor: 'pointer',
-                              background: emp.require_profile_completion
-                                ? 'linear-gradient(135deg,#22c55e,#16a34a)'
-                                : '#e2e8f0',
-                              opacity: togglingProfileForm === emp.id ? 0.6 : 1,
-                              transition: 'background 0.25s ease, opacity 0.2s',
-                              boxShadow: emp.require_profile_completion ? '0 0 0 2px rgba(34,197,94,0.3)' : 'none',
-                            }}
-                          >
-                            <span style={{
-                              width: 16, height: 16, borderRadius: '50%',
-                              background: '#fff',
-                              boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
-                              flexShrink: 0,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: 9,
-                            }}>
-                              {togglingProfileForm === emp.id ? '…' : emp.require_profile_completion ? '✓' : ''}
-                            </span>
-                            <span style={{
-                              fontSize: 10, fontWeight: 600,
-                              color: emp.require_profile_completion ? '#fff' : '#64748b',
-                              whiteSpace: 'nowrap',
-                            }}>
-                              {emp.require_profile_completion ? 'Form ON' : 'Form OFF'}
-                            </span>
-                          </button>
-                        </div>
-                      </td>
-                      <td onClick={e => e.stopPropagation()}>
-                        <div className="d-flex gap-2 gap-md-3 align-items-center justify-content-center flex-wrap">
-                          <FaEye
-                            size={14}
-                            className="text-secondary"
-                            style={{ cursor: 'pointer' }}
-                            onClick={() => navigate(`/admin/employees/${emp.employee_id}`)}
-                            title="View Full Profile"
-                          />
-                          <FaFileAlt
-                            size={14}
-                            className="text-info"
-                            style={{ cursor: 'pointer' }}
-                            onClick={() => handleViewDocuments(emp)}
-                            title="View Documents"
-                          />
-                          {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'desktop_support') && (
-                            <FaEdit
-                              size={14}
-                              className="text-secondary"
-                              style={{ cursor: 'pointer' }}
-                              onClick={() => handleEdit(emp)}
-                              title="Edit Employee"
-                            />
-                          )}
-                          {(user?.role === 'admin' || user?.role === 'sub_admin') && (
-                            <FaTrash
-                              size={14}
-                              className="text-danger"
-                              style={{ cursor: 'pointer' }}
-                              onClick={() => handleDeleteClick(emp)}
-                              title="Delete Employee"
-                            />
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="8" className="text-center py-4">
-                      {searchTerm ? (
-                        <>
-                          <FaSearch size={40} className="text-muted mb-3 opacity-50" />
-                          <p className="text-muted small mb-2">No employees found matching "{searchTerm}"</p>
-                          <Button
-                            variant="link"
-                            size="sm"
-                            onClick={clearSearch}
-                            className="text-decoration-none"
-                          >
-                            Clear search and show all employees
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-muted small mb-3">No employees found</p>
-                          {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'desktop_support') && (
-                            <Button
-                              variant="outline-primary"
-                              size="sm"
-                              onClick={() => navigate('/admin/add-employee')}
-                            >
-                              Add your first employee
-                            </Button>
-                          )}
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </Table>
+          {/* Active / Inactive tabs */}
+          <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
+            {[
+              { key: 'active', label: 'Active', count: activeCount, color: '#22c55e' },
+              { key: 'inactive', label: 'Inactive', count: inactiveCount, color: '#ef4444' },
+            ].map(t => (
+              <button key={t.key} onClick={() => { setActiveTab(t.key); setSelectedEmpId(null); }} style={{
+                flex: 1, border: 'none', background: 'transparent', padding: '7px 4px', fontSize: 12,
+                fontWeight: activeTab === t.key ? 700 : 400,
+                color: activeTab === t.key ? t.color : '#6b7280',
+                borderBottom: activeTab === t.key ? `2.5px solid ${t.color}` : '2.5px solid transparent',
+                cursor: 'pointer', transition: 'all 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+              }}>
+                {t.label}
+                <span style={{ background: activeTab === t.key ? t.color : '#e2e8f0', color: activeTab === t.key ? '#fff' : '#6b7280', borderRadius: 10, padding: '0 6px', fontSize: 10, fontWeight: 700 }}>
+                  {t.count}
+                </span>
+              </button>
+            ))}
           </div>
-          
-          {/* Scroll indicator */}
-          {filteredEmployees.length > 15 && (
-            <div className="text-center py-1 bg-light border-top">
-              <small className="text-muted">
-                <FaEye size={10} className="me-1" />
-                Scroll to view all {filteredEmployees.length} employees
-              </small>
+
+          {/* Count hint */}
+          <div style={{ padding: '4px 12px', fontSize: 10, color: '#9ca3af', background: '#f8fafc', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
+            {filteredEmployees.length} employee{filteredEmployees.length !== 1 ? 's' : ''}{searchTerm ? ` matching "${searchTerm}"` : ''}
+          </div>
+
+          {/* Scrollable employee list */}
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {filteredEmployees.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '30px 16px', color: '#9ca3af' }}>
+                <FaUsers size={30} style={{ marginBottom: 8, opacity: 0.4 }} />
+                <div style={{ fontSize: 12 }}>{searchTerm ? 'No employees found' : `No ${activeTab} employees`}</div>
+              </div>
+            ) : filteredEmployees.map(emp => (
+              <EmpListItem
+                key={emp.id}
+                emp={emp}
+                selected={selectedEmpId === emp.id}
+                onClick={() => setSelectedEmpId(emp.id)}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* ── Right Panel ── */}
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          {selectedEmp ? (
+            <EmpQuickView
+              key={selectedEmp.id}
+              emp={selectedEmp}
+              onClose={() => setSelectedEmpId(null)}
+              navigate={navigate}
+              user={user}
+              onToggleStatus={handleToggleStatus}
+              togglingStatus={togglingStatus}
+              onDeleteClick={(emp) => { setSelectedEmployee(emp); setShowDeleteModal(true); }}
+              onViewDocs={fetchEmployeeDocuments}
+            />
+          ) : (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', color: '#9ca3af', padding: 24 }}>
+              <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                <FaUser size={28} color="#c4c4c4" />
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Select an Employee</div>
+              <div style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', maxWidth: 220, marginBottom: 24 }}>
+                Click any employee from the list on the left to view their profile details here.
+              </div>
+              <div style={{ display: 'flex', gap: 24 }}>
+                {[
+                  { label: 'Active', value: activeCount, color: '#22c55e' },
+                  { label: 'Inactive', value: inactiveCount, color: '#ef4444' },
+                  { label: 'Total', value: employees.length, color: '#6366f1' },
+                ].map(s => (
+                  <div key={s.label} style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 24, fontWeight: 800, color: s.color }}>{s.value}</div>
+                    <div style={{ fontSize: 11, color: '#9ca3af' }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
-        </Card.Body>
-      </Card>
+        </div>
+      </div>
 
-      {/* Employee Profile View Modal */}
-      <EmployeeProfileView
-        show={showProfileModal}
-        onHide={() => setShowProfileModal(false)}
-        employeeId={selectedEmployeeId}
-      />
-
-      {/* Documents View Modal */}
-      <Modal 
-        show={showDocumentModal} 
-        onHide={() => setShowDocumentModal(false)} 
-        size="lg" 
-        centered
-        dialogClassName="mx-2 mx-md-auto"
-      >
+      {/* ── Documents Modal ── */}
+      <Modal show={showDocumentModal} onHide={() => setShowDocumentModal(false)} size="lg" centered>
         <Modal.Header closeButton className="bg-info text-white py-2">
-          <Modal.Title as="h6" className="mb-0 small fw-semibold d-flex align-items-center">
+          <Modal.Title as="h6" className="mb-0 small fw-semibold">
             <FaFileAlt className="me-2" size={14} />
-            <span className="text-truncate">Documents: {selectedEmployeeForDocs?.first_name} {selectedEmployeeForDocs?.last_name}</span>
+            Documents: {selectedEmployeeForDocs?.first_name} {selectedEmployeeForDocs?.last_name}
           </Modal.Title>
         </Modal.Header>
         <Modal.Body className="p-2 p-md-3">
           {docLoading ? (
-            <div className="text-center py-4">
-              <Spinner animation="border" variant="info" size="sm" />
-              <p className="mt-2 small text-muted">Loading documents...</p>
-            </div>
+            <div className="text-center py-4"><Spinner animation="border" variant="info" size="sm" /></div>
           ) : employeeDocuments.length > 0 ? (
             <div className="table-responsive">
               <Table striped hover size="sm" className="mb-0">
                 <thead className="bg-light">
                   <tr>
-                    <th className="small text-dark">Document Type</th>
-                    <th className="small text-dark d-none d-sm-table-cell">File Name</th>
-                    <th className="small text-dark text-center">Actions</th>
+                    <th className="small">Document Type</th>
+                    <th className="small d-none d-sm-table-cell">File Name</th>
+                    <th className="small text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {employeeDocuments.map((doc, index) => (
-                    <tr key={index}>
-                      <td>
-                        <div className="d-flex align-items-center">
-                          {doc.icon}
-                          <span className="ms-2 small fw-semibold text-truncate" style={{ maxWidth: '120px' }}>
-                            {doc.displayName}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="d-none d-sm-table-cell">
-                        <small className="text-muted text-truncate d-block" style={{ maxWidth: '150px' }} title={doc.filename}>
-                          {doc.filename}
-                        </small>
-                      </td>
+                  {employeeDocuments.map((doc, i) => (
+                    <tr key={i}>
+                      <td><div className="d-flex align-items-center">{doc.icon}<span className="ms-2 small fw-semibold">{doc.displayName}</span></div></td>
+                      <td className="d-none d-sm-table-cell"><small className="text-muted text-truncate d-block" style={{ maxWidth: 150 }}>{doc.filename}</small></td>
                       <td className="text-center">
-                        <div className="d-flex flex-column flex-sm-row gap-1 gap-sm-2 justify-content-center">
-                          <Button
-                            variant="outline-info"
-                            size="sm"
-                            onClick={() => handleViewDocument(doc)}
-                            className="px-2 px-sm-3"
-                            title="View Document"
-                          >
-                            <FaEye size={12} className="me-1" />
-                            <span className="d-none d-sm-inline">View</span>
-                          </Button>
-                          <Button
-                            variant="outline-success"
-                            size="sm"
-                            onClick={() => handleDownloadDocument(doc)}
-                            className="px-2 px-sm-3"
-                            title="Download Document"
-                          >
-                            <FaDownload size={12} className="me-1" />
-                            <span className="d-none d-sm-inline">Download</span>
-                          </Button>
+                        <div className="d-flex gap-2 justify-content-center">
+                          <Button variant="outline-info" size="sm" onClick={() => handleViewDocument(doc)}><FaEye size={12} className="me-1" /><span className="d-none d-sm-inline">View</span></Button>
+                          <Button variant="outline-success" size="sm" onClick={() => handleDownloadDocument(doc)}><FaDownload size={12} className="me-1" /><span className="d-none d-sm-inline">Download</span></Button>
                         </div>
                       </td>
                     </tr>
@@ -708,77 +829,35 @@ const EmployeeList = () => {
           ) : (
             <div className="text-center py-4">
               <FaFileAlt size={40} className="text-muted mb-3 opacity-50" />
-              <p className="text-muted small mb-0">No documents found for this employee</p>
+              <p className="text-muted small mb-0">No documents found</p>
             </div>
           )}
         </Modal.Body>
         <Modal.Footer className="py-2">
-          <Button variant="secondary" size="sm" onClick={() => setShowDocumentModal(false)}>
-            Close
-          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setShowDocumentModal(false)}>Close</Button>
         </Modal.Footer>
       </Modal>
 
-      {/* Delete Confirmation Modal */}
-      <Modal 
-        show={showDeleteModal} 
-        onHide={handleCancelDelete} 
-        centered 
-        backdrop="static"
-        dialogClassName="mx-2 mx-md-auto"
-      >
+      {/* ── Delete Modal ── */}
+      <Modal show={showDeleteModal} onHide={() => { setShowDeleteModal(false); setSelectedEmployee(null); }} centered backdrop="static">
         <Modal.Header closeButton className="bg-danger text-white py-2">
-          <Modal.Title as="h6" className="mb-0 small fw-semibold d-flex align-items-center">
-            <FaTrash className="me-2" size={12} />
-            Confirm Delete
-          </Modal.Title>
+          <Modal.Title as="h6" className="mb-0 small fw-semibold"><FaTrash className="me-2" size={12} />Confirm Delete</Modal.Title>
         </Modal.Header>
-        <Modal.Body className="p-2 p-md-3">
-          <div className="text-center mb-3">
-            <FaTrash size={40} className="text-danger mb-2" />
-            <p className="mb-2">Are you sure you want to delete this employee?</p>
-          </div>
-
+        <Modal.Body className="p-3">
+          <div className="text-center mb-3"><FaTrash size={40} className="text-danger mb-2" /></div>
           {selectedEmployee && (
             <div className="alert alert-warning py-2 small">
-              <strong>Employee Details:</strong><br />
-              <span className="d-block text-truncate">Name: {selectedEmployee.first_name} {selectedEmployee.last_name}</span>
-              <span className="d-block">ID: {selectedEmployee.employee_id}</span>
-              <span className="d-block text-truncate">Department: {selectedEmployee.department}</span>
+              <strong>{selectedEmployee.first_name} {selectedEmployee.last_name}</strong><br />
+              ID: {selectedEmployee.employee_id} · Dept: {selectedEmployee.department}
             </div>
           )}
-
-          <p className="text-danger mb-0 small fw-bold">
-            <small>⚠️ This action cannot be undone. All data will be permanently removed.</small>
-          </p>
+          <p className="text-danger small fw-bold mb-0">⚠️ This action cannot be undone.</p>
         </Modal.Body>
         <Modal.Footer className="py-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleCancelDelete}
-            disabled={deleting}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={handleDelete}
-            disabled={deleting}
-          >
-            {deleting ? (
-              <>
-                <Spinner size="sm" animation="border" className="me-2" />
-                <span className="d-none d-sm-inline">Deleting...</span>
-              </>
-            ) : (
-              <>
-                <FaTrash className="me-2" size={10} />
-                <span className="d-none d-sm-inline">Yes, Delete</span>
-                <span className="d-inline d-sm-none">Delete</span>
-              </>
-            )}
+          <Button variant="secondary" size="sm" onClick={() => { setShowDeleteModal(false); setSelectedEmployee(null); }} disabled={deleting}>Cancel</Button>
+          <Button variant="danger" size="sm" onClick={handleDelete} disabled={deleting}>
+            {deleting ? <Spinner size="sm" animation="border" className="me-1" /> : <FaTrash className="me-1" size={10} />}
+            Delete
           </Button>
         </Modal.Footer>
       </Modal>

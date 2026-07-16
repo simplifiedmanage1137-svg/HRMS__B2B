@@ -1,10 +1,11 @@
 // components/Admin/Teams.jsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, Button, Badge, Modal, Form, Spinner, Alert } from 'react-bootstrap';
+import { Button, Badge, Modal, Form, Spinner, Alert } from 'react-bootstrap';
 import {
-    FaUserTie, FaUsers, FaSearch, FaChevronDown, FaChevronUp,
+    FaUserTie, FaUsers, FaSearch, FaChevronRight,
     FaEye, FaEdit, FaExchangeAlt, FaTimesCircle, FaUserMinus,
     FaFilter, FaSyncAlt, FaClock, FaCalendarAlt, FaCheck, FaArrowLeft,
+    FaLayerGroup, FaTimes, FaUserSlash,
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -12,31 +13,46 @@ import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
-// ── Avatar ──────────────────────────────────────────────────────────────────
+// ── Avatar ────────────────────────────────────────────────────────────────────
 const Avatar = ({ name, size = 36, bg = '#3b82f6' }) => {
     const initials = name ? name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase() : '?';
     return (
         <div className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0 text-white fw-bold"
-            style={{ width: size, height: size, background: bg, fontSize: size * 0.35 }}>
+            style={{ width: size, height: size, background: bg, fontSize: size * 0.36 }}>
             {initials}
         </div>
     );
 };
 
-// ── Manager avatars palette ──────────────────────────────────────────────────
-const COLORS = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899'];
+const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899'];
 const mgrColor = (id) => COLORS[(id || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length];
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+// ── Checkbox ──────────────────────────────────────────────────────────────────
+const Checkbox = ({ checked, indeterminate = false, onChange, size = 16 }) => (
+    <div
+        onClick={e => { e.stopPropagation(); onChange(); }}
+        style={{
+            width: size, height: size, borderRadius: 4, cursor: 'pointer', flexShrink: 0,
+            border: checked || indeterminate ? '2px solid #3b82f6' : '2px solid #cbd5e1',
+            background: checked || indeterminate ? '#3b82f6' : '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.15s',
+        }}
+    >
+        {checked && <FaCheck size={size * 0.55} color="#fff" />}
+        {indeterminate && !checked && <div style={{ width: size * 0.5, height: 2, background: '#fff', borderRadius: 1 }} />}
+    </div>
+);
 
 // ── LoginSettings ─────────────────────────────────────────────────────────────
 const LoginSettings = ({ mgr, color }) => {
     const init = mgr.settings;
-    const [loginTime, setLoginTime]   = useState(init?.login_time?.slice(0,5) || '09:00');
-    const [workDays, setWorkDays]     = useState(init?.working_days || ['Monday','Tuesday','Wednesday','Thursday','Friday']);
-    const [saving, setSaving]         = useState(false);
-    const [saved, setSaved]           = useState(false);
-    const [error, setError]           = useState('');
+    const [loginTime, setLoginTime] = useState(init?.login_time?.slice(0, 5) || '09:00');
+    const [workDays, setWorkDays]   = useState(init?.working_days || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']);
+    const [saving, setSaving]       = useState(false);
+    const [saved, setSaved]         = useState(false);
+    const [error, setError]         = useState('');
 
     const toggleDay = (day) =>
         setWorkDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]);
@@ -59,36 +75,31 @@ const LoginSettings = ({ mgr, color }) => {
     };
 
     return (
-        <div className="px-3 pb-3" style={{ borderTop: `1px solid ${color}22` }}>
-            <div className="d-flex align-items-center gap-2 py-2 mb-2">
-                <FaClock size={12} style={{ color }} />
-                <span className="small fw-semibold" style={{ color }}>Login Time Settings</span>
+        <div>
+            <div className="d-flex align-items-center gap-2 mb-3">
+                <FaClock size={13} style={{ color }} />
+                <span className="fw-semibold" style={{ color, fontSize: 13 }}>Login Time Settings</span>
                 {init?.login_time && (
                     <Badge bg="light" text="dark" style={{ fontSize: 10, marginLeft: 'auto' }}>
-                        Current: {init.login_time.slice(0,5)}
+                        Current: {init.login_time.slice(0, 5)}
                     </Badge>
                 )}
             </div>
-
             {error && <Alert variant="danger" className="py-1 px-2 small mb-2">{error}</Alert>}
-
-            {/* Working days */}
             <div className="mb-3">
-                <div className="text-muted small mb-2" style={{ fontSize: 11 }}>
+                <div className="text-muted mb-2" style={{ fontSize: 11 }}>
                     <FaCalendarAlt size={10} className="me-1" />Working Days
                 </div>
                 <div className="d-flex flex-wrap gap-1">
                     {DAYS.map(day => {
                         const active = workDays.includes(day);
                         return (
-                            <button key={day}
-                                onClick={() => toggleDay(day)}
+                            <button key={day} onClick={() => toggleDay(day)}
                                 style={{
-                                    padding: '2px 8px', fontSize: 11, border: 'none', borderRadius: 20, cursor: 'pointer',
+                                    padding: '3px 10px', fontSize: 12, border: 'none', borderRadius: 20, cursor: 'pointer',
                                     background: active ? color : '#f1f5f9',
                                     color: active ? '#fff' : '#64748b',
-                                    fontWeight: active ? 600 : 400,
-                                    transition: 'all 0.15s',
+                                    fontWeight: active ? 600 : 400, transition: 'all 0.15s',
                                 }}>
                                 {day.slice(0, 3)}
                             </button>
@@ -96,160 +107,407 @@ const LoginSettings = ({ mgr, color }) => {
                     })}
                 </div>
             </div>
-
-            {/* Login time + save */}
             <div className="d-flex align-items-center gap-2">
-                <FaClock size={11} className="text-muted" />
-                <span className="small text-muted" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>Login Time</span>
-                <Form.Control
-                    type="time" size="sm" value={loginTime}
-                    onChange={e => setLoginTime(e.target.value)}
-                    style={{ width: 110, fontSize: 12 }}
-                />
+                <FaClock size={12} className="text-muted" />
+                <span className="text-muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>Login Time</span>
+                <Form.Control type="time" size="sm" value={loginTime}
+                    onChange={e => setLoginTime(e.target.value)} style={{ width: 110, fontSize: 12 }} />
                 <Button size="sm" variant={saved ? 'success' : 'primary'}
                     onClick={handleSave} disabled={saving || workDays.length === 0}
-                    className="d-flex align-items-center gap-1 ms-auto"
-                    style={{ fontSize: 12 }}>
+                    className="d-flex align-items-center gap-1 ms-auto">
                     {saving ? <Spinner size="sm" animation="border" /> :
-                     saved   ? <><FaCheck size={10} /> Saved</> :
-                               'Save'}
+                     saved   ? <><FaCheck size={10} /> Saved</> : 'Save'}
                 </Button>
             </div>
         </div>
     );
 };
 
-// ── ManagerCard ──────────────────────────────────────────────────────────────
-const ManagerCard = ({ mgr, managers, onAssign, onRemove, onRefresh, navigate }) => {
-    const [open, setOpen] = useState(false);
+// ── ManagerListItem — compact left-panel card ─────────────────────────────────
+const ManagerListItem = ({ mgr, isSelected, onClick, selCount, type = 'TL' }) => {
     const color = mgrColor(mgr.employee_id);
+    const [hovered, setHovered] = useState(false);
+
+    const typeStyle = type === 'TL'
+        ? { background: '#dbeafe', color: '#1d4ed8' }
+        : { background: '#f3e8ff', color: '#7c3aed' };
 
     return (
-        <Card className="shadow-sm mb-3" style={{ border: `1.5px solid ${color}22` }}>
-            {/* Manager header */}
-            <div
-                className="d-flex align-items-center gap-3 p-3 rounded-top"
-                style={{ background: `${color}0d`, cursor: 'pointer' }}
-                onClick={() => setOpen(o => !o)}
-            >
-                <Avatar name={`${mgr.first_name} ${mgr.last_name}`} size={42} bg={color} />
-                <div className="flex-grow-1 min-width-0">
-                    <div className="d-flex align-items-center gap-2 flex-wrap">
-                        <span className="fw-semibold">{mgr.first_name} {mgr.last_name}</span>
-                        <Badge bg="primary" className="small" style={{ fontSize: 10 }}>Manager</Badge>
-                        {!mgr.is_active && <Badge bg="secondary" style={{ fontSize: 10 }}>Inactive</Badge>}
-                        {mgr.settings?.login_time && (
-                            <Badge bg="light" text="dark" className="d-flex align-items-center gap-1" style={{ fontSize: 10 }}>
-                                <FaClock size={8} />{mgr.settings.login_time.slice(0,5)}
-                            </Badge>
+        <div
+            onClick={onClick}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            style={{
+                padding: '9px 12px', borderRadius: 10, cursor: 'pointer', marginBottom: 4,
+                border: isSelected ? `1.5px solid ${color}` : `1.5px solid ${hovered ? color + '55' : '#e2e8f0'}`,
+                background: isSelected ? `${color}0f` : hovered ? '#f8fafc' : '#fff',
+                transition: 'all 0.15s',
+            }}
+        >
+            <div className="d-flex align-items-center gap-2">
+                <Avatar name={`${mgr.first_name} ${mgr.last_name}`} size={34} bg={color} />
+                <div className="flex-grow-1 min-w-0">
+                    {/* Name row: name + TL/M badge + count */}
+                    <div className="d-flex align-items-center gap-1 flex-wrap" style={{ marginBottom: 2 }}>
+                        <span className="fw-semibold text-truncate" style={{ fontSize: 13, color: isSelected ? color : '#1e293b', maxWidth: 110 }}>
+                            {mgr.first_name} {mgr.last_name}
+                        </span>
+                        <span style={{
+                            fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
+                            flexShrink: 0, ...typeStyle,
+                        }}>
+                            {type}
+                        </span>
+                        <span className="d-flex align-items-center gap-1 flex-shrink-0"
+                            style={{ fontSize: 11, fontWeight: 600, color, marginLeft: 'auto' }}>
+                            <FaUsers size={9} style={{ color }} />
+                            {mgr.total_employees}
+                        </span>
+                        {isSelected && <FaChevronRight size={9} style={{ color, flexShrink: 0 }} />}
+                    </div>
+                    {/* Designation row */}
+                    <div className="text-muted text-truncate" style={{ fontSize: 11 }}>
+                        {mgr.designation || mgr.department || mgr.employee_id}
+                    </div>
+                    {selCount > 0 && (
+                        <Badge style={{ background: '#3b82f6', fontSize: 9, marginTop: 2 }}>✓ {selCount} selected</Badge>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ── ManagerDetail — right-panel full view ─────────────────────────────────────
+const ManagerDetail = ({ mgr, type = 'TL', onAssign, onRemove, onDeactivate, navigate, selectedEmps, onToggleSelect, onToggleSelectAll }) => {
+    const color = mgrColor(mgr.employee_id);
+    const totalEmps     = mgr.employees.length;
+    const selectedCount = mgr.employees.filter(e => selectedEmps.has(e.employee_id)).length;
+    const allChecked    = totalEmps > 0 && selectedCount === totalEmps;
+    const someChecked   = selectedCount > 0 && selectedCount < totalEmps;
+
+    return (
+        <div className="d-flex flex-column gap-3">
+            {/* Manager profile header */}
+            <div style={{
+                background: '#fff', borderRadius: 16, padding: '20px 24px',
+                border: `1.5px solid ${color}30`, boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+            }}>
+                <div className="d-flex align-items-start gap-3">
+                    <div style={{ position: 'relative' }}>
+                        <Avatar name={`${mgr.first_name} ${mgr.last_name}`} size={56} bg={color} />
+                        {mgr.is_active && (
+                            <div style={{
+                                position: 'absolute', bottom: 1, right: 1,
+                                width: 12, height: 12, borderRadius: '50%',
+                                background: '#22c55e', border: '2px solid #fff',
+                            }} />
                         )}
                     </div>
-                    <div className="text-muted small mt-1">
-                        {mgr.employee_id}
-                        {mgr.designation && <> · {mgr.designation}</>}
-                        {mgr.department && <> · {mgr.department}</>}
+                    <div className="flex-grow-1 min-w-0">
+                        <div className="d-flex align-items-center flex-wrap gap-2 mb-1">
+                            <span className="fw-bold" style={{ fontSize: 18, color: '#1e293b' }}>
+                                {mgr.first_name} {mgr.last_name}
+                            </span>
+                            {type === 'TL'
+                                ? <Badge style={{ background: '#dbeafe', color: '#1d4ed8', fontSize: 11 }}>TL</Badge>
+                                : <Badge style={{ background: '#f3e8ff', color: '#7c3aed', fontSize: 11 }}>Manager</Badge>
+                            }
+                            {!mgr.is_active && <Badge bg="secondary">Inactive</Badge>}
+                        </div>
+                        <div className="text-muted" style={{ fontSize: 13 }}>
+                            {mgr.employee_id}
+                            {mgr.designation && <span> · {mgr.designation}</span>}
+                        </div>
+                        {mgr.department && (
+                            <div className="text-muted" style={{ fontSize: 13 }}>{mgr.department}</div>
+                        )}
                     </div>
-                </div>
-                <div className="d-flex align-items-center gap-3 flex-shrink-0">
-                    <div className="text-center d-none d-sm-block">
-                        <div className="fw-bold" style={{ color }}>{mgr.total_employees}</div>
-                        <div className="text-muted" style={{ fontSize: 11 }}>Employees</div>
+                    <div className="d-flex gap-2 flex-shrink-0">
+                        {[
+                            { title: 'Edit', icon: <FaEdit size={12} />, bg: '#3b82f6', onClick: () => navigate(`/admin/edit-employee/${mgr.id}`) },
+                            { title: 'View', icon: <FaEye size={12} />, bg: '#06b6d4', onClick: () => navigate(`/admin/employees/${mgr.id}`) },
+                        ].map(btn => (
+                            <button key={btn.title} title={btn.title} onClick={btn.onClick}
+                                style={{
+                                    padding: '6px 14px', border: '1px solid #e2e8f0', borderRadius: 8,
+                                    background: '#fff', cursor: 'pointer', display: 'flex',
+                                    alignItems: 'center', gap: 5, fontSize: 12, color: '#64748b',
+                                    fontWeight: 500, transition: 'all 0.15s',
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.background = btn.bg; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = btn.bg; }}
+                                onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = '#64748b'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+                            >
+                                {btn.icon} {btn.title}
+                            </button>
+                        ))}
                     </div>
-                    <div className="d-flex gap-1">
-                        <Button variant="outline-secondary" size="sm" className="p-1"
-                            title="Edit Manager"
-                            onClick={e => { e.stopPropagation(); navigate(`/admin/edit-employee/${mgr.id}`); }}>
-                            <FaEdit size={11} />
-                        </Button>
-                        <Button variant="outline-info" size="sm" className="p-1"
-                            title="View Manager"
-                            onClick={e => { e.stopPropagation(); navigate(`/admin/employees/${mgr.id}`); }}>
-                            <FaEye size={11} />
-                        </Button>
-                    </div>
-                    {open ? <FaChevronUp size={13} className="text-muted" /> : <FaChevronDown size={13} className="text-muted" />}
                 </div>
             </div>
 
-            {/* Expanded employee list + login settings */}
-            {open && (
-                <div className="pt-2">
-                    <div className="px-3 pb-3">
-                    <div className="d-sm-none text-muted small mb-2">
-                        {mgr.total_employees} employee{mgr.total_employees !== 1 ? 's' : ''}
+            {/* Team members */}
+            <div style={{
+                background: '#fff', borderRadius: 16, border: `1.5px solid ${color}20`,
+                boxShadow: '0 2px 12px rgba(0,0,0,0.06)', overflow: 'hidden',
+            }}>
+                {/* Members header */}
+                <div style={{ padding: '14px 20px', borderBottom: `1px solid ${color}18`, background: `${color}07` }}>
+                    <div className="d-flex align-items-center justify-content-between">
+                        <div className="d-flex align-items-center gap-2">
+                            {totalEmps > 0 && (
+                                <Checkbox
+                                    checked={allChecked}
+                                    indeterminate={someChecked}
+                                    onChange={() => onToggleSelectAll(mgr.employees, !allChecked)}
+                                    size={15}
+                                />
+                            )}
+                            <FaUsers size={13} style={{ color }} />
+                            <span className="fw-semibold" style={{ fontSize: 14, color: '#1e293b' }}>Team Members</span>
+                            {selectedCount > 0 && (
+                                <Badge style={{ background: '#3b82f6', fontSize: 10 }}>
+                                    {selectedCount} selected
+                                </Badge>
+                            )}
+                        </div>
+                        <Badge style={{ background: color, fontSize: 11, padding: '4px 10px' }}>
+                            {totalEmps} {totalEmps === 1 ? 'member' : 'members'}
+                        </Badge>
                     </div>
-                    {mgr.employees.length === 0 ? (
-                        <div className="text-center text-muted small py-3" style={{ background: '#f8fafc', borderRadius: 8 }}>
-                            No employees assigned to this manager yet.
+                </div>
+
+                {/* Members list */}
+                <div style={{ padding: '12px 20px' }}>
+                    {totalEmps === 0 ? (
+                        <div className="text-center text-muted py-4 rounded-3"
+                            style={{ background: '#f8fafc', border: '1px dashed #e2e8f0' }}>
+                            <FaUsers size={28} className="mb-2 opacity-25" />
+                            <div style={{ fontSize: 13 }}>No employees assigned to this manager</div>
                         </div>
                     ) : (
-                        <div style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                            {mgr.employees.map((emp, i) => (
+                        <div className="d-flex flex-column gap-2">
+                            {mgr.employees.map(emp => {
+                                const isSelected = selectedEmps.has(emp.employee_id);
+                                return (
+                                    <div key={emp.employee_id}
+                                        className="d-flex align-items-center gap-3 rounded-3 px-3 py-2"
+                                        style={{
+                                            background: isSelected ? '#eff6ff' : '#f8fafc',
+                                            border: isSelected ? '1.5px solid #93c5fd' : '1.5px solid transparent',
+                                            transition: 'all 0.15s',
+                                        }}
+                                        onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#f0f9ff'; }}
+                                        onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = '#f8fafc'; }}
+                                    >
+                                        <Checkbox checked={isSelected} onChange={() => onToggleSelect(emp)} size={14} />
+                                        <Avatar name={`${emp.first_name} ${emp.last_name}`} size={34} bg={color} />
+                                        <div className="flex-grow-1 min-w-0">
+                                            <div className="fw-semibold text-truncate" style={{ fontSize: 14, color: '#1e293b' }}>
+                                                {emp.first_name} {emp.last_name}
+                                            </div>
+                                            <div className="text-muted text-truncate" style={{ fontSize: 11 }}>
+                                                {emp.employee_id}{emp.designation && ` · ${emp.designation}`}
+                                            </div>
+                                        </div>
+                                        {emp.department && (
+                                            <span className="text-muted d-none d-md-block" style={{ fontSize: 11, flexShrink: 0 }}>
+                                                {emp.department}
+                                            </span>
+                                        )}
+                                        <Badge bg={emp.is_active ? 'success' : 'secondary'} style={{ fontSize: 10, flexShrink: 0 }}>
+                                            {emp.is_active ? 'Active' : 'Inactive'}
+                                        </Badge>
+                                        <div className="d-flex gap-1 flex-shrink-0">
+                                            <button title="Change Manager" onClick={() => onAssign(emp, mgr)}
+                                                style={{
+                                                    width: 28, height: 28, border: '1px solid #bfdbfe', borderRadius: 7,
+                                                    background: '#eff6ff', cursor: 'pointer', display: 'flex',
+                                                    alignItems: 'center', justifyContent: 'center', color: '#3b82f6', transition: 'all 0.15s',
+                                                }}
+                                                onMouseEnter={e => { e.currentTarget.style.background = '#3b82f6'; e.currentTarget.style.color = '#fff'; }}
+                                                onMouseLeave={e => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.color = '#3b82f6'; }}
+                                            >
+                                                <FaExchangeAlt size={10} />
+                                            </button>
+                                            <button title="Remove Assignment" onClick={() => onRemove(emp)}
+                                                style={{
+                                                    width: 28, height: 28, border: '1px solid #fecaca', borderRadius: 7,
+                                                    background: '#fff1f2', cursor: 'pointer', display: 'flex',
+                                                    alignItems: 'center', justifyContent: 'center', color: '#ef4444', transition: 'all 0.15s',
+                                                }}
+                                                onMouseEnter={e => { e.currentTarget.style.background = '#ef4444'; e.currentTarget.style.color = '#fff'; }}
+                                                onMouseLeave={e => { e.currentTarget.style.background = '#fff1f2'; e.currentTarget.style.color = '#ef4444'; }}
+                                            >
+                                                <FaUserMinus size={10} />
+                                            </button>
+                                        <button title="Deactivate Account" onClick={() => onDeactivate(emp)}
+                                                style={{
+                                                    width: 28, height: 28, border: '1px solid #fde68a', borderRadius: 7,
+                                                    background: '#fffbeb', cursor: 'pointer', display: 'flex',
+                                                    alignItems: 'center', justifyContent: 'center', color: '#d97706', transition: 'all 0.15s',
+                                                }}
+                                                onMouseEnter={e => { e.currentTarget.style.background = '#f59e0b'; e.currentTarget.style.color = '#fff'; }}
+                                                onMouseLeave={e => { e.currentTarget.style.background = '#fffbeb'; e.currentTarget.style.color = '#d97706'; }}
+                                            >
+                                                <FaUserSlash size={10} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Login settings */}
+            <div style={{
+                background: '#fff', borderRadius: 16, padding: '18px 22px',
+                border: `1.5px solid ${color}20`, boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+            }}>
+                <LoginSettings mgr={mgr} color={color} />
+            </div>
+        </div>
+    );
+};
+
+// ── UnassignedDetail — right panel for unassigned employees ───────────────────
+const UnassignedDetail = ({ employees, onAssign, isAdmin, selectedEmps, onToggleSelect, onToggleSelectAll }) => {
+    const selectedCount = employees.filter(e => selectedEmps.has(e.employee_id)).length;
+    const allChecked    = employees.length > 0 && selectedCount === employees.length;
+    const someChecked   = selectedCount > 0 && selectedCount < employees.length;
+
+    return (
+        <div style={{
+            background: '#fff', borderRadius: 16, overflow: 'hidden',
+            border: '1.5px solid #f59e0b44', boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+        }}>
+            <div style={{ padding: '14px 20px', borderBottom: '1px solid #fef08a', background: '#fefce8' }}>
+                <div className="d-flex align-items-center gap-2">
+                    {employees.length > 0 && (
+                        <Checkbox
+                            checked={allChecked} indeterminate={someChecked}
+                            onChange={() => onToggleSelectAll(employees, !allChecked)} size={15}
+                        />
+                    )}
+                    <FaTimesCircle size={14} className="text-warning" />
+                    <span className="fw-semibold" style={{ fontSize: 14 }}>Employees Without TL</span>
+                    <Badge bg="warning" text="dark" pill>{employees.length}</Badge>
+                    {selectedCount > 0 && <Badge bg="primary" pill>{selectedCount} selected</Badge>}
+                </div>
+            </div>
+            <div style={{ padding: '12px 20px' }}>
+                {employees.length === 0 ? (
+                    <div className="text-center text-muted py-4">
+                        <FaCheck size={28} className="mb-2 text-success opacity-50" />
+                        <div style={{ fontSize: 13 }}>All employees are assigned to a manager.</div>
+                    </div>
+                ) : (
+                    <div className="d-flex flex-column gap-2">
+                        {employees.map(emp => {
+                            const isSelected = selectedEmps.has(emp.employee_id);
+                            return (
                                 <div key={emp.employee_id}
-                                    className="d-flex align-items-center gap-2 px-3 py-2"
+                                    className="d-flex align-items-center gap-3 rounded-3 px-3 py-2"
                                     style={{
-                                        borderBottom: i < mgr.employees.length - 1 ? '1px solid #f1f5f9' : 'none',
-                                        background: i % 2 === 0 ? '#fff' : '#fafbfc',
-                                    }}>
-                                    <Avatar name={`${emp.first_name} ${emp.last_name}`} size={30} bg={color} />
-                                    <div className="flex-grow-1 min-width-0">
-                                        <div className="small fw-semibold">{emp.first_name} {emp.last_name}</div>
-                                        <div className="text-muted" style={{ fontSize: 11 }}>
-                                            {emp.employee_id}
-                                            {emp.designation && <> · {emp.designation}</>}
+                                        background: isSelected ? '#eff6ff' : '#f8fafc',
+                                        border: isSelected ? '1.5px solid #93c5fd' : '1.5px solid transparent',
+                                        transition: 'all 0.15s',
+                                    }}
+                                    onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#f0f9ff'; }}
+                                    onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = '#f8fafc'; }}
+                                >
+                                    <Checkbox checked={isSelected} onChange={() => onToggleSelect(emp)} size={14} />
+                                    <Avatar name={`${emp.first_name} ${emp.last_name}`} size={34} bg="#94a3b8" />
+                                    <div className="flex-grow-1 min-w-0">
+                                        <div className="fw-semibold text-truncate" style={{ fontSize: 14, color: '#1e293b' }}>
+                                            {emp.first_name} {emp.last_name}
+                                        </div>
+                                        <div className="text-muted text-truncate" style={{ fontSize: 11 }}>
+                                            {emp.employee_id}{emp.designation && ` · ${emp.designation}`}
                                         </div>
                                     </div>
                                     <Badge bg={emp.is_active ? 'success' : 'secondary'} style={{ fontSize: 10 }}>
                                         {emp.is_active ? 'Active' : 'Inactive'}
                                     </Badge>
-                                    <div className="d-flex gap-1 ms-1">
-                                        <Button variant="outline-primary" size="sm" className="p-1"
-                                            title="Change Manager"
-                                            onClick={() => onAssign(emp, mgr)}>
-                                            <FaExchangeAlt size={10} />
-                                        </Button>
-                                        <Button variant="outline-danger" size="sm" className="p-1"
-                                            title="Remove Manager Assignment"
-                                            onClick={() => onRemove(emp)}>
-                                            <FaUserMinus size={10} />
-                                        </Button>
-                                    </div>
+                                    {isAdmin && (
+                                        <button title="Assign Manager" onClick={() => onAssign(emp, null)}
+                                            style={{
+                                                padding: '4px 10px', border: '1px solid #bfdbfe', borderRadius: 7,
+                                                background: '#eff6ff', cursor: 'pointer', display: 'flex',
+                                                alignItems: 'center', gap: 5, fontSize: 11, color: '#3b82f6',
+                                                fontWeight: 500, transition: 'all 0.15s',
+                                            }}
+                                            onMouseEnter={e => { e.currentTarget.style.background = '#3b82f6'; e.currentTarget.style.color = '#fff'; }}
+                                            onMouseLeave={e => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.color = '#3b82f6'; }}
+                                        >
+                                            <FaUserTie size={10} /> Assign
+                                        </button>
+                                    )}
                                 </div>
-                            ))}
-                        </div>
-                    )}
+                            );
+                        })}
                     </div>
-                    <LoginSettings mgr={mgr} color={color} />
-                </div>
-            )}
-        </Card>
+                )}
+            </div>
+        </div>
     );
 };
 
-// ── Main Component ───────────────────────────────────────────────────────────
+// ── Main Component ────────────────────────────────────────────────────────────
 const Teams = () => {
     const { showNotification } = useNotification();
     const { user } = useAuth();
     const navigate = useNavigate();
     const isAdmin = user?.role === 'admin' || user?.role === 'sub_admin';
 
-    const [hierarchy, setHierarchy]     = useState([]);
-    const [unassigned, setUnassigned]   = useState([]);
-    const [managers, setManagers]       = useState([]);
-    const [subAdmins, setSubAdmins]     = useState([]);
-    const [loading, setLoading]         = useState(true);
-    const [saving, setSaving]           = useState(false);
+    const [hierarchy, setHierarchy]   = useState([]);
+    const [unassigned, setUnassigned] = useState([]);
+    const [managers, setManagers]     = useState([]);
+    const [subAdmins, setSubAdmins]   = useState([]);
+    const [loading, setLoading]       = useState(true);
+    const [saving, setSaving]         = useState(false);
 
-    // Search & filter
-    const [search, setSearch]           = useState('');
-    const [filter, setFilter]           = useState('all');
+    const [search, setSearch] = useState('');
+    const [filter, setFilter] = useState('all');
 
-    // Assign modal
+    // Which manager card is "open" in the right panel
+    const [selectedMgrId, setSelectedMgrId]         = useState(null);
+    const [showUnassignedPanel, setShowUnassignedPanel] = useState(false);
+
+    // Multi-select
+    const [selectedEmps, setSelectedEmps] = useState(new Map());
+    const selectedCount = selectedEmps.size;
+    const selectedList  = [...selectedEmps.values()];
+    const clearSelection = () => setSelectedEmps(new Map());
+
+    const toggleSelect = (emp) => setSelectedEmps(prev => {
+        const next = new Map(prev);
+        if (next.has(emp.employee_id)) next.delete(emp.employee_id);
+        else next.set(emp.employee_id, emp);
+        return next;
+    });
+
+    const toggleSelectAll = (employees, select) => setSelectedEmps(prev => {
+        const next = new Map(prev);
+        if (select) employees.forEach(e => next.set(e.employee_id, e));
+        else employees.forEach(e => next.delete(e.employee_id));
+        return next;
+    });
+
+    // Single assign modal
     const [assignModal, setAssignModal] = useState(false);
     const [assignEmp, setAssignEmp]     = useState(null);
-    const [assignType, setAssignType]   = useState('tl'); // 'tl' | 'manager'
+    const [assignType, setAssignType]   = useState('tl');
     const [newMgrId, setNewMgrId]       = useState('');
     const [assignError, setAssignError] = useState('');
+
+    // Bulk assign modal
+    const [bulkModal, setBulkModal]   = useState(false);
+    const [bulkType, setBulkType]     = useState('tl');
+    const [bulkMgrId, setBulkMgrId]   = useState('');
+    const [bulkError, setBulkError]   = useState('');
+    const [bulkSaving, setBulkSaving] = useState(false);
 
     const fetchHierarchy = useCallback(async () => {
         setLoading(true);
@@ -261,14 +519,10 @@ const Teams = () => {
             setHierarchy(hierRes.data.hierarchy || []);
             setUnassigned(hierRes.data.unassigned || []);
             setManagers(mgrRes.data.managers || []);
-
-            // Non-fatal — sub-admins list might not be available yet
             try {
                 const subRes = await axios.get(API_ENDPOINTS.TEAMS_SUB_ADMINS_LIST);
                 setSubAdmins(subRes.data.managers || []);
-            } catch {
-                setSubAdmins([]);
-            }
+            } catch { setSubAdmins([]); }
         } catch {
             showNotification('Failed to load manager hierarchy', 'danger');
         } finally {
@@ -278,7 +532,6 @@ const Teams = () => {
 
     useEffect(() => { fetchHierarchy(); }, [fetchHierarchy]);
 
-    // ── Assign / Change manager ──────────────────────────────────────────────
     const openAssign = (emp, currentMgr = null) => {
         setAssignEmp(emp);
         setNewMgrId(currentMgr?.employee_id || '');
@@ -294,7 +547,6 @@ const Teams = () => {
         if (!mgr) return;
         setSaving(true);
         try {
-            // Use numeric id — the PUT /:id route matches by database id, not employee_id string
             await axios.put(API_ENDPOINTS.EMPLOYEE_BY_ID(assignEmp.id), {
                 reporting_manager: `${mgr.first_name} ${mgr.last_name}`.trim(),
             });
@@ -311,7 +563,6 @@ const Teams = () => {
     const handleRemove = async (emp) => {
         if (!window.confirm(`Remove manager assignment for ${emp.first_name} ${emp.last_name}?`)) return;
         try {
-            // Use numeric id — the PUT /:id route matches by database id, not employee_id string
             await axios.put(API_ENDPOINTS.EMPLOYEE_BY_ID(emp.id), { reporting_manager: null });
             showNotification('Manager assignment removed', 'success');
             fetchHierarchy();
@@ -320,7 +571,61 @@ const Teams = () => {
         }
     };
 
-    // ── Filtered data ────────────────────────────────────────────────────────
+    const handleDeactivateEmployee = async (emp) => {
+        if (!window.confirm(`Deactivate account for ${emp.first_name} ${emp.last_name}? They will be removed from all team views.`)) return;
+        try {
+            await axios.patch(API_ENDPOINTS.EMPLOYEE_TOGGLE_STATUS(emp.id));
+            showNotification(`${emp.first_name} ${emp.last_name}'s account deactivated`, 'warning');
+            fetchHierarchy();
+        } catch (err) {
+            showNotification(err.response?.data?.message || 'Failed to deactivate', 'danger');
+        }
+    };
+
+    const openBulkModal = () => {
+        setBulkType('tl'); setBulkMgrId(''); setBulkError(''); setBulkModal(true);
+    };
+
+    const handleBulkAssign = async () => {
+        if (!bulkMgrId) return setBulkError('Please select a manager');
+        const pool = bulkType === 'tl' ? managers : subAdmins;
+        const mgr = pool.find(m => m.employee_id === bulkMgrId);
+        if (!mgr) return;
+        setBulkSaving(true);
+        const mgrName = `${mgr.first_name} ${mgr.last_name}`.trim();
+        try {
+            await Promise.all(
+                selectedList.map(emp =>
+                    axios.put(API_ENDPOINTS.EMPLOYEE_BY_ID(emp.id), { reporting_manager: mgrName })
+                )
+            );
+            showNotification(`${selectedCount} employees assigned to ${mgrName}`, 'success');
+            setBulkModal(false);
+            clearSelection();
+            fetchHierarchy();
+        } catch (err) {
+            setBulkError(err.response?.data?.message || 'Failed to assign');
+        } finally {
+            setBulkSaving(false);
+        }
+    };
+
+    const handleBulkRemove = async () => {
+        if (!window.confirm(`Remove manager assignment for ${selectedCount} employee(s)?`)) return;
+        try {
+            await Promise.all(
+                selectedList.map(emp =>
+                    axios.put(API_ENDPOINTS.EMPLOYEE_BY_ID(emp.id), { reporting_manager: null })
+                )
+            );
+            showNotification(`${selectedCount} assignments removed`, 'success');
+            clearSelection();
+            fetchHierarchy();
+        } catch (err) {
+            showNotification(err.response?.data?.message || 'Failed to remove', 'danger');
+        }
+    };
+
     const q = search.trim().toLowerCase();
 
     const filteredHierarchy = useMemo(() => {
@@ -328,21 +633,15 @@ const Teams = () => {
         if (filter === 'active')       list = list.filter(m => m.is_active);
         if (filter === 'no_employees') list = list.filter(m => m.total_employees === 0);
         if (!q) return list;
-        return list
-            .map(m => {
-                const mgrMatch = `${m.first_name} ${m.last_name}`.toLowerCase().includes(q) ||
-                    m.employee_id.toLowerCase().includes(q) ||
-                    (m.designation || '').toLowerCase().includes(q);
-                const matchedEmps = m.employees.filter(e =>
-                    `${e.first_name} ${e.last_name}`.toLowerCase().includes(q) ||
-                    e.employee_id.toLowerCase().includes(q) ||
-                    (e.designation || '').toLowerCase().includes(q)
-                );
-                if (mgrMatch) return m;               // show whole card if manager matches
-                if (matchedEmps.length) return { ...m, employees: matchedEmps }; // show filtered employees
-                return null;
-            })
-            .filter(Boolean);
+        return list.filter(m =>
+            `${m.first_name} ${m.last_name}`.toLowerCase().includes(q) ||
+            m.employee_id.toLowerCase().includes(q) ||
+            (m.designation || '').toLowerCase().includes(q) ||
+            m.employees.some(e =>
+                `${e.first_name} ${e.last_name}`.toLowerCase().includes(q) ||
+                e.employee_id.toLowerCase().includes(q)
+            )
+        );
     }, [hierarchy, filter, q]);
 
     const filteredUnassigned = useMemo(() => {
@@ -355,148 +654,328 @@ const Teams = () => {
         );
     }, [unassigned, filter, q]);
 
-    const showUnassigned = filter === 'no_manager' || (filter === 'all' && unassigned.length > 0);
+    // Build sub_admin teams from unassigned employees whose reporting_manager matches a sub_admin
+    const subAdminTeams = useMemo(() => {
+        return subAdmins.map(sa => {
+            const saName = `${sa.first_name} ${sa.last_name}`.trim().toLowerCase();
+            const employees = unassigned.filter(e =>
+                e.reporting_manager && e.reporting_manager.trim().toLowerCase() === saName
+            );
+            return { ...sa, employees, total_employees: employees.length, settings: null };
+        });
+    }, [subAdmins, unassigned]);
 
-    // ── Render ───────────────────────────────────────────────────────────────
+    const filteredSubAdminTeams = useMemo(() => {
+        if (filter === 'active')       return subAdminTeams.filter(m => m.is_active);
+        if (filter === 'no_employees') return subAdminTeams.filter(m => m.total_employees === 0);
+        if (filter === 'no_manager')   return [];
+        if (!q) return subAdminTeams;
+        return subAdminTeams.filter(m =>
+            `${m.first_name} ${m.last_name}`.toLowerCase().includes(q) ||
+            m.employee_id.toLowerCase().includes(q) ||
+            (m.designation || '').toLowerCase().includes(q) ||
+            m.employees.some(e =>
+                `${e.first_name} ${e.last_name}`.toLowerCase().includes(q) ||
+                e.employee_id.toLowerCase().includes(q)
+            )
+        );
+    }, [subAdminTeams, filter, q]);
+
+    // Employees truly without any manager (not even a sub_admin)
+    const trueUnassigned = useMemo(() => {
+        const assignedToSubAdmin = new Set(
+            subAdminTeams.flatMap(sa => sa.employees.map(e => e.employee_id))
+        );
+        return filteredUnassigned.filter(e => !assignedToSubAdmin.has(e.employee_id));
+    }, [filteredUnassigned, subAdminTeams]);
+
+    // Resolve currently selected item — check TL hierarchy first, then sub_admin teams
+    const [selectedType, setSelectedType] = useState('TL'); // 'TL' | 'M'
+    const selectedMgr = useMemo(() => {
+        if (!selectedMgrId) return null;
+        return hierarchy.find(m => m.employee_id === selectedMgrId) ||
+               subAdminTeams.find(m => m.employee_id === selectedMgrId) ||
+               null;
+    }, [hierarchy, subAdminTeams, selectedMgrId]);
+
+    const selectManager = (mgrId, type = 'TL') => {
+        setSelectedMgrId(mgrId);
+        setSelectedType(type);
+        setShowUnassignedPanel(false);
+    };
+
+    const selectUnassigned = () => {
+        setSelectedMgrId(null);
+        setShowUnassignedPanel(true);
+    };
+
+    const showUnassignedInList = filter === 'all' || filter === 'no_manager';
+
     return (
-        <div className="container-fluid p-3 p-md-4">
+        <div style={{ padding: '20px 24px', minHeight: '100vh', background: '#f0f2f5', paddingBottom: selectedCount > 0 ? 100 : 24 }}>
 
-            {/* Header */}
+            {/* Page header */}
             <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
                 <div className="d-flex align-items-center gap-2">
-                    <FaUserTie size={18} className="text-primary" />
-                    <h5 className="mb-0">Manager Hierarchy</h5>
-                    <Badge bg="light" text="dark" className="ms-1">{hierarchy.length} managers</Badge>
+                    <FaUserTie size={20} className="text-primary" />
+                    <h5 className="mb-0 fw-bold">TL Teams</h5>
+                    <Badge bg="light" text="dark" className="ms-1" style={{ fontSize: 12 }}>
+                        {hierarchy.length} managers
+                    </Badge>
                 </div>
                 <div className="d-flex gap-2">
-                    <Button variant="outline-secondary" size="sm" onClick={fetchHierarchy}
+                    <Button variant="outline-primary" size="sm" onClick={fetchHierarchy}
                         className="d-flex align-items-center gap-1">
                         <FaSyncAlt size={11} /> Refresh
                     </Button>
-                    <button
-                        className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
-                        onClick={() => navigate(-1)}
-                    >
+                    <Button variant="outline-secondary" size="sm"
+                        className="d-flex align-items-center gap-1" onClick={() => navigate(-1)}>
                         <FaArrowLeft size={12} /> Back
-                    </button>
+                    </Button>
                 </div>
             </div>
 
-            {/* Search & Filter bar */}
-            <div className="d-flex flex-wrap gap-2 mb-4 align-items-center">
-                <div className="position-relative" style={{ flex: '1 1 220px', maxWidth: 360 }}>
-                    <FaSearch style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: 11 }} />
-                    <Form.Control size="sm" placeholder="Search manager, employee, ID, designation…"
+            {/* Stats row */}
+            {!loading && (
+                <div className="d-flex gap-3 flex-wrap mb-4">
+                    {[
+                        { label: 'Total TLs',      value: hierarchy.length,                                      color: '#3b82f6' },
+                        { label: 'Total Managers',  value: subAdmins.length,                                     color: '#8b5cf6' },
+                        { label: 'Total Employees', value: hierarchy.reduce((s, m) => s + m.total_employees, 0), color: '#10b981' },
+                        { label: 'Without TL',      value: unassigned.length,                                    color: '#f59e0b' },
+                    ].map(s => (
+                        <div key={s.label} className="rounded-3 px-4 py-3"
+                            style={{ background: '#fff', minWidth: 140, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', borderLeft: `4px solid ${s.color}` }}>
+                            <div className="fw-bold fs-5" style={{ color: s.color }}>{s.value}</div>
+                            <div className="text-muted" style={{ fontSize: 12 }}>{s.label}</div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Search & Filter */}
+            <div className="d-flex flex-wrap gap-2 mb-3 align-items-center">
+                <div className="position-relative" style={{ flex: '1 1 200px', maxWidth: 320 }}>
+                    <FaSearch style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: 12 }} />
+                    <Form.Control size="sm" placeholder="Search manager or employee…"
                         value={search} onChange={e => setSearch(e.target.value)}
-                        style={{ paddingLeft: 28 }} />
+                        style={{ paddingLeft: 30, borderRadius: 8 }} />
                 </div>
                 <div className="d-flex align-items-center gap-1">
                     <FaFilter size={11} className="text-muted" />
-                    <Form.Select size="sm" value={filter} onChange={e => setFilter(e.target.value)} style={{ width: 'auto' }}>
+                    <Form.Select size="sm" value={filter} onChange={e => setFilter(e.target.value)}
+                        style={{ width: 'auto', borderRadius: 8 }}>
                         <option value="all">All TLs</option>
                         <option value="active">Active TLs</option>
-                        <option value="no_employees">No Employees Assigned</option>
-                        <option value="no_manager">Employees Without TL</option>
+                        <option value="no_employees">No Employees</option>
+                        <option value="no_manager">Without TL</option>
                     </Form.Select>
                 </div>
+                {selectedCount > 0 && (
+                    <button onClick={clearSelection}
+                        style={{
+                            border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff',
+                            padding: '4px 10px', fontSize: 12, cursor: 'pointer', color: '#64748b',
+                            display: 'flex', alignItems: 'center', gap: 5,
+                        }}>
+                        <FaTimes size={10} /> Clear {selectedCount} selected
+                    </button>
+                )}
             </div>
 
-            {/* Content */}
+            {/* ── Split-pane layout ── */}
             {loading ? (
-                <div className="text-center py-5"><Spinner animation="border" variant="primary" /></div>
+                <div className="text-center py-5">
+                    <Spinner animation="border" variant="primary" />
+                </div>
             ) : (
-                <>
-                    {/* Stats row */}
-                    <div className="d-flex gap-3 flex-wrap mb-4">
-                        {[
-                            { label: 'Total TLs', value: hierarchy.length, color: '#3b82f6' },
-                            { label: 'Total Employees', value: hierarchy.reduce((s, m) => s + m.total_employees, 0), color: '#10b981' },
-                            { label: 'Without TL', value: unassigned.length, color: '#f59e0b' },
-                        ].map(s => (
-                            <div key={s.label} className="px-3 py-2 rounded"
-                                style={{ background: `${s.color}12`, border: `1px solid ${s.color}30`, minWidth: 130 }}>
-                                <div className="fw-bold fs-5" style={{ color: s.color }}>{s.value}</div>
-                                <div className="text-muted" style={{ fontSize: 12 }}>{s.label}</div>
-                            </div>
-                        ))}
+                <div className="d-flex gap-3 align-items-start">
+
+                    {/* ── LEFT PANEL — compact manager list ── */}
+                    <div style={{
+                        width: 300, flexShrink: 0,
+                        position: 'sticky', top: 80,
+                        maxHeight: 'calc(100vh - 200px)',
+                        overflowY: 'auto',
+                        background: '#fff', borderRadius: 14,
+                        border: '1.5px solid #e2e8f0',
+                        boxShadow: '0 2px 10px rgba(0,0,0,0.06)',
+                        padding: '10px 8px',
+                    }}>
+                        {/* ── TL section ── */}
+                        <div className="d-flex align-items-center justify-content-between px-2 pb-2 mb-1"
+                            style={{ borderBottom: '1px solid #f1f5f9' }}>
+                            <span className="fw-semibold text-muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                TL Teams
+                            </span>
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: '#dbeafe', color: '#1d4ed8' }}>
+                                {filteredHierarchy.length}
+                            </span>
+                        </div>
+
+                        {filteredHierarchy.length === 0 && (
+                            <div className="text-center text-muted py-2" style={{ fontSize: 12 }}>No TLs found</div>
+                        )}
+                        {filteredHierarchy.map(mgr => {
+                            const selCount = mgr.employees.filter(e => selectedEmps.has(e.employee_id)).length;
+                            return (
+                                <ManagerListItem key={mgr.employee_id} mgr={mgr} type="TL"
+                                    isSelected={selectedMgrId === mgr.employee_id && selectedType === 'TL'}
+                                    onClick={() => selectManager(mgr.employee_id, 'TL')}
+                                    selCount={selCount} />
+                            );
+                        })}
+
+                        {/* ── Manager (sub_admin) section ── */}
+                        {filteredSubAdminTeams.length > 0 && (
+                            <>
+                                <div className="d-flex align-items-center justify-content-between px-2 py-2 mt-2"
+                                    style={{ borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', marginBottom: 4 }}>
+                                    <span className="fw-semibold text-muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                        Managers
+                                    </span>
+                                    <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: '#f3e8ff', color: '#7c3aed' }}>
+                                        {filteredSubAdminTeams.length}
+                                    </span>
+                                </div>
+                                {filteredSubAdminTeams.map(mgr => {
+                                    const selCount = mgr.employees.filter(e => selectedEmps.has(e.employee_id)).length;
+                                    return (
+                                        <ManagerListItem key={mgr.employee_id} mgr={mgr} type="M"
+                                            isSelected={selectedMgrId === mgr.employee_id && selectedType === 'M'}
+                                            onClick={() => selectManager(mgr.employee_id, 'M')}
+                                            selCount={selCount} />
+                                    );
+                                })}
+                            </>
+                        )}
+
+                        {/* ── Without TL / unassigned ── */}
+                        {showUnassignedInList && trueUnassigned.length > 0 && (
+                            <>
+                                <div className="px-2 py-2 mt-2" style={{ borderTop: '1px solid #f1f5f9' }}>
+                                    <span className="fw-semibold text-muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                        Unassigned
+                                    </span>
+                                </div>
+                                <div onClick={selectUnassigned}
+                                    style={{
+                                        padding: '9px 12px', borderRadius: 10, cursor: 'pointer',
+                                        border: showUnassignedPanel ? '1.5px solid #f59e0b' : '1.5px solid #fef08a',
+                                        background: showUnassignedPanel ? '#fefce8' : '#fffbeb',
+                                        transition: 'all 0.15s',
+                                    }}
+                                    onMouseEnter={e => { if (!showUnassignedPanel) e.currentTarget.style.background = '#fef9c3'; }}
+                                    onMouseLeave={e => { if (!showUnassignedPanel) e.currentTarget.style.background = '#fffbeb'; }}>
+                                    <div className="d-flex align-items-center gap-2">
+                                        <div className="rounded-circle d-flex align-items-center justify-content-center"
+                                            style={{ width: 34, height: 34, background: '#fef08a', flexShrink: 0 }}>
+                                            <FaTimesCircle size={14} color="#d97706" />
+                                        </div>
+                                        <div className="flex-grow-1 min-w-0">
+                                            <div className="d-flex align-items-center gap-2">
+                                                <span className="fw-semibold" style={{ fontSize: 13, color: '#92400e' }}>Without TL/Manager</span>
+                                                <Badge bg="warning" text="dark" style={{ fontSize: 10 }}>{trueUnassigned.length}</Badge>
+                                            </div>
+                                            <div className="text-muted" style={{ fontSize: 11 }}>No reporting manager</div>
+                                        </div>
+                                        {showUnassignedPanel && <FaChevronRight size={9} color="#d97706" />}
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
 
-                    {/* Manager cards */}
-                    {filter !== 'no_manager' && (
-                        filteredHierarchy.length === 0 ? (
-                            <Card className="shadow-sm text-center py-5 mb-3">
-                                <FaUsers size={36} className="text-muted mx-auto mb-2 opacity-50" />
-                                <p className="text-muted mb-0 small">No managers match your filters.</p>
-                            </Card>
+                    {/* ── RIGHT PANEL — detail view ── */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        {!selectedMgr && !showUnassignedPanel ? (
+                            <div className="text-center py-5 rounded-4"
+                                style={{ background: '#fff', border: '1.5px dashed #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
+                                <FaUsers size={48} className="mb-3" style={{ color: '#cbd5e1' }} />
+                                <div className="fw-semibold" style={{ color: '#94a3b8', fontSize: 15 }}>Select a TL or Manager</div>
+                                <div className="text-muted mt-1" style={{ fontSize: 13 }}>
+                                    Click any entry on the left to view their team
+                                </div>
+                            </div>
+                        ) : showUnassignedPanel ? (
+                            <UnassignedDetail
+                                employees={trueUnassigned}
+                                onAssign={openAssign}
+                                isAdmin={isAdmin}
+                                selectedEmps={selectedEmps}
+                                onToggleSelect={toggleSelect}
+                                onToggleSelectAll={toggleSelectAll}
+                            />
                         ) : (
-                            filteredHierarchy.map(mgr => (
-                                <ManagerCard
-                                    key={mgr.employee_id}
-                                    mgr={mgr}
-                                    managers={managers}
-                                    onAssign={openAssign}
-                                    onRemove={handleRemove}
-                                    onRefresh={fetchHierarchy}
-                                    navigate={navigate}
-                                />
-                            ))
-                        )
-                    )}
-
-                    {/* Unassigned employees section */}
-                    {showUnassigned && (
-                        <Card className="shadow-sm mb-3" style={{ border: '1.5px solid #f59e0b33' }}>
-                            <div className="p-3" style={{ background: '#f59e0b0d', borderRadius: '0.375rem 0.375rem 0 0' }}>
-                                <div className="d-flex align-items-center gap-2 flex-wrap">
-                                    <FaTimesCircle size={15} className="text-warning" />
-                                    <span className="fw-semibold">Employees Without TL</span>
-                                    <Badge bg="warning" text="dark" pill>{unassigned.length}</Badge>
-                                </div>
-                            </div>
-                            <div className="px-3 pb-3 pt-2">
-                                {filteredUnassigned.length === 0 && (
-                                    <p className="text-muted small text-center py-2 mb-1">
-                                        {q ? `No results for "${search}"` : 'All employees are assigned to a manager.'}
-                                    </p>
-                                )}
-                                {filteredUnassigned.length > 0 && (
-                                <div style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                                    {filteredUnassigned.map((emp, i) => (
-                                        <div key={emp.employee_id}
-                                            className="d-flex align-items-center gap-2 px-3 py-2"
-                                            style={{
-                                                borderBottom: i < filteredUnassigned.length - 1 ? '1px solid #f1f5f9' : 'none',
-                                                background: i % 2 === 0 ? '#fff' : '#fafbfc',
-                                            }}>
-                                            <Avatar name={`${emp.first_name} ${emp.last_name}`} size={30} bg="#94a3b8" />
-                                            <div className="flex-grow-1 min-width-0">
-                                                <div className="small fw-semibold">{emp.first_name} {emp.last_name}</div>
-                                                <div className="text-muted" style={{ fontSize: 11 }}>
-                                                    {emp.employee_id}
-                                                    {emp.designation && <> · {emp.designation}</>}
-                                                </div>
-                                            </div>
-                                            <Badge bg={emp.is_active ? 'success' : 'secondary'} style={{ fontSize: 10 }}>
-                                                {emp.is_active ? 'Active' : 'Inactive'}
-                                            </Badge>
-                                            {isAdmin && (
-                                                <Button variant="outline-primary" size="sm" className="p-1 ms-1"
-                                                    title="Assign Manager"
-                                                    onClick={() => openAssign(emp, null)}>
-                                                    <FaUserTie size={10} />
-                                                </Button>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                                )}
-                            </div>
-                        </Card>
-                    )}
-                </>
+                            <ManagerDetail
+                                mgr={selectedMgr}
+                                type={selectedType}
+                                onAssign={openAssign}
+                                onRemove={handleRemove}
+                                onDeactivate={handleDeactivateEmployee}
+                                navigate={navigate}
+                                selectedEmps={selectedEmps}
+                                onToggleSelect={toggleSelect}
+                                onToggleSelectAll={toggleSelectAll}
+                            />
+                        )}
+                    </div>
+                </div>
             )}
 
-            {/* ── Assign Manager Modal ── */}
+            {/* ── Floating bulk-action bar ── */}
+            {selectedCount > 0 && (
+                <div style={{
+                    position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+                    background: '#1e293b', borderRadius: 14, padding: '10px 20px',
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.28)', zIndex: 1050,
+                    animation: 'teams-slidein 0.2s ease', whiteSpace: 'nowrap',
+                }}>
+                    <div className="d-flex align-items-center gap-2">
+                        <FaLayerGroup size={13} color="#93c5fd" />
+                        <span style={{ color: '#e2e8f0', fontSize: 13, fontWeight: 600 }}>
+                            {selectedCount} employee{selectedCount !== 1 ? 's' : ''} selected
+                        </span>
+                    </div>
+                    <div style={{ width: 1, height: 24, background: '#334155', margin: '0 4px' }} />
+                    <button onClick={openBulkModal}
+                        style={{
+                            background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 8,
+                            padding: '5px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: 5, transition: 'background 0.15s',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#2563eb'}
+                        onMouseLeave={e => e.currentTarget.style.background = '#3b82f6'}
+                    >
+                        <FaExchangeAlt size={10} /> Assign / Move
+                    </button>
+                    <button onClick={handleBulkRemove}
+                        style={{
+                            background: '#ef4444', color: '#fff', border: 'none', borderRadius: 8,
+                            padding: '5px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: 5, transition: 'background 0.15s',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#dc2626'}
+                        onMouseLeave={e => e.currentTarget.style.background = '#ef4444'}
+                    >
+                        <FaUserMinus size={10} /> Remove
+                    </button>
+                    <button onClick={clearSelection}
+                        style={{
+                            background: 'transparent', color: '#94a3b8', border: '1px solid #334155',
+                            borderRadius: 8, padding: '5px 10px', fontSize: 12, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: 4, transition: 'all 0.15s',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.color = '#e2e8f0'; e.currentTarget.style.borderColor = '#64748b'; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.borderColor = '#334155'; }}
+                    >
+                        <FaTimes size={10} /> Clear
+                    </button>
+                </div>
+            )}
+
+            {/* ── Single-assign Modal ── */}
             <Modal show={assignModal} onHide={() => setAssignModal(false)} centered size="sm">
                 <Modal.Header closeButton className="py-2">
                     <Modal.Title as="h6" className="fw-semibold">
@@ -505,47 +984,33 @@ const Teams = () => {
                 </Modal.Header>
                 <Modal.Body className="p-3">
                     {assignError && <Alert variant="danger" className="py-2 small mb-2">{assignError}</Alert>}
-
-                    {/* Toggle: TL / Manager */}
                     <div className="mb-3">
-                        <div className="small fw-semibold mb-2">Assign as</div>
+                        <div className="small fw-semibold mb-2">Assign under</div>
                         <div className="d-flex" style={{ background: '#f1f5f9', borderRadius: 10, padding: 3 }}>
                             {[{ key: 'tl', label: 'TL' }, { key: 'manager', label: 'Manager' }].map(opt => (
-                                <button
-                                    key={opt.key}
-                                    onClick={() => { setAssignType(opt.key); setNewMgrId(''); }}
+                                <button key={opt.key} onClick={() => { setAssignType(opt.key); setNewMgrId(''); }}
                                     style={{
                                         flex: 1, border: 'none', borderRadius: 8, padding: '6px 0',
                                         fontWeight: 600, fontSize: 13, cursor: 'pointer',
                                         background: assignType === opt.key ? '#3b82f6' : 'transparent',
-                                        color: assignType === opt.key ? '#fff' : '#64748b',
-                                        transition: 'all 0.2s',
-                                    }}
-                                >
-                                    {opt.label}
+                                        color: assignType === opt.key ? '#fff' : '#64748b', transition: 'all 0.2s',
+                                    }}>{opt.label}
                                 </button>
                             ))}
                         </div>
                     </div>
-
                     <Form.Group>
                         <Form.Label className="small fw-semibold">
                             {assignType === 'tl' ? 'Select TL' : 'Select Manager'}
                         </Form.Label>
                         <Form.Select size="sm" value={newMgrId} onChange={e => setNewMgrId(e.target.value)}>
-                            <option value="">-- {assignType === 'tl' ? 'Select TL' : 'Select Manager'} --</option>
+                            <option value="">-- Select --</option>
                             {(assignType === 'tl' ? managers : subAdmins).map(m => (
                                 <option key={m.employee_id} value={m.employee_id}>
                                     {m.first_name} {m.last_name}{m.designation ? ` (${m.designation})` : ''}
                                 </option>
                             ))}
                         </Form.Select>
-                        {assignType === 'tl' && managers.length === 0 && (
-                            <div className="text-muted small mt-1">No TLs found.</div>
-                        )}
-                        {assignType === 'manager' && subAdmins.length === 0 && (
-                            <div className="text-muted small mt-1">No Managers found.</div>
-                        )}
                     </Form.Group>
                 </Modal.Body>
                 <Modal.Footer className="py-2">
@@ -555,6 +1020,88 @@ const Teams = () => {
                     </Button>
                 </Modal.Footer>
             </Modal>
+
+            {/* ── Bulk-assign Modal ── */}
+            <Modal show={bulkModal} onHide={() => setBulkModal(false)} centered>
+                <Modal.Header closeButton className="py-2">
+                    <Modal.Title as="h6" className="fw-semibold d-flex align-items-center gap-2">
+                        <FaLayerGroup size={14} className="text-primary" />
+                        Assign {selectedCount} Employee{selectedCount !== 1 ? 's' : ''}
+                    </Modal.Title>
+                </Modal.Header>
+                <Modal.Body className="p-3">
+                    {bulkError && <Alert variant="danger" className="py-2 small mb-2">{bulkError}</Alert>}
+                    <div className="mb-3">
+                        <div className="small fw-semibold mb-2 text-muted">Selected employees</div>
+                        <div style={{ maxHeight: 150, overflowY: 'auto', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc' }}>
+                            {selectedList.map((emp, i) => (
+                                <div key={emp.employee_id}
+                                    className="d-flex align-items-center gap-2 px-3 py-2"
+                                    style={{ borderBottom: i < selectedList.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+                                    <Avatar name={`${emp.first_name} ${emp.last_name}`} size={26} bg="#3b82f6" />
+                                    <div className="flex-grow-1 min-w-0">
+                                        <div className="small fw-semibold text-truncate">{emp.first_name} {emp.last_name}</div>
+                                        <div className="text-muted text-truncate" style={{ fontSize: 10 }}>{emp.employee_id}</div>
+                                    </div>
+                                    <button onClick={() => toggleSelect(emp)}
+                                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', padding: 2 }}>
+                                        <FaTimes size={10} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="mb-3">
+                        <div className="small fw-semibold mb-2">Assign under</div>
+                        <div className="d-flex" style={{ background: '#f1f5f9', borderRadius: 10, padding: 3 }}>
+                            {[{ key: 'tl', label: 'TL' }, { key: 'manager', label: 'Manager' }].map(opt => (
+                                <button key={opt.key} onClick={() => { setBulkType(opt.key); setBulkMgrId(''); }}
+                                    style={{
+                                        flex: 1, border: 'none', borderRadius: 8, padding: '6px 0',
+                                        fontWeight: 600, fontSize: 13, cursor: 'pointer',
+                                        background: bulkType === opt.key ? '#3b82f6' : 'transparent',
+                                        color: bulkType === opt.key ? '#fff' : '#64748b', transition: 'all 0.2s',
+                                    }}>{opt.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <Form.Group>
+                        <Form.Label className="small fw-semibold">
+                            {bulkType === 'tl' ? 'Select TL' : 'Select Manager'}
+                        </Form.Label>
+                        <Form.Select value={bulkMgrId} onChange={e => setBulkMgrId(e.target.value)}>
+                            <option value="">-- Select --</option>
+                            {(bulkType === 'tl' ? managers : subAdmins).map(m => (
+                                <option key={m.employee_id} value={m.employee_id}>
+                                    {m.first_name} {m.last_name}{m.designation ? ` (${m.designation})` : ''}
+                                </option>
+                            ))}
+                        </Form.Select>
+                    </Form.Group>
+                </Modal.Body>
+                <Modal.Footer className="py-2">
+                    <Button variant="secondary" size="sm" onClick={() => setBulkModal(false)}>Cancel</Button>
+                    <Button variant="primary" size="sm" onClick={handleBulkAssign}
+                        disabled={bulkSaving || !bulkMgrId}
+                        className="d-flex align-items-center gap-2">
+                        {bulkSaving
+                            ? <><Spinner size="sm" animation="border" /> Saving…</>
+                            : <><FaCheck size={10} /> Assign {selectedCount}</>}
+                    </Button>
+                </Modal.Footer>
+            </Modal>
+
+            <style>{`
+                @keyframes teams-slidein {
+                    from { opacity: 0; transform: translate(-50%, 20px); }
+                    to   { opacity: 1; transform: translate(-50%, 0); }
+                }
+                /* left panel scrollbar */
+                div[style*="maxHeight: calc(100vh"]::-webkit-scrollbar { width: 4px; }
+                div[style*="maxHeight: calc(100vh"]::-webkit-scrollbar-track { background: transparent; }
+                div[style*="maxHeight: calc(100vh"]::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 4px; }
+            `}</style>
         </div>
     );
 };

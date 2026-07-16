@@ -81,7 +81,8 @@ router.get('/hierarchy', verifyToken, isAdminOrDesktopSupport, async (req, res) 
             supabase
                 .from('employees')
                 .select('id, employee_id, first_name, last_name, designation, department, reporting_manager, is_active')
-                .eq('role', 'employee'),
+                .eq('role', 'employee')
+                .eq('is_active', true),
             supabase
                 .from('manager_settings')
                 .select('manager_id, login_time, working_days'),

@@ -581,6 +581,55 @@ router.post('/:id/toggle-profile-form', verifyToken, isAdmin, async (req, res) =
     }
 });
 
+// Toggle employee active/inactive status (Admin, sub_admin, TL/manager)
+router.patch('/:id/toggle-status', verifyToken, async (req, res) => {
+    try {
+        const { role, employeeId: callerEmpId } = req.user;
+        const allowed = ['admin', 'sub_admin', 'manager'];
+        if (!allowed.includes(role)) {
+            return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+
+        const { id } = req.params;
+        const { data: target, error: fetchErr } = await supabase
+            .from('employees')
+            .select('id, employee_id, first_name, last_name, is_active, reporting_manager, role')
+            .eq('id', id)
+            .single();
+        if (fetchErr || !target) return res.status(404).json({ success: false, message: 'Employee not found' });
+
+        // TLs (manager role) can only deactivate their own direct reports
+        if (role === 'manager') {
+            const { data: caller } = await supabase
+                .from('employees')
+                .select('first_name, last_name')
+                .eq('employee_id', callerEmpId)
+                .single();
+            if (caller) {
+                const callerName = `${caller.first_name} ${caller.last_name}`.trim().toLowerCase();
+                if (!target.reporting_manager || target.reporting_manager.trim().toLowerCase() !== callerName) {
+                    return res.status(403).json({ success: false, message: 'You can only deactivate your own team members' });
+                }
+            }
+        }
+
+        const newStatus = !target.is_active;
+        const { data, error } = await supabase
+            .from('employees')
+            .update({ is_active: newStatus, updated_at: new Date().toISOString() })
+            .eq('id', id)
+            .select('id, employee_id, first_name, last_name, is_active')
+            .single();
+        if (error) throw error;
+
+        const action = newStatus ? 'activated' : 'deactivated';
+        res.json({ success: true, message: `Employee ${action} successfully`, employee: data, is_active: newStatus });
+    } catch (err) {
+        console.error('Error toggling employee status:', err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 // Update employee (Admin only)
 router.put('/:id', verifyToken, isAdmin, async (req, res) => {
     try {
