@@ -38,15 +38,34 @@ const fmtTime = (iso) => {
 // ── Shared dropdown for all modes ─────────────────────────────────────────────
 function BreakDropdown({ activeBreak, usedTypes, canInteract, acting, error, onStart, onEnd, align = 'right' }) {
     const [open, setOpen] = useState(false);
-    const [pendingType, setPendingType] = useState(null); // break type awaiting confirmation
-    const ref = useRef(null);
+    const [pendingType, setPendingType] = useState(null);
+    const [dropPos, setDropPos] = useState({ top: 0, left: 0 });
+    const triggerRef = useRef(null);
+    const dropRef = useRef(null);
     const allUsed = BREAK_TYPES.every(t => usedTypes.includes(t.key));
     const activeType = BREAK_TYPES.find(t => t.key === activeBreak?.break_type);
     const pendingDef = BREAK_TYPES.find(t => t.key === pendingType);
 
+    const openDropdown = () => {
+        if (!canInteract || allUsed) return;
+        if (triggerRef.current) {
+            const rect = triggerRef.current.getBoundingClientRect();
+            setDropPos({
+                top: rect.bottom + 6,
+                // align right edge of dropdown with right edge of button
+                left: rect.right - 188,
+            });
+        }
+        setOpen(o => !o);
+        setPendingType(null);
+    };
+
     useEffect(() => {
         const close = (e) => {
-            if (ref.current && !ref.current.contains(e.target)) {
+            if (
+                dropRef.current && !dropRef.current.contains(e.target) &&
+                triggerRef.current && !triggerRef.current.contains(e.target)
+            ) {
                 setOpen(false);
                 setPendingType(null);
             }
@@ -83,9 +102,10 @@ function BreakDropdown({ activeBreak, usedTypes, canInteract, acting, error, onS
     }
 
     return (
-        <div ref={ref} style={{ position: 'relative', display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+        <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
             <button
-                onClick={() => { if (canInteract && !allUsed) { setOpen(o => !o); setPendingType(null); } }}
+                ref={triggerRef}
+                onClick={openDropdown}
                 disabled={acting || !canInteract || allUsed}
                 style={{
                     ...btnBase,
@@ -101,10 +121,11 @@ function BreakDropdown({ activeBreak, usedTypes, canInteract, acting, error, onS
             </button>
 
             {open && (
-                <div style={{
-                    position: 'absolute',
-                    [align === 'left' ? 'left' : 'right']: 0,
-                    top: 'calc(100% + 6px)', zIndex: 9999,
+                <div ref={dropRef} style={{
+                    position: 'fixed',
+                    top: dropPos.top,
+                    left: Math.max(8, dropPos.left),
+                    zIndex: 99999,
                     background: '#fff', borderRadius: 12, minWidth: 188,
                     boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
                     border: '1px solid #e5e7eb', overflow: 'hidden',
