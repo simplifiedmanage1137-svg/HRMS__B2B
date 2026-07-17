@@ -226,7 +226,7 @@ const Sidebar = () => {
               <NavItem to="/admin/attendance/reports" icon={<FaClock />}       label="Attendance" />
               <NavItem to="/admin/ratings"            icon={<FaStar />}        label="Employee Ratings" />
               <NavItem to="/performance/reviews"      icon={<FaChartLine />}   label="Performance Reviews" />
-              <NavItem to="/admin/payroll"            icon={<FaMoneyBill />}   label="Payroll" />
+              {/* <NavItem to="/admin/payroll"            icon={<FaMoneyBill />}   label="Payroll" /> */}
               <NavItem to="/admin/deductions"         icon={<FaMinusCircle />} label="Deductions" />
 
               <Section label="Admin Tools" />
