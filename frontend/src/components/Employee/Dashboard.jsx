@@ -83,6 +83,7 @@ const EmployeeDashboard = () => {
   const [clockLoading, setClockLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [canClockOut, setCanClockOut] = useState(false);
+  const [showClockOutConfirm, setShowClockOutConfirm] = useState(false);
 
   const OFFICE_COORDS = { radius: 100 };
   const STORAGE_KEY = `attendance_session_${user?.employeeId}`;
@@ -238,7 +239,7 @@ const EmployeeDashboard = () => {
           variant="warning"
           size="sm"
           className="d-flex align-items-center gap-2 px-3 py-2 rounded-pill fw-semibold shadow-sm"
-          onClick={handleClockOut}
+          onClick={() => setShowClockOutConfirm(true)}
           disabled={clockLoading}
         >
           {clockLoading
@@ -1719,6 +1720,31 @@ const EmployeeDashboard = () => {
           </Card>
         </Col>
       </Row>
+
+      {/* Clock-out confirmation overlay */}
+      {showClockOutConfirm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: 18, padding: '32px 28px', boxShadow: '0 24px 64px rgba(0,0,0,0.22)', textAlign: 'center', maxWidth: 320, width: '90%' }}>
+            <div style={{ fontSize: 44, marginBottom: 10 }}>🕐</div>
+            <div style={{ fontWeight: 700, fontSize: 18, color: '#111827', marginBottom: 8 }}>Clock Out?</div>
+            <div style={{ color: '#6b7280', fontSize: 14, marginBottom: 24 }}>Are you sure you want to clock out?</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => { setShowClockOutConfirm(false); handleClockOut(); }}
+                style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: '#f97316', color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
+              >
+                Sure
+              </button>
+              <button
+                onClick={() => setShowClockOutConfirm(false)}
+                style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid #e5e7eb', background: '#fff', color: '#374151', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Full Performance Rating History Modal */}
       <Modal show={showRatingHistory} onHide={() => setShowRatingHistory(false)} centered size="lg">
