@@ -169,11 +169,16 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
         const employeeId = req.user.employeeId;
         const today = new Date().toISOString().split('T')[0];
         try {
-            // Must be clocked in today
+            // Must have an open clock-in (no clock_out yet), checked without strict date filter
             const { data: att } = await supabase.from('attendance')
-                .select('id, clock_in, clock_out').eq('employee_id', employeeId).eq('attendance_date', today).maybeSingle();
-            if (!att?.clock_in) return res.status(400).json({ success: false, message: 'You must be clocked in before starting a break.' });
-            if (att.clock_out)  return res.status(400).json({ success: false, message: 'You have already clocked out for today.' });
+                .select('id, clock_in, clock_out, attendance_date')
+                .eq('employee_id', employeeId)
+                .not('clock_in', 'is', null)
+                .is('clock_out', null)
+                .order('attendance_date', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+            if (!att) return res.status(400).json({ success: false, message: 'You must be clocked in before starting a break.' });
 
             // No active break already running
             const { data: active } = await supabase.from('employee_breaks')
@@ -246,12 +251,10 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
     // employee → empty list
     router.get('/break/team-active', authenticateToken, async (req, res) => {
         const { employeeId, role } = req.user;
-        const today = new Date().toISOString().split('T')[0];
         try {
             let employeeIds = null; // null = all (admin only)
 
             if (role !== 'admin') {
-                // Find all teams this user manages (manager_id = their ID)
                 const { data: myTeams, error: teamsErr } = await supabase
                     .from('teams').select('id').eq('manager_id', employeeId);
                 if (teamsErr) throw teamsErr;
@@ -269,10 +272,9 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
                 if (employeeIds.length === 0) return res.json({ success: true, breaks: [] });
             }
 
-            // Query active breaks
+            // Only check break_end IS NULL — no attendance_date filter to avoid timezone/date-mismatch issues
             let query = supabase.from('employee_breaks')
                 .select('id, employee_id, break_start, attendance_date')
-                .eq('attendance_date', today)
                 .is('break_end', null)
                 .order('break_start', { ascending: true });
 

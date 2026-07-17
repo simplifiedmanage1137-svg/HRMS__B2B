@@ -69,6 +69,7 @@ import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../context/AuthContext';
 import AdminRatings from './AdminRatings';
+import BreakWidget from '../Common/BreakWidget';
 import * as XLSX from 'xlsx';
 // import HistoricalLateMarksUpdater from './HistoricalLateMarksUpdater';
 
@@ -1609,30 +1610,37 @@ const AdminDashboard = () => {
               </div>
             </div>
 
-            {/* Clock In / Out button */}
+            {/* Break + Clock buttons */}
             {(() => {
               const hasOpen = !!subAdminSession || (!!subAdminAttendance?.clock_in && !subAdminAttendance?.clock_out);
               return (
-                <button
-                  onClick={hasOpen ? handleSubAdminClockOut : handleSubAdminClockIn}
-                  disabled={subAdminClockLoading}
-                  style={{
-                    background: hasOpen ? 'rgba(251,191,36,0.9)' : 'rgba(34,197,94,0.9)',
-                    border: 'none', borderRadius: 10, padding: '9px 20px',
-                    color: hasOpen ? '#78350f' : '#fff',
-                    cursor: subAdminClockLoading ? 'not-allowed' : 'pointer',
-                    display: 'flex', alignItems: 'center', gap: 7,
-                    fontSize: 13, fontWeight: 700,
-                    opacity: subAdminClockLoading ? 0.7 : 1, flexShrink: 0,
-                  }}
-                >
-                  {subAdminClockLoading
-                    ? <><FaSyncAlt size={12} style={{ animation: 'dashspin 0.8s linear infinite' }} /> Processing...</>
-                    : hasOpen
-                      ? <><FaSignOutAlt size={13} /> Clock Out</>
-                      : <><FaSignInAlt size={13} /> Clock In</>
-                  }
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                  <BreakWidget
+                    mode="inline-button"
+                    isClockedIn={!!(subAdminAttendance?.clock_in || subAdminSession)}
+                    isClockedOut={!!(subAdminAttendance?.clock_out && !subAdminSession)}
+                  />
+                  <button
+                    onClick={hasOpen ? handleSubAdminClockOut : handleSubAdminClockIn}
+                    disabled={subAdminClockLoading}
+                    style={{
+                      background: hasOpen ? 'rgba(251,191,36,0.9)' : 'rgba(34,197,94,0.9)',
+                      border: 'none', borderRadius: 10, padding: '9px 20px',
+                      color: hasOpen ? '#78350f' : '#fff',
+                      cursor: subAdminClockLoading ? 'not-allowed' : 'pointer',
+                      display: 'flex', alignItems: 'center', gap: 7,
+                      fontSize: 13, fontWeight: 700,
+                      opacity: subAdminClockLoading ? 0.7 : 1,
+                    }}
+                  >
+                    {subAdminClockLoading
+                      ? <><FaSyncAlt size={12} style={{ animation: 'dashspin 0.8s linear infinite' }} /> Processing...</>
+                      : hasOpen
+                        ? <><FaSignOutAlt size={13} /> Clock Out</>
+                        : <><FaSignInAlt size={13} /> Clock In</>
+                    }
+                  </button>
+                </div>
               );
             })()}
           </div>
@@ -1727,7 +1735,12 @@ const AdminDashboard = () => {
             </button>
           </div>
         </div>
-      ) : (
+      ) : null}
+
+      {/* Team-on-break panel — visible to sub_admin who manages teams */}
+      {user?.role === 'sub_admin' && <BreakWidget mode="team-panel" />}
+
+      {user?.role !== 'sub_admin' && (
         /* ── Admin: existing header ── */
         <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
           <div>

@@ -115,13 +115,14 @@ export default function BreakWidget({ isClockedIn = false, isClockedOut = false,
     }, [fetchStatus]);
 
     useEffect(() => {
-        if (activeBreak) {
+        const shouldTick = !!activeBreak || (mode === 'team-panel' && teamBreaks.length > 0);
+        if (shouldTick) {
             timerRef.current = setInterval(() => setTicker(t => t + 1), 1000);
         } else {
             clearInterval(timerRef.current);
         }
         return () => clearInterval(timerRef.current);
-    }, [activeBreak]);
+    }, [activeBreak, teamBreaks, mode]);
 
     const handleStart = async () => {
         setActing(true); setError('');
