@@ -45,6 +45,7 @@ import { holidays } from '../../data/holidays';
 import EmployeeNotices from './EmployeeNotices';
 import AnnouncementBanner from './AnnouncementBanner';
 import ProfileCompletion from './ProfileCompletion';
+import BreakWidget from '../Common/BreakWidget';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -1005,10 +1006,15 @@ const EmployeeDashboard = () => {
                 </div>
               </Col>
 
-              {/* Action Button */}
+              {/* Action Button + Break Button */}
               <Col xs={12} md={4}>
-                <div className="d-flex justify-content-center justify-content-md-end">
+                <div className="d-flex justify-content-center justify-content-md-end align-items-center gap-2 flex-wrap">
                   {renderClockButton()}
+                  <BreakWidget
+                    mode="inline-button"
+                    isClockedIn={!!(attendance?.clock_in || activeSession)}
+                    isClockedOut={hasClockedOutToday}
+                  />
                 </div>
               </Col>
             </Row>
@@ -1027,6 +1033,10 @@ const EmployeeDashboard = () => {
           </Card.Body>
         </div>
       </Card>
+
+      {/* Team-on-break panel — only visible to managers/admins */}
+      <BreakWidget mode="team-panel" />
+
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
         <div>
           <h5 className="mb-1 d-flex align-items-center">

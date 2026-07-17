@@ -46,7 +46,10 @@ async function uploadFile(buffer, originalName, folder, mimeType) {
             errorMsg:  error.message,
             errorFull: JSON.stringify(error, null, 2),
         });
-        throw new Error(`Supabase Storage upload failed: ${error.message}`);
+        const msg = error.message?.toLowerCase().includes('bucket not found')
+            ? `Storage bucket "${BUCKET}" does not exist. Create it in the Supabase dashboard → Storage → New bucket → name: "${BUCKET}" → Public.`
+            : `Supabase Storage upload failed: ${error.message}`;
+        throw new Error(msg);
     }
 
     const { data: { publicUrl } } = supabase.storage

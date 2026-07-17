@@ -215,6 +215,12 @@ export const API_ENDPOINTS = {
   ONBOARDING_PRESIGN:           (token) => ep(`/api/onboarding/${token}/presign`),
   ONBOARDING_SUBMIT:            (token) => ep(`/api/onboarding/${token}/submit`),
 
+  // Break management
+  BREAK_START:       ep('/api/attendance/break/start'),
+  BREAK_END:         ep('/api/attendance/break/end'),
+  BREAK_MY_STATUS:   ep('/api/attendance/break/my-status'),
+  BREAK_TEAM_ACTIVE: ep('/api/attendance/break/team-active'),
+
   // Geofence
   GEOFENCE_LIST:   ep('/api/geofence/list'),
   GEOFENCE_CREATE: ep('/api/geofence'),

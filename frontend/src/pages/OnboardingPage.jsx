@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Spinner, Alert, Modal, Form, Button } from 'react-bootstrap';
-import { CheckCircle, XCircle, Clock, Briefcase, Building2, DollarSign, User, Calendar, AlertTriangle } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Briefcase, Building2, DollarSign, User, Calendar, AlertTriangle, PenLine, ShieldCheck } from 'lucide-react';
 import API_ENDPOINTS from '../config/api';
 
 const fmtMoney = (n) => n ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
@@ -44,6 +44,12 @@ export default function OnboardingPage() {
     const [accepting, setAccepting] = useState(false);
     const [acceptErr, setAcceptErr] = useState('');
 
+    // Acknowledgement form state
+    const [showAck, setShowAck]     = useState(false);
+    const [ackChecks, setAckChecks] = useState({ terms: false, salary: false, docs: false, policy: false });
+    const [ackName, setAckName]     = useState('');
+    const [ackErr, setAckErr]       = useState('');
+
     // Reject modal state
     const [showReject, setShowReject]   = useState(false);
     const [rejectName, setRejectName]   = useState('');
@@ -70,8 +76,17 @@ export default function OnboardingPage() {
         })();
     }, [token]);
 
-    const handleAccept = async () => {
-        setAccepting(true); setAcceptErr('');
+    const allAckChecked = Object.values(ackChecks).every(Boolean);
+
+    const handleAckSubmit = async () => {
+        if (!allAckChecked) { setAckErr('Please tick all acknowledgement checkboxes.'); return; }
+        if (!ackName.trim()) { setAckErr('Please enter your full name as a digital signature.'); return; }
+        if (ackName.trim().toLowerCase() !== (offer?.employee_name || '').trim().toLowerCase()) {
+            setAckErr(`Name does not match. Please enter exactly: ${offer.employee_name}`);
+            return;
+        }
+        setAckErr('');
+        setAccepting(true);
         try {
             const res = await fetch(API_ENDPOINTS.ONBOARDING_ACCEPT(token), { method: 'POST' });
             const d   = await res.json();
@@ -81,6 +96,12 @@ export default function OnboardingPage() {
             setAcceptErr(err.message);
             setAccepting(false);
         }
+    };
+
+    const handleAccept = () => {
+        setShowAck(true);
+        setAckErr('');
+        setAcceptErr('');
     };
 
     const handleReject = async () => {
@@ -154,10 +175,17 @@ export default function OnboardingPage() {
         );
     }
 
+    const ACK_ITEMS = [
+        { key: 'terms',   text: `I have carefully read and understood all the terms and conditions of this job offer from B2B InDemand.` },
+        { key: 'salary',  text: `I confirm that the offered designation, department, employment type, and salary of ${fmtMoney(offer.salary)} per month are as agreed with HR.` },
+        { key: 'docs',    text: `I understand that this offer is subject to successful verification of all submitted documents and information. Any discrepancy may result in withdrawal of the offer.` },
+        { key: 'policy',  text: `I agree to comply with B2B InDemand's company policies, code of conduct, and all applicable employment terms upon joining.` },
+    ];
+
     // Default: pending state
     return (
         <div style={pageStyle}>
-            <div style={cardStyle}>
+            <div style={{ ...cardStyle, maxWidth: showAck ? 600 : 520 }}>
                 {/* Header */}
                 <div style={{ textAlign: 'center', marginBottom: 28 }}>
                     <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
@@ -166,7 +194,7 @@ export default function OnboardingPage() {
                     <div style={{ fontSize: 12, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Job Offer from B2B InDemand</div>
                     <h2 style={{ fontWeight: 800, color: '#111827', fontSize: 24, margin: 0 }}>Hello, {offer.employee_name.split(' ')[0]}!</h2>
                     <p style={{ color: '#6b7280', fontSize: 14, marginTop: 6 }}>
-                        We're excited to extend a job offer to you. Please review the details below.
+                        {showAck ? 'Please read and acknowledge the following before accepting.' : "We're excited to extend a job offer to you. Please review the details below."}
                     </p>
                 </div>
 
@@ -179,17 +207,83 @@ export default function OnboardingPage() {
                     </div>
                 )}
 
-                {acceptErr && <Alert variant="danger" style={{ fontSize: 13 }}>{acceptErr}</Alert>}
+                {/* ── Acknowledgement form (shows after clicking Accept) ── */}
+                {showAck && (
+                    <div style={{ marginBottom: 20 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                            <div style={{ width: 30, height: 30, borderRadius: 8, background: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <ShieldCheck size={16} color="#4338ca" />
+                            </div>
+                            <span style={{ fontWeight: 700, fontSize: 14, color: '#1e293b' }}>Offer Acknowledgement</span>
+                        </div>
 
-                <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-                    <button onClick={handleAccept} disabled={accepting} style={{ ...acceptBtnStyle, flex: 1 }}>
-                        {accepting ? <Spinner size="sm" animation="border" style={{ marginRight: 8 }} /> : null}
-                        {accepting ? 'Please wait…' : '✓ Accept Offer & Continue'}
-                    </button>
-                    <button onClick={() => { setShowReject(true); setRejectName(''); setRejectErr(''); }} style={rejectBtnStyle}>
-                        Decline
-                    </button>
-                </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
+                            {ACK_ITEMS.map(item => (
+                                <label key={item.key}
+                                    onClick={() => setAckChecks(c => ({ ...c, [item.key]: !c[item.key] }))}
+                                    style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 14px', borderRadius: 10, border: `1px solid ${ackChecks[item.key] ? '#bbf7d0' : '#e5e7eb'}`, background: ackChecks[item.key] ? '#f0fdf4' : '#fafafa', cursor: 'pointer', transition: 'all 0.15s' }}>
+                                    <div style={{ width: 20, height: 20, borderRadius: 5, border: `2px solid ${ackChecks[item.key] ? '#16a34a' : '#cbd5e1'}`, background: ackChecks[item.key] ? '#16a34a' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1, transition: 'all 0.15s' }}>
+                                        {ackChecks[item.key] && <CheckCircle size={13} color="#fff" strokeWidth={3} />}
+                                    </div>
+                                    <span style={{ fontSize: 13, color: '#374151', lineHeight: 1.5 }}>{item.text}</span>
+                                </label>
+                            ))}
+                        </div>
+
+                        {/* Digital signature */}
+                        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 18px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
+                                <PenLine size={15} color="#6366f1" />
+                                <span style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>Digital Signature</span>
+                            </div>
+                            <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>
+                                By entering your full name below, you are digitally signing this acknowledgement and confirming that you have read and agreed to all the above statements.
+                            </p>
+                            <Form.Control
+                                value={ackName}
+                                onChange={e => { setAckName(e.target.value); setAckErr(''); }}
+                                placeholder={`Type your full name: ${offer.employee_name}`}
+                                style={{ borderRadius: 8, fontStyle: 'italic', fontSize: 14 }}
+                            />
+                            <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>
+                                Must match exactly: <strong style={{ color: '#374151' }}>{offer.employee_name}</strong>
+                            </div>
+                        </div>
+
+                        {(ackErr || acceptErr) && (
+                            <Alert variant="danger" className="mt-3 py-2" style={{ fontSize: 13 }}>
+                                {ackErr || acceptErr}
+                            </Alert>
+                        )}
+                    </div>
+                )}
+
+                {/* Action buttons */}
+                {!showAck ? (
+                    <>
+                        {acceptErr && <Alert variant="danger" style={{ fontSize: 13 }}>{acceptErr}</Alert>}
+                        <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                            <button onClick={handleAccept} style={{ ...acceptBtnStyle, flex: 1 }}>
+                                ✓ Accept Offer & Continue
+                            </button>
+                            <button onClick={() => { setShowReject(true); setRejectName(''); setRejectErr(''); }} style={rejectBtnStyle}>
+                                Decline
+                            </button>
+                        </div>
+                    </>
+                ) : (
+                    <div style={{ display: 'flex', gap: 12 }}>
+                        <button onClick={() => { setShowAck(false); setAckErr(''); }}
+                            style={{ padding: '12px 20px', borderRadius: 10, border: '1px solid #e5e7eb', background: '#fff', color: '#374151', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+                            ← Back
+                        </button>
+                        <button onClick={handleAckSubmit} disabled={accepting}
+                            style={{ ...acceptBtnStyle, flex: 1, opacity: (!allAckChecked || !ackName.trim()) ? 0.6 : 1 }}>
+                            {accepting ? <Spinner size="sm" animation="border" style={{ marginRight: 8 }} /> : <CheckCircle size={16} style={{ marginRight: 8 }} />}
+                            {accepting ? 'Processing…' : 'Confirm & Accept Offer'}
+                        </button>
+                    </div>
+                )}
 
                 <p style={{ textAlign: 'center', fontSize: 12, color: '#9ca3af', marginTop: 14 }}>
                     Offer valid until <strong>{fmtDate(offer.expiry_date)}</strong> · Issued by {offer.generated_by_name || 'HR'}

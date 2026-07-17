@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
+import BreakWidget from '../Common/BreakWidget';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement);
 
@@ -404,30 +405,37 @@ const ManagerDashboard = () => {
             </div>
           </div>
 
-          {/* Clock In / Out button */}
+          {/* Break + Clock buttons */}
           {(() => {
             const hasOpen = !!activeSession || (!!attendance?.clock_in && !attendance?.clock_out);
             return (
-              <button
-                onClick={hasOpen ? handleClockOut : handleClockIn}
-                disabled={clockLoading}
-                style={{
-                  background: hasOpen ? 'rgba(251,191,36,0.9)' : 'rgba(34,197,94,0.9)',
-                  border: 'none', borderRadius: 10, padding: '9px 20px',
-                  color: hasOpen ? '#78350f' : '#fff',
-                  cursor: clockLoading ? 'not-allowed' : 'pointer',
-                  display: 'flex', alignItems: 'center', gap: 7,
-                  fontSize: 13, fontWeight: 700,
-                  opacity: clockLoading ? 0.7 : 1, flexShrink: 0,
-                }}
-              >
-                {clockLoading
-                  ? <><FaSyncAlt size={12} style={{ animation: 'mgrspin 0.8s linear infinite' }} /> Processing...</>
-                  : hasOpen
-                    ? <><FaSignOutAlt size={13} /> Clock Out</>
-                    : <><FaSignInAlt size={13} /> Clock In</>
-                }
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                <BreakWidget
+                  mode="inline-button"
+                  isClockedIn={!!(attendance?.clock_in || activeSession)}
+                  isClockedOut={!!(attendance?.clock_out && !activeSession)}
+                />
+                <button
+                  onClick={hasOpen ? handleClockOut : handleClockIn}
+                  disabled={clockLoading}
+                  style={{
+                    background: hasOpen ? 'rgba(251,191,36,0.9)' : 'rgba(34,197,94,0.9)',
+                    border: 'none', borderRadius: 10, padding: '9px 20px',
+                    color: hasOpen ? '#78350f' : '#fff',
+                    cursor: clockLoading ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 7,
+                    fontSize: 13, fontWeight: 700,
+                    opacity: clockLoading ? 0.7 : 1,
+                  }}
+                >
+                  {clockLoading
+                    ? <><FaSyncAlt size={12} style={{ animation: 'mgrspin 0.8s linear infinite' }} /> Processing...</>
+                    : hasOpen
+                      ? <><FaSignOutAlt size={13} /> Clock Out</>
+                      : <><FaSignInAlt size={13} /> Clock In</>
+                  }
+                </button>
+              </div>
             );
           })()}
         </div>
@@ -528,6 +536,9 @@ const ManagerDashboard = () => {
           </button>
         </div>
       </div>
+
+      {/* Team-on-break panel */}
+      <BreakWidget mode="team-panel" />
 
       {/* Stat Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16, marginBottom: 28 }}>

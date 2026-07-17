@@ -161,6 +161,148 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
         }
     });
 
+    // ── Break management ─────────────────────────────────────────────────────────
+    // All break routes require auth. The employee must be clocked-in to start a break.
+
+    // POST /api/attendance/break/start
+    router.post('/break/start', authenticateToken, async (req, res) => {
+        const employeeId = req.user.employeeId;
+        const today = new Date().toISOString().split('T')[0];
+        try {
+            // Must be clocked in today
+            const { data: att } = await supabase.from('attendance')
+                .select('id, clock_in, clock_out').eq('employee_id', employeeId).eq('attendance_date', today).maybeSingle();
+            if (!att?.clock_in) return res.status(400).json({ success: false, message: 'You must be clocked in before starting a break.' });
+            if (att.clock_out)  return res.status(400).json({ success: false, message: 'You have already clocked out for today.' });
+
+            // No active break already running
+            const { data: active } = await supabase.from('employee_breaks')
+                .select('id').eq('employee_id', employeeId).is('break_end', null).maybeSingle();
+            if (active) return res.status(400).json({ success: false, message: 'You already have an active break. Please end it first.' });
+
+            const { data, error } = await supabase.from('employee_breaks').insert([{
+                employee_id: employeeId,
+                attendance_date: today,
+                break_start: new Date().toISOString(),
+            }]).select().single();
+            if (error) throw error;
+
+            console.log(`[break] ${employeeId} started break at ${data.break_start}`);
+            return res.json({ success: true, break: data, message: 'Break started successfully.' });
+        } catch (err) {
+            console.error('[break] start error:', err);
+            return res.status(500).json({ success: false, message: err.message });
+        }
+    });
+
+    // POST /api/attendance/break/end
+    router.post('/break/end', authenticateToken, async (req, res) => {
+        const employeeId = req.user.employeeId;
+        try {
+            const { data: active, error: findErr } = await supabase.from('employee_breaks')
+                .select('id, break_start').eq('employee_id', employeeId).is('break_end', null).maybeSingle();
+            if (findErr) throw findErr;
+            if (!active) return res.status(400).json({ success: false, message: 'No active break found.' });
+
+            const breakEnd = new Date();
+            const breakStart = new Date(active.break_start);
+            const durationMinutes = Math.round((breakEnd - breakStart) / 60000);
+
+            const { data, error } = await supabase.from('employee_breaks').update({
+                break_end: breakEnd.toISOString(),
+                break_duration_minutes: durationMinutes,
+                updated_at: breakEnd.toISOString(),
+            }).eq('id', active.id).select().single();
+            if (error) throw error;
+
+            console.log(`[break] ${employeeId} ended break, duration: ${durationMinutes} min`);
+            return res.json({ success: true, break: data, duration_minutes: durationMinutes, message: `Break ended. Duration: ${durationMinutes} min.` });
+        } catch (err) {
+            console.error('[break] end error:', err);
+            return res.status(500).json({ success: false, message: err.message });
+        }
+    });
+
+    // GET /api/attendance/break/my-status
+    router.get('/break/my-status', authenticateToken, async (req, res) => {
+        const employeeId = req.user.employeeId;
+        try {
+            const { data, error } = await supabase.from('employee_breaks')
+                .select('id, break_start, break_end, break_duration_minutes, attendance_date')
+                .eq('employee_id', employeeId)
+                .is('break_end', null)
+                .maybeSingle();
+            if (error) throw error;
+            return res.json({ success: true, active_break: data || null });
+        } catch (err) {
+            return res.status(500).json({ success: false, message: err.message });
+        }
+    });
+
+    // GET /api/attendance/break/team-active
+    // Admin  → all employees currently on break
+    // sub_admin (Manager) → members of their managed team(s)
+    // manager (TL) → members of their managed team(s)
+    // employee → empty list
+    router.get('/break/team-active', authenticateToken, async (req, res) => {
+        const { employeeId, role } = req.user;
+        const today = new Date().toISOString().split('T')[0];
+        try {
+            let employeeIds = null; // null = all (admin only)
+
+            if (role !== 'admin') {
+                // Find all teams this user manages (manager_id = their ID)
+                const { data: myTeams, error: teamsErr } = await supabase
+                    .from('teams').select('id').eq('manager_id', employeeId);
+                if (teamsErr) throw teamsErr;
+
+                if (!myTeams || myTeams.length === 0) {
+                    return res.json({ success: true, breaks: [] });
+                }
+
+                const teamIds = myTeams.map(t => t.id);
+                const { data: members, error: memErr } = await supabase
+                    .from('team_members').select('employee_id').in('team_id', teamIds);
+                if (memErr) throw memErr;
+
+                employeeIds = (members || []).map(m => m.employee_id);
+                if (employeeIds.length === 0) return res.json({ success: true, breaks: [] });
+            }
+
+            // Query active breaks
+            let query = supabase.from('employee_breaks')
+                .select('id, employee_id, break_start, attendance_date')
+                .eq('attendance_date', today)
+                .is('break_end', null)
+                .order('break_start', { ascending: true });
+
+            if (employeeIds !== null) query = query.in('employee_id', employeeIds);
+
+            const { data: breaks, error: breakErr } = await query;
+            if (breakErr) throw breakErr;
+
+            // Enrich with employee details
+            const ids = (breaks || []).map(b => b.employee_id);
+            let empMap = {};
+            if (ids.length > 0) {
+                const { data: emps } = await supabase.from('employees')
+                    .select('employee_id, first_name, last_name, designation, department')
+                    .in('employee_id', ids);
+                (emps || []).forEach(e => { empMap[e.employee_id] = e; });
+            }
+
+            const enriched = (breaks || []).map(b => ({
+                ...b,
+                employee: empMap[b.employee_id] || { first_name: b.employee_id, last_name: '' },
+            }));
+
+            return res.json({ success: true, breaks: enriched });
+        } catch (err) {
+            console.error('[break] team-active error:', err);
+            return res.status(500).json({ success: false, message: err.message });
+        }
+    });
+
     console.log('✅ Attendance routes loaded with regularization support and team report');
     return router;
 };
