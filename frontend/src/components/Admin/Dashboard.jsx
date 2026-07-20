@@ -799,6 +799,8 @@ const AdminDashboard = () => {
   const [filterDepartment, setFilterDepartment] = useState('all');
   const [todayAttendance, setTodayAttendance] = useState([]);
   const [filteredAttendance, setFilteredAttendance] = useState([]);
+  const [allActiveEmployees, setAllActiveEmployees] = useState([]);
+  const [attendanceViewMode, setAttendanceViewMode] = useState('present'); // 'present' | 'absent'
   const [filteredLeaveRequests, setFilteredLeaveRequests] = useState([]);
   const [attendanceSearchTerm, setAttendanceSearchTerm] = useState('');
   const [leaveSearchTerm, setLeaveSearchTerm] = useState('');
@@ -1032,6 +1034,7 @@ const AdminDashboard = () => {
       setTotalEmployees(employees.length);
       setStats(prevStats => ({ ...prevStats, total: employees.length }));
       setRecentEmployees(employees.slice(-5));
+      setAllActiveEmployees(employees.filter(emp => emp.is_active !== false));
       fetchCompleteEvents(employees);
       const deptMap = {};
       employees.forEach(emp => {
@@ -1583,6 +1586,18 @@ const AdminDashboard = () => {
   const filteredEmployees = getFilteredEmployees();
   const filteredBirthdays = getFilteredBirthdays();
   const filteredAnniversaries = getFilteredAnniversaries();
+
+  const presentEmployeeIds = new Set(todayAttendance.map(a => a.employee_id));
+  const absentEmployeesToday = allActiveEmployees.filter(emp => !presentEmployeeIds.has(emp.employee_id));
+  const filteredAbsentEmployees = attendanceSearchTerm.trim()
+    ? absentEmployeesToday.filter(emp => {
+        const searchLower = attendanceSearchTerm.toLowerCase();
+        return emp.first_name?.toLowerCase().includes(searchLower) ||
+          emp.last_name?.toLowerCase().includes(searchLower) ||
+          emp.employee_id?.toLowerCase().includes(searchLower) ||
+          `${emp.first_name} ${emp.last_name}`.toLowerCase().includes(searchLower);
+      })
+    : absentEmployeesToday;
 
   return (
     <div className="p-2 p-md-3 p-lg-4">
@@ -2486,12 +2501,34 @@ const AdminDashboard = () => {
                       </div>
                       <div>
                         <div className="fw-bold" style={{ fontSize: 14, color: '#111827' }}>Live Attendance</div>
-                        <div style={{ fontSize: 11, color: '#9ca3af' }}>Today's clock-in feed</div>
+                        <div style={{ fontSize: 11, color: '#9ca3af' }}>
+                          {attendanceViewMode === 'present' ? "Today's clock-in feed" : "Employees not clocked in today"}
+                        </div>
                       </div>
                     </div>
-                    <Badge bg="dark" className="px-2 py-1" style={{ fontSize: 11 }}>{filteredAttendance.length} Clocked In</Badge>
+                    <Badge bg={attendanceViewMode === 'present' ? 'dark' : 'danger'} className="px-2 py-1" style={{ fontSize: 11 }}>
+                      {attendanceViewMode === 'present' ? `${filteredAttendance.length} Present` : `${filteredAbsentEmployees.length} Absent`}
+                    </Badge>
                   </div>
-                  <div className="mt-2">
+                  <div className="mt-2 d-flex align-items-center gap-2">
+                    <div className="btn-group" role="group" style={{ flexShrink: 0 }}>
+                      <Button
+                        size="sm"
+                        variant={attendanceViewMode === 'present' ? 'success' : 'outline-secondary'}
+                        onClick={() => setAttendanceViewMode('present')}
+                        style={{ fontSize: 12, fontWeight: 600, padding: '4px 10px' }}
+                      >
+                        Present
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={attendanceViewMode === 'absent' ? 'danger' : 'outline-secondary'}
+                        onClick={() => setAttendanceViewMode('absent')}
+                        style={{ fontSize: 12, fontWeight: 600, padding: '4px 10px' }}
+                      >
+                        Absent
+                      </Button>
+                    </div>
                     <InputGroup size="sm">
                       <InputGroup.Text style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }}><FaSearch size={11} color="#9ca3af" /></InputGroup.Text>
                       <Form.Control
@@ -2508,11 +2545,37 @@ const AdminDashboard = () => {
                   </div>
                 </Card.Header>
                 <Card.Body className="p-0">
-                  <div style={{ maxHeight: 310, overflowY: 'auto' }}>
-                    {filteredAttendance.length === 0 ? (
+                  <div style={{ maxHeight: 450, overflowY: 'auto' }}>
+                    {attendanceViewMode === 'absent' ? (
+                      filteredAbsentEmployees.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '32px 0', color: '#9ca3af' }}>
+                          <FaUsers size={24} style={{ marginBottom: 8, opacity: 0.4 }} />
+                          <div style={{ fontSize: 13 }}>No absent employees 🎉</div>
+                        </div>
+                      ) : filteredAbsentEmployees.map((emp, i) => {
+                        const ACLRS = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#0ea5e9'];
+                        const clr = ACLRS[((emp.first_name||'').charCodeAt(0)||0) % ACLRS.length];
+                        return (
+                          <div key={emp.employee_id || i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: '1px solid #f9fafb' }}>
+                            <div style={{ width: 32, height: 32, borderRadius: '50%', background: clr, color: '#fff', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: 0.6 }}>
+                              {((emp.first_name||'')[0]||'?').toUpperCase()}{((emp.last_name||'')[0]||'').toUpperCase()}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 14, fontWeight: 600, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {emp.first_name} {emp.last_name}
+                              </div>
+                              <div style={{ fontSize: 12, color: '#9ca3af' }}>
+                                {emp.department || emp.employee_id}
+                              </div>
+                            </div>
+                            <Badge bg="danger" style={{ fontSize: 11, flexShrink: 0 }}>Absent</Badge>
+                          </div>
+                        );
+                      })
+                    ) : filteredAttendance.length === 0 ? (
                       <div style={{ textAlign: 'center', padding: '32px 0', color: '#9ca3af' }}>
                         <FaClock size={24} style={{ marginBottom: 8, opacity: 0.4 }} />
-                        <div style={{ fontSize: 12 }}>No attendance records today</div>
+                        <div style={{ fontSize: 13 }}>No attendance records today</div>
                       </div>
                     ) : filteredAttendance.map((att, i) => {
                       const lateMinutes = parseFloat(att.late_minutes) || 0;
@@ -2541,21 +2604,21 @@ const AdminDashboard = () => {
                       const clr = ACLRS[((att.first_name||'').charCodeAt(0)||0) % ACLRS.length];
                       return (
                         <div key={att.id || i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: '1px solid #f9fafb' }}>
-                          <div style={{ width: 30, height: 30, borderRadius: '50%', background: clr, color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <div style={{ width: 32, height: 32, borderRadius: '50%', background: clr, color: '#fff', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                             {((att.first_name||'')[0]||'?').toUpperCase()}{((att.last_name||'')[0]||'').toUpperCase()}
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {att.first_name} {att.last_name}
                             </div>
-                            <div style={{ fontSize: 10, color: '#9ca3af' }}>
+                            <div style={{ fontSize: 12, color: '#9ca3af' }}>
                               {att.department || att.employee_id}
                               {lateDisplay && <span style={{ color: '#f97316', marginLeft: 6, fontWeight: 600 }}>· Late {lateDisplay}</span>}
                             </div>
                           </div>
                           <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                            <div style={{ fontSize: 11, color: '#374151', fontWeight: 600 }}>{formatTime(att.clock_in) || '--'}</div>
-                            <Badge bg={statusBg} style={{ fontSize: 9 }}>{statusLabel}</Badge>
+                            <div style={{ fontSize: 13, color: '#374151', fontWeight: 600 }}>{formatTime(att.clock_in) || '--'}</div>
+                            <Badge bg={statusBg} style={{ fontSize: 11 }}>{statusLabel}</Badge>
                           </div>
                         </div>
                       );
