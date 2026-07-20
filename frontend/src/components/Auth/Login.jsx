@@ -27,7 +27,7 @@ const Login = () => {
       const result = await login(identifier, password);
       if (result.success) {
         const { role } = result.user;
-        if (role === 'admin' || role === 'desktop_support') navigate('/admin/dashboard');
+        if (role === 'admin' || role === 'desktop_support' || role === 'hr') navigate('/admin/dashboard');
         else if (role === 'sub_admin') navigate('/');
         else if (role === 'manager') navigate('/manager/dashboard');
         else if (role === 'finance') navigate('/finance/export');

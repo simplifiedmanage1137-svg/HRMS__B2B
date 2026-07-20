@@ -61,7 +61,7 @@ export default function FinanceExport() {
         }),
       ]);
 
-      const emps = (empRes.data || []).filter(e => e.is_active !== false && e.role !== 'finance' && e.role !== 'admin' && e.role !== 'sub_admin' && e.role !== 'desktop_support');
+      const emps = (empRes.data || []).filter(e => e.is_active !== false && e.role !== 'finance' && e.role !== 'admin' && e.role !== 'sub_admin' && e.role !== 'desktop_support' && e.role !== 'hr');
       const attRecords = attRes.data?.attendance || attRes.data || [];
 
       // Build per-employee stats

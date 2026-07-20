@@ -25,7 +25,7 @@ const isTeamLeaderDesignation = (designation) => {
 const SendNotice = ({ embedded = false }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin' || user?.role === 'sub_admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'hr';
 
   const [employees, setEmployees] = useState([]);
   const [sentNotices, setSentNotices] = useState([]);

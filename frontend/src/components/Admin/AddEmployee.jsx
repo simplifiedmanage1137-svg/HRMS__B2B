@@ -133,7 +133,7 @@ const AddEmployee = () => {
     { value: 'experience_certificates', label: 'Experience Certificates', icon: <FaFileAlt className="text-secondary" /> }
   ];
 
-  const departments = ['IT', 'HR', 'Finance', 'Marketing', 'Sales', 'Operations', 'Administration', 'Legal'];
+  const departments = ['HR', 'IT', 'Admin', 'Finance', 'Marketing', 'Sales', 'Operations', 'Administration', 'Legal', 'Design', 'Support', 'Product'];
   const employmentTypes = ['Full Time', 'Part Time', 'Freelancer', 'Contract Based', 'Intern', 'Probation'];
   const bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 

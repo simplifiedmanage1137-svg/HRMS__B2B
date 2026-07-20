@@ -476,7 +476,7 @@ router.patch('/:id/role', verifyToken, isAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         const { role } = req.body;
-        const validRoles = ['admin', 'sub_admin', 'manager', 'employee', 'desktop_support', 'finance'];
+        const validRoles = ['admin', 'sub_admin', 'manager', 'employee', 'desktop_support', 'finance', 'hr'];
         if (!validRoles.includes(role)) {
             return res.status(400).json({ success: false, message: `Invalid role. Must be one of: ${validRoles.join(', ')}` });
         }
@@ -585,7 +585,7 @@ router.post('/:id/toggle-profile-form', verifyToken, isAdmin, async (req, res) =
 router.patch('/:id/toggle-status', verifyToken, async (req, res) => {
     try {
         const { role, employeeId: callerEmpId } = req.user;
-        const allowed = ['admin', 'sub_admin', 'manager'];
+        const allowed = ['admin', 'sub_admin', 'manager', 'hr'];
         if (!allowed.includes(role)) {
             return res.status(403).json({ success: false, message: 'Access denied' });
         }
@@ -638,11 +638,11 @@ router.put('/:id', verifyToken, isAdmin, async (req, res) => {
         const newShiftTiming = updates.shift_timing;
 
         // Only admin/sub_admin can change role
-        if ('role' in updates && !['admin', 'sub_admin'].includes(req.user?.role)) {
+        if ('role' in updates && !['admin', 'sub_admin', 'hr'].includes(req.user?.role)) {
             delete updates.role;
         }
         if ('role' in updates) {
-            const validRoles = ['admin', 'sub_admin', 'manager', 'employee', 'desktop_support', 'finance'];
+            const validRoles = ['admin', 'sub_admin', 'manager', 'employee', 'desktop_support', 'finance', 'hr'];
             if (!validRoles.includes(updates.role)) {
                 return res.status(400).json({ success: false, message: 'Invalid role value' });
             }

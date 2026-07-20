@@ -286,11 +286,11 @@ const getEmployeeRatingHistory = async (req, res) => {
                 year: rating.rating_year,
                 month_name: new Date(rating.rating_year, rating.rating_month - 1).toLocaleString('default', { month: 'long' }),
                 rater_name: raterName,
-                rater_role: raterRole === 'admin' ? 'Admin' : 'Manager',
+                rater_role: (raterRole === 'admin' || raterRole === 'hr') ? 'Admin' : 'Manager',
                 created_at: rating.created_at
             };
 
-            if (raterRole === 'admin' || rating.rated_by_role === 'admin') {
+            if (raterRole === 'admin' || raterRole === 'hr' || rating.rated_by_role === 'admin' || rating.rated_by_role === 'hr') {
                 adminRatings.push(ratingData);
             } else {
                 managerRatings.push(ratingData);
@@ -433,9 +433,9 @@ const getAllRatings = async (req, res) => {
 
             // Determine rater role for display
             let displayRaterRole = 'Manager';
-            if (rating.rated_by_role === 'admin') {
+            if (rating.rated_by_role === 'admin' || rating.rated_by_role === 'hr') {
                 displayRaterRole = 'Admin';
-            } else if (rater?.role === 'admin') {
+            } else if (rater?.role === 'admin' || rater?.role === 'hr') {
                 displayRaterRole = 'Admin';
             }
 

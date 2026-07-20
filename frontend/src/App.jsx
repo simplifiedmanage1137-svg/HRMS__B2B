@@ -60,6 +60,9 @@ const ManagerLeaveRequests   = lazy(() => import('./components/Employee/ManagerL
 const ManagerShiftUpdate     = lazy(() => import('./components/Employee/ManagerShiftUpdate'));
 const ManagerPanel           = lazy(() => import('./components/Employee/ManagerPanel'));
 
+// Tickets — lazy loaded
+const TicketList = lazy(() => import('./components/Tickets/TicketList'));
+
 // Onboarding — public pages (no auth required)
 const OnboardingPage    = lazy(() => import('./pages/OnboardingPage'));
 const OnboardingFormPage = lazy(() => import('./pages/OnboardingFormPage'));
@@ -186,14 +189,14 @@ function AppContent() {
           <Routes>
             {/* Dashboard Route - Conditional based on role */}
             <Route path="/" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'employee', 'desktop_support', 'finance']}>
-                {user?.role === 'admin' || user?.role === 'desktop_support' ? <AdminDashboard /> : user?.role === 'sub_admin' ? <AdminDashboard /> : user?.role === 'manager' ? <ManagerDashboard /> : user?.role === 'finance' ? <FinanceExport /> : <EmployeeDashboard />}
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'employee', 'desktop_support', 'finance', 'hr']}>
+                {user?.role === 'admin' || user?.role === 'desktop_support' || user?.role === 'hr' ? <AdminDashboard /> : user?.role === 'sub_admin' ? <AdminDashboard /> : user?.role === 'manager' ? <ManagerDashboard /> : user?.role === 'finance' ? <FinanceExport /> : <EmployeeDashboard />}
               </PrivateRoute>
             } />
 
             {/* Admin Routes */}
             <Route path="/admin/dashboard" element={
-              <PrivateRoute allowedRoles={['admin', 'desktop_support']}>
+              <PrivateRoute allowedRoles={['admin', 'desktop_support', 'hr']}>
                 <AdminDashboard />
               </PrivateRoute>
             } />
@@ -207,83 +210,83 @@ function AppContent() {
 
             {/* Manager Routes */}
             <Route path="/manager/dashboard" element={
-              <PrivateRoute allowedRoles={['admin', 'manager']}>
+              <PrivateRoute allowedRoles={['admin', 'manager', 'hr']}>
                 <ManagerDashboard />
               </PrivateRoute>
             } />
 
             <Route path="/admin/employees" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'desktop_support']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'desktop_support', 'hr']}>
                 <EmployeeList />
               </PrivateRoute>
             } />
 
             <Route path="/admin/add-employee" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'desktop_support']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'desktop_support', 'hr']}>
                 <AddEmployee />
               </PrivateRoute>
             } />
 
             <Route path="/admin/edit-employee/:id" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'desktop_support']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'desktop_support', 'hr']}>
                 <EditEmployee />
               </PrivateRoute>
             } />
 
             <Route path="/admin/employees/:employeeId" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'hr']}>
                 <EmployeeProfileView />
               </PrivateRoute>
             } />
 
             <Route path="/admin/leave-requests" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'hr']}>
                 <LeaveRequests />
               </PrivateRoute>
             } />
 
             <Route path="/admin/leave-reports" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'hr']}>
                 <LeaveReports />
               </PrivateRoute>
             } />
 
             {/* Admin Attendance Routes */}
             <Route path="/admin/attendance/dashboard" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'hr']}>
                 <AttendanceDashboard />
               </PrivateRoute>
             } />
 
             <Route path="/admin/attendance/reports" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'hr']}>
                 <AttendanceReports />
               </PrivateRoute>
             } />
 
             {/* Admin Ratings Route */}
             <Route path="/admin/ratings" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'hr']}>
                 <AdminRatings />
               </PrivateRoute>
             } />
 
             {/* Payroll Adjustment */}
             <Route path="/admin/payroll" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'hr']}>
                 <PayrollAdjustment />
               </PrivateRoute>
             } />
 
             {/* Deductions */}
             <Route path="/admin/deductions" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'hr']}>
                 <DeductionManager />
               </PrivateRoute>
             } />
 
             <Route path="/admin/teams" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'desktop_support']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'desktop_support', 'hr']}>
                 <Teams />
               </PrivateRoute>
             } />
@@ -296,20 +299,20 @@ function AppContent() {
             } />
 
             <Route path="/admin/send-update-request" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'hr']}>
                 <SendUpdateRequest />
               </PrivateRoute>
             } />
 
             <Route path="/admin/update-approvals" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'hr']}>
                 <UpdateApprovals />
               </PrivateRoute>
             } />
 
             {/* BROADCAST CENTER - combined notice + announcements */}
             <Route path="/admin/broadcast" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'hr']}>
                 <AdminBroadcast />
               </PrivateRoute>
             } />
@@ -320,13 +323,13 @@ function AppContent() {
 
             {/* Employee Routes */}
             <Route path="/employee/dashboard" element={
-              <PrivateRoute allowedRoles={['employee', 'manager', 'admin']}>
+              <PrivateRoute allowedRoles={['employee', 'manager', 'admin', 'hr']}>
                 <EmployeeDashboard />
               </PrivateRoute>
             } />
 
             <Route path="/profile" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'employee']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'employee', 'hr']}>
                 <Profile />
               </PrivateRoute>
             } />
@@ -362,7 +365,7 @@ function AppContent() {
             } />
 
             <Route path="/manager/panel" element={
-              <PrivateRoute allowedRoles={['employee', 'manager', 'admin']}>
+              <PrivateRoute allowedRoles={['employee', 'manager', 'admin', 'hr']}>
                 <ManagerPanel />
               </PrivateRoute>
             } />
@@ -374,19 +377,19 @@ function AppContent() {
 
             {/* Performance Routes */}
             <Route path="/performance/reviews" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'hr']}>
                 <PerformanceReviews />
               </PrivateRoute>
             } />
             <Route path="/performance/history" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'employee']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'employee', 'hr']}>
                 <PerformanceHistory />
               </PrivateRoute>
             } />
 
             {/* Finance Routes */}
             <Route path="/finance/export" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'finance']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'finance', 'hr']}>
                 <FinanceExport />
               </PrivateRoute>
             } />
@@ -400,8 +403,15 @@ function AppContent() {
 
             {/* Admin — Manager Teams management */}
             <Route path="/admin/manager-teams" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'hr']}>
                 <AdminManagerTeams />
+              </PrivateRoute>
+            } />
+
+            {/* Support Tickets — all authenticated roles */}
+            <Route path="/tickets" element={
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'employee', 'hr']}>
+                <TicketList />
               </PrivateRoute>
             } />
 

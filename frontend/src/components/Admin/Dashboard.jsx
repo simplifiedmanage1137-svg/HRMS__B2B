@@ -70,6 +70,7 @@ import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../context/AuthContext';
 import AdminRatings from './AdminRatings';
 import BreakWidget from '../Common/BreakWidget';
+import TeamBreakDashboard from '../Common/TeamBreakDashboard';
 import * as XLSX from 'xlsx';
 // import HistoricalLateMarksUpdater from './HistoricalLateMarksUpdater';
 
@@ -859,16 +860,16 @@ const AdminDashboard = () => {
       .catch(() => {});
   }, []);
 
-  // Sub-admin: live clock ticker
+  // Sub-admin / HR: live clock ticker
   useEffect(() => {
-    if (user?.role !== 'sub_admin') return;
+    if (!['sub_admin', 'hr'].includes(user?.role)) return;
     const t = setInterval(() => setSubAdminCurrentTime(new Date()), 1000);
     return () => clearInterval(t);
   }, [user]);
 
-  // Sub-admin: fetch own today's attendance on mount
+  // Sub-admin / HR: fetch own today's attendance on mount
   useEffect(() => {
-    if (user?.role === 'sub_admin' && user?.employeeId) {
+    if (['sub_admin', 'hr'].includes(user?.role) && user?.employeeId) {
       fetchSubAdminAttendance();
     }
   }, [user]);
@@ -1586,8 +1587,8 @@ const AdminDashboard = () => {
   return (
     <div className="p-2 p-md-3 p-lg-4">
       {/* Header */}
-      {user?.role === 'sub_admin' ? (
-        /* ── Sub Admin: Manager-style dark header with clock-in/out ── */
+      {['sub_admin', 'hr'].includes(user?.role) ? (
+        /* ── Sub Admin / HR: Manager-style dark header with clock-in/out ── */
         <div style={{
           background: '#1e2a3e', borderRadius: 10, padding: '24px 32px',
           marginBottom: 28, boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
@@ -1603,7 +1604,7 @@ const AdminDashboard = () => {
                 <FaUsers size={24} color="#fff" />
               </div>
               <div>
-                <h4 style={{ color: '#fff', margin: 0, fontWeight: 800, fontSize: 22 }}>Manager Dashboard</h4>
+                <h4 style={{ color: '#fff', margin: 0, fontWeight: 800, fontSize: 22 }}>{user?.role === 'hr' ? 'HR Dashboard' : 'Manager Dashboard'}</h4>
                 <div style={{ color: 'rgba(255,255,255,.82)', fontSize: 13, marginTop: 3 }}>
                   Welcome back, <strong style={{ color: '#fff' }}>{user?.employeeId}</strong>
                   {lastUpdated && <span style={{ marginLeft: 8, opacity: 0.65 }}>· Updated {lastUpdated.toLocaleTimeString()}</span>}
@@ -1738,10 +1739,7 @@ const AdminDashboard = () => {
         </div>
       ) : null}
 
-      {/* Team-on-break panel — visible to sub_admin who manages teams */}
-      {user?.role === 'sub_admin' && <BreakWidget mode="team-panel" />}
-
-      {user?.role !== 'sub_admin' && (
+      {!['sub_admin', 'hr'].includes(user?.role) && (
         /* ── Admin: existing header ── */
         <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
           <div>
@@ -2477,8 +2475,97 @@ const AdminDashboard = () => {
                 </Card.Body>
               </Card>
             </Col>
-            {/* Department Distribution */}
+            {/* Live Attendance Feed — compact card */}
             <Col xs={12} md={6}>
+              <Card className="border-0 h-100" style={{ borderRadius: '14px', boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}>
+                <Card.Header className="bg-white border-0 pt-3 pb-2 px-3" style={{ borderRadius: '14px 14px 0 0' }}>
+                  <div className="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                    <div className="d-flex align-items-center gap-2">
+                      <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(16,185,129,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <FaClock size={14} color="#10b981" />
+                      </div>
+                      <div>
+                        <div className="fw-bold" style={{ fontSize: 14, color: '#111827' }}>Live Attendance</div>
+                        <div style={{ fontSize: 11, color: '#9ca3af' }}>Today's clock-in feed</div>
+                      </div>
+                    </div>
+                    <Badge bg="dark" className="px-2 py-1" style={{ fontSize: 11 }}>{filteredAttendance.length} Clocked In</Badge>
+                  </div>
+                  <div className="mt-2">
+                    <InputGroup size="sm">
+                      <InputGroup.Text style={{ background: '#f9fafb', border: '1px solid #e5e7eb' }}><FaSearch size={11} color="#9ca3af" /></InputGroup.Text>
+                      <Form.Control
+                        type="text" placeholder="Search employee..." value={attendanceSearchTerm}
+                        onChange={e => setAttendanceSearchTerm(e.target.value)}
+                        style={{ background: '#f9fafb', border: '1px solid #e5e7eb', fontSize: 12 }}
+                      />
+                      {attendanceSearchTerm && (
+                        <Button variant="outline-secondary" size="sm" onClick={() => setAttendanceSearchTerm('')}>
+                          <FaTimesCircle size={11} />
+                        </Button>
+                      )}
+                    </InputGroup>
+                  </div>
+                </Card.Header>
+                <Card.Body className="p-0">
+                  <div style={{ maxHeight: 310, overflowY: 'auto' }}>
+                    {filteredAttendance.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '32px 0', color: '#9ca3af' }}>
+                        <FaClock size={24} style={{ marginBottom: 8, opacity: 0.4 }} />
+                        <div style={{ fontSize: 12 }}>No attendance records today</div>
+                      </div>
+                    ) : filteredAttendance.map((att, i) => {
+                      const lateMinutes = parseFloat(att.late_minutes) || 0;
+                      let lateDisplay = null;
+                      if (lateMinutes > 0) {
+                        const ts = Math.floor(lateMinutes * 60);
+                        const h = Math.floor(ts / 3600), m = Math.floor((ts % 3600) / 60), s = ts % 60;
+                        const parts = [];
+                        if (h > 0) parts.push(`${h}h`);
+                        if (m > 0) parts.push(`${m}m`);
+                        if (s > 0 || (!h && !m)) parts.push(`${s}s`);
+                        lateDisplay = parts.join(' ');
+                      }
+                      let statusBg = 'secondary', statusLabel = 'Not Clocked';
+                      if (att.clock_in) {
+                        if (att.clock_out) {
+                          const mins = Math.round((new Date(att.clock_out) - new Date(att.clock_in)) / 60000);
+                          const h = Math.floor(mins / 60), m = mins % 60;
+                          const dur = `${h}h ${m}m`;
+                          if (mins >= 540) { statusBg = 'success'; statusLabel = `Done · ${dur}`; }
+                          else if (mins >= 300) { statusBg = 'warning'; statusLabel = `Half · ${dur}`; }
+                          else { statusBg = 'danger'; statusLabel = `Short · ${dur}`; }
+                        } else { statusBg = 'info'; statusLabel = 'Working'; }
+                      }
+                      const ACLRS = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#0ea5e9'];
+                      const clr = ACLRS[((att.first_name||'').charCodeAt(0)||0) % ACLRS.length];
+                      return (
+                        <div key={att.id || i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: '1px solid #f9fafb' }}>
+                          <div style={{ width: 30, height: 30, borderRadius: '50%', background: clr, color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            {((att.first_name||'')[0]||'?').toUpperCase()}{((att.last_name||'')[0]||'').toUpperCase()}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {att.first_name} {att.last_name}
+                            </div>
+                            <div style={{ fontSize: 10, color: '#9ca3af' }}>
+                              {att.department || att.employee_id}
+                              {lateDisplay && <span style={{ color: '#f97316', marginLeft: 6, fontWeight: 600 }}>· Late {lateDisplay}</span>}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            <div style={{ fontSize: 11, color: '#374151', fontWeight: 600 }}>{formatTime(att.clock_in) || '--'}</div>
+                            <Badge bg={statusBg} style={{ fontSize: 9 }}>{statusLabel}</Badge>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card.Body>
+              </Card>
+            </Col>
+            {/* Department Distribution — removed */}
+            {/* <Col xs={12} md={6}>
               <Card className="border-0 h-100" style={{ borderRadius: '14px', boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}>
                 <Card.Header className="bg-white border-0 pt-3 pb-2 px-3" style={{ borderRadius: '14px 14px 0 0' }}>
                   <div className="d-flex align-items-center gap-2">
@@ -2575,137 +2662,11 @@ const AdminDashboard = () => {
                   })()}
                 </Card.Body>
               </Card>
-            </Col>
+            </Col> */}
           </Row>
 
-          {/* Live Attendance Feed */}
-          <Card className="mb-4 border-0 shadow-sm">
-            <Card.Header className="bg-light d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center py-3 gap-2">
-              <h5 className="mb-0 text-dark d-flex align-items-center">
-                <FaClock className="me-2 text-dark" />
-                <span>Live Attendance Feed</span>
-              </h5>
-              <div className="d-flex gap-2">
-                <InputGroup size="sm" style={{ width: '250px' }}>
-                  <InputGroup.Text><FaSearch size={12} /></InputGroup.Text>
-                  <Form.Control type="text" placeholder="Search by name or ID..." value={attendanceSearchTerm} onChange={(e) => setAttendanceSearchTerm(e.target.value)} />
-                  {attendanceSearchTerm && <Button variant="outline-secondary" onClick={() => setAttendanceSearchTerm('')} size="sm"><FaTimesCircle size={12} /></Button>}
-                </InputGroup>
-                <Badge bg="dark" className="px-3 py-2">{filteredAttendance.length} Clocked In</Badge>
-              </div>
-            </Card.Header>
-            <Card.Body className="p-0">
-              <div className="table-responsive" style={{ maxHeight: '450px', overflowY: 'auto' }}>
-                <Table striped size="sm" className="mb-0 align-middle">
-                  <thead className="bg-light sticky-top">
-                    <tr className="small">
-                      <th className="fw-normal text-center">#</th>
-                      <th className="fw-normal">Employee</th>
-                      <th className="fw-normal d-none d-md-table-cell">Department</th>
-                      <th className="fw-normal">Clock In</th>
-                      <th className="fw-normal d-none d-sm-table-cell">Clock Out</th>
-                      <th className="fw-normal">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredAttendance.length > 0 ? (
-                      filteredAttendance.map((att, index) => {
-                        const lateMinutes = parseFloat(att.late_minutes) || 0;
-                        let lateDisplay = null;
-                        if (lateMinutes > 0) {
-                          const totalSeconds = Math.floor(lateMinutes * 60);
-                          const hours = Math.floor(totalSeconds / 3600);
-                          const remainingSeconds = totalSeconds % 3600;
-                          const minutes = Math.floor(remainingSeconds / 60);
-                          const seconds = remainingSeconds % 60;
-                          const parts = [];
-                          if (hours > 0) parts.push(`${hours}h`);
-                          if (minutes > 0) parts.push(`${minutes}m`);
-                          if (seconds > 0 || (hours === 0 && minutes === 0)) parts.push(`${seconds}s`);
-                          lateDisplay = parts.join(' ');
-                        }
-
-                        let workingStatus = 'Not Clocked';
-                        let statusBg = 'secondary';
-                        let statusIcon = null;
-                        let hoursDisplay = null;
-
-                        if (att.clock_in) {
-                          if (att.clock_out) {
-                            const clockInTime = new Date(att.clock_in);
-                            const clockOutTime = new Date(att.clock_out);
-                            let totalMinutes = Math.round((clockOutTime - clockInTime) / (1000 * 60));
-                            if (totalMinutes < 0) totalMinutes += 24 * 60;
-                            const displayHours = Math.floor(totalMinutes / 60);
-                            const displayMinutes = totalMinutes % 60;
-                            hoursDisplay = `${displayHours}h ${displayMinutes}m`;
-
-                            if (totalMinutes >= 540) {
-                              workingStatus = `Present (${hoursDisplay})`;
-                              statusBg = 'success';
-                              statusIcon = <FaCheckCircle className="me-1" size={10} />;
-                            } else if (totalMinutes >= 300) {
-                              workingStatus = `Half Day (${hoursDisplay})`;
-                              statusBg = 'warning';
-                              statusIcon = null;
-                            } else {
-                              workingStatus = `Absent (${hoursDisplay})`;
-                              statusBg = 'danger';
-                              statusIcon = null;
-                            }
-                          } else {
-                            workingStatus = 'Working';
-                            statusBg = 'info';
-                            statusIcon = <FaClock className="me-1" size={10} />;
-                          }
-                        }
-
-                        return (
-                          <tr key={att.id || index}>
-                            <td className="text-center">{index + 1}</td>
-                            <td className="small">
-                              <div className="text-truncate" style={{ maxWidth: '120px' }}>{att.first_name} {att.last_name}</div>
-                              <small className="text-muted">{att.employee_id}</small>
-                            </td>
-                            <td className="small d-none d-md-table-cell text-truncate" style={{ maxWidth: '100px' }}>{att.department}</td>
-                            <td className={`small ${att.clock_in ? 'text-success' : 'text-muted'}`}>
-                              <div>
-                                <span className="text-nowrap">{formatTime(att.clock_in)}</span>
-                                {lateDisplay && (
-                                  <div className="mt-1">
-                                    <Badge bg="warning" pill style={{ backgroundColor: '#fd7e14', fontSize: '10px' }}>
-                                      <FaExclamationTriangle className="me-1" size={8} />
-                                      Late {lateDisplay}
-                                    </Badge>
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                            <td className={`small d-none d-sm-table-cell ${att.clock_out ? 'text-danger' : 'text-muted'}`}>
-                              {formatTime(att.clock_out) || '--:--'}
-                            </td>
-                            <td>
-                              <Badge bg={statusBg} className="px-2 py-1">
-                                {statusIcon}
-                                {workingStatus}
-                              </Badge>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    ) : (
-                      <tr>
-                        <td colSpan="6" className="text-center py-4">
-                          <FaClock size={30} className="text-muted mb-2 opacity-50" />
-                          <p className="text-muted mb-0">No attendance records for today</p>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </Table>
-              </div>
-            </Card.Body>
-          </Card>
+          {/* Team Break Dashboard */}
+          <TeamBreakDashboard />
 
           {/* Pending Leave Requests */}
           <Card className="mb-4 border-0 shadow-sm">

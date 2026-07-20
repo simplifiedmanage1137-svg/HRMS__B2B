@@ -163,6 +163,7 @@ router.get('/employees/unassigned', verifyToken, isAdminOrDesktopSupport, async 
             .select('employee_id, first_name, last_name, designation, department')
             .eq('is_active', true)
             .neq('role', 'admin')
+            .neq('role', 'hr')
             .order('first_name');
 
         if (assignedIds.length > 0) {
@@ -187,7 +188,7 @@ router.get('/', verifyToken, async (req, res) => {
 
         if (role === 'manager' || role === 'sub_admin') {
             query = query.eq('manager_id', employeeId);
-        } else if (!['admin', 'desktop_support'].includes(role)) {
+        } else if (!['admin', 'desktop_support', 'hr'].includes(role)) {
             return res.status(403).json({ success: false, message: 'Access denied' });
         }
 

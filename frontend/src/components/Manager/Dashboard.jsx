@@ -15,6 +15,7 @@ import { useAuth } from '../../context/AuthContext';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import BreakWidget from '../Common/BreakWidget';
+import TeamBreakDashboard from '../Common/TeamBreakDashboard';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement);
 
@@ -538,8 +539,8 @@ const ManagerDashboard = () => {
         </div>
       </div>
 
-      {/* Team-on-break panel */}
-      <BreakWidget mode="team-panel" />
+      {/* Team break dashboard */}
+      <TeamBreakDashboard />
 
       {/* Stat Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16, marginBottom: 28 }}>

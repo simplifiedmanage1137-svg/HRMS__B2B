@@ -199,8 +199,15 @@ const EmpQuickView = ({ emp, onClose, navigate, user, onToggleStatus, togglingSt
               ? <img src={emp.profile_image} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
               : ini}
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ color: '#fff', fontWeight: 800, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+          <div
+            style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
+            onClick={() => navigate(`/admin/employees/${emp.employee_id}`)}
+            title="Click to view full profile"
+          >
+            <div style={{ color: '#fff', fontWeight: 800, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+              {name}
+              <span style={{ fontSize: 10, opacity: 0.7, fontWeight: 400 }}>↗</span>
+            </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
               <span style={{ background: 'rgba(255,255,255,0.15)', color: '#e0e7ff', borderRadius: 20, padding: '1px 8px', fontSize: 9, fontWeight: 600 }}>{emp.employee_id}</span>
               <span style={{ background: isActive ? '#22c55e' : '#ef4444', color: '#fff', borderRadius: 20, padding: '1px 8px', fontSize: 9, fontWeight: 700 }}>
@@ -267,7 +274,7 @@ const EmpQuickView = ({ emp, onClose, navigate, user, onToggleStatus, togglingSt
               <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', marginBottom: 10 }}>Quick Actions</div>
               <div style={{ display: 'flex', gap: 5 }}>
                 <QuickActionBtn icon={FaEye} label="View Full Profile" color="#6366f1" onClick={() => navigate(`/admin/employees/${emp.employee_id}`)} />
-                {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'desktop_support') && (
+                {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'desktop_support' || user?.role === 'hr') && (
                   <QuickActionBtn icon={FaEdit} label="Edit Details" color="#0ea5e9" onClick={() => navigate(`/admin/edit-employee/${emp.id}`)} />
                 )}
                 <QuickActionBtn icon={FaClock} label="Attendance" color="#22c55e" onClick={() => navigate(`/admin/employees/${emp.employee_id}`)} />
@@ -293,7 +300,7 @@ const EmpQuickView = ({ emp, onClose, navigate, user, onToggleStatus, togglingSt
             </div>
 
             {/* Activate / Deactivate */}
-            {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'manager') && (
+            {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'manager' || user?.role === 'hr') && (
               <button
                 onClick={() => onToggleStatus(emp)}
                 disabled={togglingStatus === emp.id}
@@ -631,7 +638,7 @@ const EmployeeList = () => {
             <option value="completed">✅ Completed</option>
             <option value="incomplete">⚠️ Incomplete</option>
           </select>
-          {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'desktop_support') && (
+          {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'desktop_support' || user?.role === 'hr') && (
             <>
               <button onClick={() => setShowGenLink(true)} style={{
                 background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', border: 'none', borderRadius: 7,

@@ -165,11 +165,11 @@ router.post('/submit-update', verifyToken, async (req, res) => {
 
         // Create notification for admin
         try {
-            // Get admin employees (role = 'admin')
+            // Get admin employees (role = 'admin' or 'hr')
             const { data: admins } = await supabase
                 .from('employees')
                 .select('employee_id')
-                .eq('role', 'admin')
+                .in('role', ['admin', 'hr'])
                 .limit(1);
 
             if (admins && admins.length > 0) {

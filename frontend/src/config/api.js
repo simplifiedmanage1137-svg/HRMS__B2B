@@ -216,10 +216,12 @@ export const API_ENDPOINTS = {
   ONBOARDING_SUBMIT:            (token) => ep(`/api/onboarding/${token}/submit`),
 
   // Break management
-  BREAK_START:       ep('/api/attendance/break/start'),
-  BREAK_END:         ep('/api/attendance/break/end'),
-  BREAK_MY_STATUS:   ep('/api/attendance/break/my-status'),
-  BREAK_TEAM_ACTIVE: ep('/api/attendance/break/team-active'),
+  BREAK_START:        ep('/api/attendance/break/start'),
+  BREAK_END:          ep('/api/attendance/break/end'),
+  BREAK_MY_STATUS:    ep('/api/attendance/break/my-status'),
+  BREAK_TEAM_ACTIVE:  ep('/api/attendance/break/team-active'),
+  BREAK_TEAM_TODAY:   ep('/api/attendance/break/team-today'),
+  BREAK_TEAM_STATS:   ep('/api/attendance/break/team-stats'),
 
   // Geofence
   GEOFENCE_LIST:   ep('/api/geofence/list'),
@@ -228,6 +230,16 @@ export const API_ENDPOINTS = {
   GEOFENCE_DELETE: (id) => ep(`/api/geofence/${id}`),
   GEOFENCE_GET:    (id) => ep(`/api/geofence/${id}`),
   GEOFENCE_CHECK:  ep('/api/geofence/check'),
+
+  // Tickets
+  TICKETS:                ep('/api/tickets'),
+  TICKET_BY_ID:           (id) => ep(`/api/tickets/${id}`),
+  TICKET_COMMENT:         (id) => ep(`/api/tickets/${id}/comment`),
+  TICKET_IN_PROGRESS:     (id) => ep(`/api/tickets/${id}/in-progress`),
+  TICKET_RESOLVE:         (id) => ep(`/api/tickets/${id}/resolve`),
+  TICKET_ACCEPT:          (id) => ep(`/api/tickets/${id}/accept`),
+  TICKET_DECLINE:         (id) => ep(`/api/tickets/${id}/decline`),
+  TICKET_DEPT_EMPLOYEES:  (dept) => ep(`/api/tickets/dept-employees/${dept}`),
 
   // Deductions
   DEDUCTIONS:                ep('/api/deductions'),

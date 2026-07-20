@@ -23,7 +23,7 @@ router.get('/active', async (req, res) => {
 
 // ── GET /api/notice-board  (admin — list all)
 router.get('/', async (req, res) => {
-    if (!['admin', 'sub_admin'].includes(req.user?.role))
+    if (!['admin', 'sub_admin', 'hr'].includes(req.user?.role))
         return res.status(403).json({ success: false, message: 'Admin only' });
     try {
         const { data, error } = await supabase
@@ -39,7 +39,7 @@ router.get('/', async (req, res) => {
 
 // ── POST /api/notice-board  (admin — create)
 router.post('/', async (req, res) => {
-    if (!['admin', 'sub_admin'].includes(req.user?.role))
+    if (!['admin', 'sub_admin', 'hr'].includes(req.user?.role))
         return res.status(403).json({ success: false, message: 'Admin only' });
     try {
         const {
@@ -92,7 +92,7 @@ router.post('/', async (req, res) => {
 
 // ── PUT /api/notice-board/:id  (admin — update)
 router.put('/:id', async (req, res) => {
-    if (!['admin', 'sub_admin'].includes(req.user?.role))
+    if (!['admin', 'sub_admin', 'hr'].includes(req.user?.role))
         return res.status(403).json({ success: false, message: 'Admin only' });
     try {
         const { id } = req.params;
@@ -136,7 +136,7 @@ router.put('/:id', async (req, res) => {
 
 // ── DELETE /api/notice-board/:id  (admin)
 router.delete('/:id', async (req, res) => {
-    if (!['admin', 'sub_admin'].includes(req.user?.role))
+    if (!['admin', 'sub_admin', 'hr'].includes(req.user?.role))
         return res.status(403).json({ success: false, message: 'Admin only' });
     try {
         const { error } = await supabase.from('notice_board').delete().eq('id', req.params.id);

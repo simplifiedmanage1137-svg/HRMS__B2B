@@ -38,7 +38,7 @@ router.get('/', async (req, res) => {
 // POST /api/announcements — create with optional image (admin only)
 router.post('/', upload.single('image'), async (req, res) => {
     try {
-        if (!['admin', 'sub_admin'].includes(req.user?.role)) {
+        if (!['admin', 'sub_admin', 'hr'].includes(req.user?.role)) {
             return res.status(403).json({ success: false, message: 'Admin access required' });
         }
         const { title, message, type, priority, expires_at } = req.body;
@@ -94,7 +94,7 @@ router.post('/', upload.single('image'), async (req, res) => {
 // DELETE /api/announcements/:id — delete with image cleanup (admin only)
 router.delete('/:id', async (req, res) => {
     try {
-        if (!['admin', 'sub_admin'].includes(req.user?.role)) {
+        if (!['admin', 'sub_admin', 'hr'].includes(req.user?.role)) {
             return res.status(403).json({ success: false, message: 'Admin access required' });
         }
         // Fetch image_url before delete to clean up file

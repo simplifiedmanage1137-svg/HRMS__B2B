@@ -5,7 +5,8 @@ import {
   FaTachometerAlt, FaUsers, FaCalendarAlt, FaMoneyBill,
   FaUserCircle, FaSignOutAlt, FaFingerprint, FaClock,
   FaBell, FaPaperPlane, FaEdit, FaUserTie,
-  FaBullhorn, FaStar, FaChevronRight, FaLayerGroup, FaDesktop, FaChartLine, FaMinusCircle, FaFileExcel
+  FaBullhorn, FaStar, FaChevronRight, FaLayerGroup, FaDesktop, FaChartLine, FaMinusCircle, FaFileExcel,
+  FaTicketAlt
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -27,12 +28,12 @@ const Sidebar = () => {
   useEffect(() => {
     if (user) {
       fetchEmployeeName();
-      if (user?.role === 'admin' || user?.role === 'sub_admin') fetchPendingCount();
+      if (user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'hr') fetchPendingCount();
     }
   }, [user]);
 
   useEffect(() => {
-    if (user?.role === 'admin' || user?.role === 'sub_admin') {
+    if (user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'hr') {
       const h = () => fetchPendingCount();
       window.addEventListener('updateApprovalsChanged', h);
       return () => window.removeEventListener('updateApprovalsChanged', h);
@@ -76,7 +77,7 @@ const Sidebar = () => {
         setEmployeeDesignation(res.data.designation || '');
       }
     } catch {
-      setEmployeeName(user?.role === 'admin' ? 'Administrator' : user?.role === 'sub_admin' ? 'Manager' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'finance' ? 'Finance' : 'Employee');
+      setEmployeeName(user?.role === 'admin' ? 'Administrator' : user?.role === 'sub_admin' ? 'Manager' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'finance' ? 'Finance' : user?.role === 'hr' ? 'HR' : 'Employee');
     }
   };
 
@@ -140,10 +141,6 @@ const Sidebar = () => {
       : <div style={{ height: '18px' }} />
   );
 
-  const sidebarWidth = isMobile
-    ? (isOpen ? SIDEBAR_OPEN : '-280px')
-    : (isOpen ? SIDEBAR_OPEN : SIDEBAR_CLOSED);
-
   return (
     <>
       {/* Mobile hamburger */}
@@ -202,7 +199,7 @@ const Sidebar = () => {
             <div className="hrms-sidebar__logo-text">
               <div className="hrms-sidebar__logo-title">EMS Portal</div>
               <div className="hrms-sidebar__logo-sub">
-                {user?.role === 'admin' ? 'Admin Dashboard' : user?.role === 'sub_admin' ? 'Manager Dashboard' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'manager' ? 'TL Dashboard' : user?.role === 'finance' ? 'Finance Dashboard' : 'Employee Dashboard'}
+                {user?.role === 'admin' ? 'Admin Dashboard' : user?.role === 'hr' ? 'HR Dashboard' : user?.role === 'sub_admin' ? 'Manager Dashboard' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'manager' ? 'TL Dashboard' : user?.role === 'finance' ? 'Finance Dashboard' : 'Employee Dashboard'}
               </div>
             </div>
           )}
@@ -216,7 +213,7 @@ const Sidebar = () => {
               <Section label="Finance" />
               <NavItem to="/finance/export" icon={<FaFileExcel />} label="Payroll Export" end />
             </>
-          ) : user?.role === 'admin' ? (
+          ) : user?.role === 'admin' || user?.role === 'hr' ? (
             <>
               <Section label="Overview" />
               <NavItem to="/admin/dashboard" icon={<FaTachometerAlt />} label="Dashboard" />
@@ -226,9 +223,8 @@ const Sidebar = () => {
               <NavItem to="/admin/attendance/reports" icon={<FaClock />}       label="Attendance" />
               <NavItem to="/admin/ratings"            icon={<FaStar />}        label="Employee Ratings" />
               <NavItem to="/performance/reviews"      icon={<FaChartLine />}   label="Performance Reviews" />
-              {/* <NavItem to="/admin/payroll"            icon={<FaMoneyBill />}   label="Payroll" /> */}
               <NavItem to="/admin/deductions"         icon={<FaMinusCircle />} label="Deductions" />
-
+              <NavItem to="/tickets"                  icon={<FaTicketAlt />}   label="Support Tickets" />
               <Section label="Admin Tools" />
               <NavItem to="/admin/teams"          icon={<FaLayerGroup />}  label="TL Teams" />
               <NavItem to="/admin/manager-teams"  icon={<FaUserTie />}     label="Manager Teams" />
@@ -254,7 +250,7 @@ const Sidebar = () => {
               <NavItem to="/performance/reviews"      icon={<FaChartLine />}   label="Performance Reviews" />
               <NavItem to="/admin/payroll"            icon={<FaMoneyBill />}   label="Payroll" />
               <NavItem to="/admin/deductions"         icon={<FaMinusCircle />} label="Deductions" />
-
+              <NavItem to="/tickets"                  icon={<FaTicketAlt />}   label="Support Tickets" />
               <Section label="Admin Tools" />
               <NavItem to="/admin/teams"          icon={<FaLayerGroup />}  label="TL Teams" />
               <NavItem to="/admin/manager-teams"  icon={<FaUserTie />}     label="Manager Teams" />
@@ -267,10 +263,8 @@ const Sidebar = () => {
                 onClick={() => { setPendingCount(0); markNotificationsAsRead(); }}
               />
               <NavItem to="/admin/broadcast" icon={<FaBullhorn />} label="Broadcast" />
-
               <Section label="My Team" />
               <NavItem to="/manager/my-team" icon={<FaUserTie />} label="My Team" />
-
               <Section label="My Attendance" />
               <NavItem to="/attendance" icon={<FaFingerprint />} label="Daily Attendance" />
             </>
@@ -292,10 +286,10 @@ const Sidebar = () => {
               <NavItem to="/apply-leave" icon={<FaCalendarAlt />} label="Apply Leave" />
               <NavItem to="/salary-slip" icon={<FaMoneyBill />}   label="Salary Slip" />
               <Section label="Team" />
-              {/* <NavItem to="/admin/teams" icon={<FaLayerGroup />} label="My Teams" /> */}
               <NavItem to="/manager/panel"       icon={<FaUserTie />}    label="Team Panel" />
               <NavItem to="/performance/reviews" icon={<FaChartLine />}  label="Performance Reviews" />
               <NavItem to="/performance/history" icon={<FaStar />}       label="My Performance" />
+              <NavItem to="/tickets"             icon={<FaTicketAlt />}  label="Support Tickets" />
             </>
           ) : (
             <>
@@ -308,6 +302,7 @@ const Sidebar = () => {
               <NavItem to="/salary-slip"             icon={<FaMoneyBill />}   label="Salary Slip" />
               <NavItem to="/employee/update-requests" icon={<FaEdit />}       label="Update Requests" />
               <NavItem to="/performance/history"     icon={<FaChartLine />}   label="My Performance" />
+              <NavItem to="/tickets"                 icon={<FaTicketAlt />}   label="Support Tickets" />
             </>
           )}
         </nav>
@@ -322,7 +317,7 @@ const Sidebar = () => {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="hrms-sidebar__user-name">{employeeName}</div>
                 <div className="hrms-sidebar__user-role">
-                  {user?.role === 'admin' ? 'Admin' : user?.role === 'sub_admin' ? 'Manager' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'manager' ? 'TL' : user?.role === 'finance' ? 'Finance' : `ID: ${user?.employeeId}`}
+                  {user?.role === 'admin' ? 'Admin' : user?.role === 'hr' ? 'HR' : user?.role === 'sub_admin' ? 'Manager' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'manager' ? 'TL' : user?.role === 'finance' ? 'Finance' : `ID: ${user?.employeeId}`}
                 </div>
               </div>
               <button className="hrms-logout-btn" onClick={logout} title="Logout">

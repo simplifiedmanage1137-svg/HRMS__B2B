@@ -278,7 +278,7 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
             const used_break_types = (sessionBreaks || []).filter(b => b.break_end).map(b => b.break_type);
             const active_break = (sessionBreaks || []).find(b => !b.break_end) || null;
 
-            return res.json({ success: true, active_break, used_break_types });
+            return res.json({ success: true, active_break, used_break_types, session_breaks: sessionBreaks || [] });
         } catch (err) {
             return res.status(500).json({ success: false, message: err.message });
         }
@@ -292,7 +292,7 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
         try {
             let employeeIds = null; // null = admin sees all
 
-            if (role !== 'admin') {
+            if (!['admin', 'hr'].includes(role)) {
                 // Step 1: get this user's full name
                 const { data: me } = await supabase
                     .from('employees')
@@ -349,6 +349,159 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
             });
         } catch (err) {
             console.error('[break] team-active error:', err);
+            return res.status(500).json({ success: false, message: err.message });
+        }
+    });
+
+    // GET /api/attendance/break/team-today
+    // Returns all breaks for today (active + completed) for the team.
+    // Uses IST date boundaries so the day matches what employees see.
+    router.get('/break/team-today', authenticateToken, async (req, res) => {
+        const { employeeId, role } = req.user;
+        try {
+            let employeeIds = null;
+
+            if (!['admin', 'hr'].includes(role)) {
+                const { data: me } = await supabase.from('employees')
+                    .select('first_name, last_name')
+                    .eq('employee_id', employeeId)
+                    .maybeSingle();
+                if (!me) return res.json({ success: true, breaks: [] });
+
+                const myName = `${me.first_name} ${me.last_name}`.trim().toLowerCase();
+                const { data: allEmps } = await supabase.from('employees')
+                    .select('employee_id, reporting_manager')
+                    .eq('is_active', true);
+
+                employeeIds = (allEmps || [])
+                    .filter(e => (e.reporting_manager || '').trim().toLowerCase() === myName)
+                    .map(e => e.employee_id);
+
+                if (employeeIds.length === 0) return res.json({ success: true, breaks: [] });
+            }
+
+            // IST day boundaries
+            const now = new Date();
+            const istNow = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
+            const todayIST = istNow.toISOString().split('T')[0];
+            const startOfDay = new Date(todayIST + 'T00:00:00+05:30').toISOString();
+            const endOfDay   = new Date(todayIST + 'T23:59:59+05:30').toISOString();
+
+            let query = supabase.from('employee_breaks')
+                .select('id, employee_id, break_start, break_end, break_duration_minutes, break_type, attendance_date')
+                .gte('break_start', startOfDay)
+                .lte('break_start', endOfDay)
+                .order('break_start', { ascending: true });
+
+            if (employeeIds !== null) query = query.in('employee_id', employeeIds);
+
+            const { data: breaks, error } = await query;
+            if (error) throw error;
+
+            const ids = [...new Set((breaks || []).map(b => b.employee_id))];
+            let empMap = {};
+            if (ids.length > 0) {
+                const { data: emps } = await supabase.from('employees')
+                    .select('employee_id, first_name, last_name, designation, department')
+                    .in('employee_id', ids);
+                (emps || []).forEach(e => { empMap[e.employee_id] = e; });
+            }
+
+            return res.json({
+                success: true,
+                breaks: (breaks || []).map(b => ({
+                    ...b,
+                    employee: empMap[b.employee_id] || { first_name: b.employee_id, last_name: '' },
+                })),
+            });
+        } catch (err) {
+            console.error('[break] team-today error:', err);
+            return res.status(500).json({ success: false, message: err.message });
+        }
+    });
+
+    // GET /api/attendance/break/team-stats
+    // Returns per-break-type usage stats + full employee lists for admin/manager dashboards.
+    router.get('/break/team-stats', authenticateToken, async (req, res) => {
+        const { employeeId, role } = req.user;
+        try {
+            let teamEmployees = [];
+
+            // admin and sub_admin (Manager) see ALL employees; manager (TL) sees their team only
+            if (role === 'admin' || role === 'sub_admin' || role === 'hr') {
+                const { data: allEmps } = await supabase.from('employees')
+                    .select('employee_id, first_name, last_name, designation, department')
+                    .eq('is_active', true);
+                teamEmployees = allEmps || [];
+            } else {
+                const { data: me } = await supabase.from('employees')
+                    .select('first_name, last_name')
+                    .eq('employee_id', employeeId)
+                    .maybeSingle();
+                if (!me) return res.json({ success: true, team_size: 0, today_breaks: [], break_stats: {} });
+
+                const myName = `${me.first_name} ${me.last_name}`.trim().toLowerCase();
+                const { data: allEmps } = await supabase.from('employees')
+                    .select('employee_id, first_name, last_name, designation, department, reporting_manager')
+                    .eq('is_active', true);
+
+                teamEmployees = (allEmps || []).filter(e =>
+                    (e.reporting_manager || '').trim().toLowerCase() === myName
+                );
+
+                if (teamEmployees.length === 0)
+                    return res.json({ success: true, team_size: 0, today_breaks: [], break_stats: {} });
+            }
+
+            const empMap = {};
+            teamEmployees.forEach(e => { empMap[e.employee_id] = e; });
+            const employeeIds = teamEmployees.map(e => e.employee_id);
+
+            // IST day boundaries
+            const now = new Date();
+            const istNow = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
+            const todayIST = istNow.toISOString().split('T')[0];
+            const startOfDay = new Date(todayIST + 'T00:00:00+05:30').toISOString();
+            const endOfDay   = new Date(todayIST + 'T23:59:59+05:30').toISOString();
+
+            let query = supabase.from('employee_breaks')
+                .select('id, employee_id, break_start, break_end, break_duration_minutes, break_type')
+                .gte('break_start', startOfDay)
+                .lte('break_start', endOfDay)
+                .order('break_start', { ascending: true });
+
+            if (employeeIds.length > 0) query = query.in('employee_id', employeeIds);
+
+            const { data: breaks, error } = await query;
+            if (error) throw error;
+
+            const BREAK_KEYS = ['tea_break_1', 'tea_break_2', 'lunch_break'];
+            const breakStats = {};
+
+            BREAK_KEYS.forEach(key => {
+                const typeBreaks = (breaks || []).filter(b => b.break_type === key);
+                const completedEmpIds = new Set(typeBreaks.filter(b => b.break_end).map(b => b.employee_id));
+                const activeEmpIds    = new Set(typeBreaks.filter(b => !b.break_end).map(b => b.employee_id));
+
+                breakStats[key] = {
+                    used_count:   completedEmpIds.size,
+                    active_count: activeEmpIds.size,
+                    unused_count: teamEmployees.filter(e => !completedEmpIds.has(e.employee_id) && !activeEmpIds.has(e.employee_id)).length,
+                    total:        teamEmployees.length,
+                    used_employees:   typeBreaks.filter(b => b.break_end).map(b => ({ ...b, employee: empMap[b.employee_id] || {} })),
+                    active_employees: typeBreaks.filter(b => !b.break_end).map(b => ({ ...b, employee: empMap[b.employee_id] || {} })),
+                    unused_employees: teamEmployees.filter(e => !completedEmpIds.has(e.employee_id) && !activeEmpIds.has(e.employee_id)),
+                };
+            });
+
+            return res.json({
+                success: true,
+                team_size: teamEmployees.length,
+                today_breaks: (breaks || []).map(b => ({ ...b, employee: empMap[b.employee_id] || {} })),
+                break_stats: breakStats,
+            });
+        } catch (err) {
+            console.error('[break] team-stats error:', err);
             return res.status(500).json({ success: false, message: err.message });
         }
     });

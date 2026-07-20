@@ -381,7 +381,7 @@ exports.getLeaves = async (req, res) => {
             .from('leaves')
             .select('*, employees!inner(first_name, last_name, department, designation)');
 
-        const isAdmin = (userRole === 'admin' || userRole === 'desktop_support') && req.query.all === 'true';
+        const isAdmin = (userRole === 'admin' || userRole === 'desktop_support' || userRole === 'hr') && req.query.all === 'true';
         const isReportingManager = req.query.reporting_manager === 'true';
         
         console.log('🔍 Query flags:', { isAdmin, isReportingManager });
@@ -479,8 +479,8 @@ exports.updateLeaveStatus = async (req, res) => {
         // - Employee can cancel their own leave
         if (status === 'cancelled') {
             // Employee cancelling own leave - allow
-        } else if (userRole === 'admin') {
-            // Admin can approve/reject any leave request
+        } else if (userRole === 'admin' || userRole === 'hr') {
+            // Admin/HR can approve/reject any leave request
         } else {
             // Non-admin: must be the reporting manager of the employee
             const { data: approver } = await supabase

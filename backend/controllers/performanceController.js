@@ -4,6 +4,7 @@ const supabase = require('../config/supabase');
 // Internal role → the role it can review
 const REVIEWABLE_ROLE = {
   admin:     'sub_admin',
+  hr:        'sub_admin',
   sub_admin: 'manager',
   manager:   'employee',
 };
@@ -376,7 +377,7 @@ const getTeamStats = async (req, res) => {
 const getAnalytics = async (req, res) => {
   try {
     const callerRole = req.user?.role;
-    if (!['admin', 'sub_admin'].includes(callerRole)) {
+    if (!['admin', 'sub_admin', 'hr'].includes(callerRole)) {
       return res.status(403).json({ success: false, message: 'Access denied' });
     }
 
@@ -404,7 +405,7 @@ const getAnalytics = async (req, res) => {
     const topRated = reviews.filter(r => r.rating === 5).map(r => r.employee_id);
 
     // Count pending by role
-    const targetRoles = callerRole === 'admin'
+    const targetRoles = (callerRole === 'admin' || callerRole === 'hr')
       ? ['sub_admin', 'manager', 'employee']
       : ['manager', 'employee'];
 
@@ -441,7 +442,7 @@ const getAnalytics = async (req, res) => {
 const getAllReviews = async (req, res) => {
   try {
     const callerRole = req.user?.role;
-    if (!['admin', 'sub_admin'].includes(callerRole)) {
+    if (!['admin', 'sub_admin', 'hr'].includes(callerRole)) {
       return res.status(403).json({ success: false, message: 'Access denied' });
     }
 
