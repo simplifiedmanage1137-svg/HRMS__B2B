@@ -1031,10 +1031,11 @@ const AdminDashboard = () => {
         else if (employeesRes.data.data) employees = employeesRes.data.data;
         else if (employeesRes.data.employees) employees = employeesRes.data.employees;
       }
-      setTotalEmployees(employees.length);
-      setStats(prevStats => ({ ...prevStats, total: employees.length }));
+      const activeEmployees = employees.filter(emp => emp.is_active !== false);
+      setTotalEmployees(activeEmployees.length);
+      setStats(prevStats => ({ ...prevStats, total: activeEmployees.length }));
       setRecentEmployees(employees.slice(-5));
-      setAllActiveEmployees(employees.filter(emp => emp.is_active !== false));
+      setAllActiveEmployees(activeEmployees);
       fetchCompleteEvents(employees);
       const deptMap = {};
       employees.forEach(emp => {
