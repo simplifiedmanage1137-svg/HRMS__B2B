@@ -414,6 +414,76 @@ const formatLateTime = (lateMinutes) => {
     return `${seconds}s`;
 };
 
+// 15-hour hard cap: an attendance record open (clock_in set, clock_out NULL) for 15+ hours
+// is force-closed with status 'missing'. This is the single source of truth for that rule —
+// called both by the scheduled cron (cron/missingClockOutCheck.js, every 15 min) AND inline
+// from getTodayAttendance so a stale session is closed the instant a dashboard/login checks
+// it, even if the background job hasn't run yet (e.g. it never runs at all on a serverless
+// deployment where node-cron can't stay resident — see server.js's `!process.env.VERCEL` guard).
+const MISSING_CLOCKOUT_THRESHOLD_MS = 15 * 60 * 60 * 1000;
+
+exports.closeStaleOpenAttendance = async (employeeId = null) => {
+    const nowMs = Date.now();
+    // NOTE: deliberately does NOT filter out status='missing' here. clock_out IS NULL is
+    // already sufficient to exclude anything this function has already closed (it always sets
+    // clock_out on close). Excluding by status too previously let a record that was mistagged
+    // 'missing' by another path without ever getting a clock_out (a real corrupted record found
+    // in production: id 18591) get silently skipped by every future run, forever.
+    let query = supabase
+        .from('attendance')
+        .select('id, employee_id, clock_in, clock_in_ist, session_id, status')
+        .not('clock_in', 'is', null)
+        .is('clock_out', null);
+    if (employeeId) query = query.eq('employee_id', employeeId);
+
+    const { data: openRecords, error } = await query;
+    if (error) {
+        console.error('❌ [closeStaleOpenAttendance] fetch error:', error.message);
+        return { closedCount: 0 };
+    }
+
+    let closedCount = 0;
+    for (const record of openRecords || []) {
+        const clockInMs = toUTCMs(record.clock_in_ist || record.clock_in);
+        if (!clockInMs || nowMs - clockInMs < MISSING_CLOCKOUT_THRESHOLD_MS) continue;
+
+        // Auto-close time is always exactly clock_in + 15h, never "now" — this guarantees
+        // total_hours can never exceed the 15h cap no matter how late the close happens.
+        const autoCloseMs = clockInMs + MISSING_CLOCKOUT_THRESHOLD_MS;
+        const autoCloseISO = new Date(autoCloseMs).toISOString();
+        const autoCloseIST = utcMsToISTString(autoCloseMs);
+
+        const { error: updErr } = await supabase
+            .from('attendance')
+            .update({
+                status: 'missing',
+                total_hours: 15,
+                total_minutes: MISSING_CLOCKOUT_THRESHOLD_MS / 60000,
+                total_hours_display: '15h 0m',
+                clock_out: autoCloseISO,
+                clock_out_ist: autoCloseIST,
+            })
+            .eq('id', record.id);
+
+        if (updErr) {
+            console.error(`❌ [closeStaleOpenAttendance] update failed for ${record.employee_id}:`, updErr.message);
+            continue;
+        }
+
+        if (record.session_id) {
+            await supabase
+                .from('attendance_sessions')
+                .update({ is_active: false, clock_out_time: autoCloseISO })
+                .eq('session_id', record.session_id)
+                .eq('employee_id', record.employee_id);
+        }
+
+        closedCount++;
+        console.log(`⚠️  [closeStaleOpenAttendance] ${record.employee_id} open 15h+ → auto-closed, status=missing`);
+    }
+    return { closedCount };
+};
+
 // Auto-close stale sessions
 exports.autoCloseStaleSessions = async () => {
     try {
@@ -512,91 +582,27 @@ exports.clockIn = async (req, res) => {
             const incompleteRecord = incompleteRecords[0];
             const incompleteDate = incompleteRecord.attendance_date;
 
-            if (incompleteRecord.status === 'missing') {
-                // Cron already closed this session and marked it missing — allow new clock-in
-                console.log(`ℹ️ Previous record for ${incompleteDate} is already 'missing'; allowing clock-in.`);
-            } else {
-                // Check if this record has an active session (night shift support)
-                const { data: activeSessionForRecord } = await supabase
-                    .from('attendance_sessions')
-                    .select('id, session_id, is_active, clock_out_time')
-                    .eq('employee_id', employee_id)
-                    .eq('session_id', incompleteRecord.session_id)
-                    .maybeSingle();
+            // Check if this record has an active session (night shift support)
+            const { data: activeSessionForRecord } = await supabase
+                .from('attendance_sessions')
+                .select('id, session_id, is_active')
+                .eq('employee_id', employee_id)
+                .eq('session_id', incompleteRecord.session_id)
+                .maybeSingle();
 
-                // Session is INACTIVE → already clocked out via session but clock_out column not updated. Auto-fix.
-                if (activeSessionForRecord && !activeSessionForRecord.is_active) {
-                    console.log(`🔧 Auto-fixing incomplete record for ${incompleteDate}: session is closed but clock_out is NULL`);
-
-                    const sessionClockOutTime = activeSessionForRecord.clock_out_time
-                        ? new Date(activeSessionForRecord.clock_out_time)
-                        : new Date();
-
-                    const sessionClockOutMs  = sessionClockOutTime.getTime() + IST_OFFSET_MS;
-                    const sessionClockOutIST = new Date(sessionClockOutMs);
-                    const coY  = sessionClockOutIST.getUTCFullYear();
-                    const coMo = String(sessionClockOutIST.getUTCMonth() + 1).padStart(2, '0');
-                    const coD  = String(sessionClockOutIST.getUTCDate()).padStart(2, '0');
-                    const coH  = String(sessionClockOutIST.getUTCHours()).padStart(2, '0');
-                    const coMi = String(sessionClockOutIST.getUTCMinutes()).padStart(2, '0');
-                    const coS  = String(sessionClockOutIST.getUTCSeconds()).padStart(2, '0');
-
-                    const clockOutDatePart = `${coY}-${coMo}-${coD}`;
-                    const clockOutTimePart = `${coH}:${coMi}:${coS}`;
-                    const clockOutIST = clockOutDatePart > incompleteDate
-                        ? `${incompleteDate} ${clockOutTimePart}`
-                        : `${clockOutDatePart} ${clockOutTimePart}`;
-
-                    const clockInMs  = toUTCMs(incompleteRecord.clock_in_ist || incompleteRecord.clock_in);
-                    const clockOutMs = toUTCMs(clockOutIST);
-                    let totalMinutes = Math.round((clockOutMs - clockInMs) / (1000 * 60));
-                    if (totalMinutes < 0) totalMinutes += 24 * 60;
-                    const totalHours = totalMinutes / 60;
-
-                    const shiftT = parseShiftTiming(emp.shift_timing);
-                    const expMin = (shiftT.totalHours || 9) * 60;
-                    let fixStatus = 'half_day';
-                    if (totalMinutes >= expMin) fixStatus = 'present';
-                    else if (totalMinutes < 300) fixStatus = 'absent';
-
-                    const dH = Math.floor(totalMinutes / 60);
-                    const dM = totalMinutes % 60;
-
-                    await supabase.from('attendance').update({
-                        clock_out:           sessionClockOutTime.toISOString(),
-                        clock_out_ist:       clockOutIST,
-                        total_hours:         parseFloat(totalHours.toFixed(2)),
-                        total_minutes:       totalMinutes,
-                        total_hours_display: `${dH}h ${dM}m`,
-                        status:              fixStatus,
-                    }).eq('id', incompleteRecord.id);
-
-                    console.log(`✅ Auto-fixed ${incompleteDate}: clock_out=${clockOutIST}, status=${fixStatus}`);
-                    // Allow clock-in to proceed
-
-                } else if (!activeSessionForRecord) {
-                    // No session at all → auto-close as missing (same as cron) and allow clock-in
-                    console.log(`⚠️ [ClockIn] Stale open record for ${incompleteDate} (no session) — auto-closing as missing.`);
-                    const IST_OFFSET_MS_LOCAL = 5.5 * 60 * 60 * 1000;
-                    const MISSING_THRESHOLD_MS_LOCAL = 15 * 60 * 60 * 1000;
-                    const clockInVal = incompleteRecord.clock_in_ist || incompleteRecord.clock_in;
-                    const clockInMs = toUTCMs(clockInVal);
-                    const autoCloseMs = clockInMs ? clockInMs + MISSING_THRESHOLD_MS_LOCAL : Date.now() - IST_OFFSET_MS_LOCAL;
-                    const autoCloseISO = new Date(autoCloseMs).toISOString();
-                    const autoCloseISTDate = new Date(autoCloseMs + IST_OFFSET_MS_LOCAL);
-                    const autoCloseIST = autoCloseISTDate.toISOString().replace('T', ' ').substring(0, 19);
-                    await supabase.from('attendance').update({
-                        status:              'missing',
-                        total_hours:         0,
-                        total_minutes:       0,
-                        total_hours_display: '0h 0m',
-                        clock_out:           autoCloseISO,
-                        clock_out_ist:       autoCloseIST,
-                    }).eq('id', incompleteRecord.id);
-                    console.log(`✅ [ClockIn] Auto-closed ${incompleteDate} as missing. Allowing new clock-in.`);
-                }
-                // else: session.is_active === true → night shift still in progress, allow
+            if (!activeSessionForRecord || !activeSessionForRecord.is_active) {
+                // Session is closed (or never existed) but the attendance row was never closed.
+                // Defer entirely to the single source of truth for the 15-hour rule instead of
+                // hand-rolling date arithmetic here — a previous bespoke version of this fix
+                // force-rewrote the computed close date back onto incompleteDate whenever it
+                // rolled forward (meant for "closed just past midnight"), which silently produced
+                // a clock_out time-of-day earlier than clock-in, triggered a +24h wraparound
+                // "fix", and reported ~20-24h worked instead of capping at 15h with status
+                // 'missing'. closeStaleOpenAttendance always caps at exactly clock_in + 15h.
+                await module.exports.closeStaleOpenAttendance(employee_id);
+                console.log(`✅ [ClockIn] Closed incomplete record for ${incompleteDate} via 15h rule. Allowing new clock-in.`);
             }
+            // else: session.is_active === true → night shift still in progress, allow
         }
 
         // Check for existing active session
@@ -1322,6 +1328,12 @@ exports.getTodayAttendance = async (req, res) => {
     try {
         const { employee_id } = req.params;
         if (!employee_id) return res.status(400).json({ success: false, message: 'Employee ID is required' });
+
+        // Dashboard/login-time enforcement of the 15-hour cap: close any open record for this
+        // employee before reading state, so a stale (>=15h) session can never be reported back
+        // as "still clocked in" — regardless of whether the background cron has run.
+        await module.exports.closeStaleOpenAttendance(employee_id);
+
         // Use IST date for today - avoids UTC midnight mismatch
         const todayStr = nowIST().split(' ')[0];
 
@@ -3377,18 +3389,33 @@ exports.fixOrphanedAttendance = async (req, res) => {
                 : `${coDatePart} ${coTimePart}`;
 
             const ciMs = toUTCMs(record.clock_in_ist || record.clock_in);
-            const coMsVal = toUTCMs(clockOutIST);
+            let coMsVal = toUTCMs(clockOutIST);
             let totalMinutes = Math.round((coMsVal - ciMs) / (1000 * 60));
             if (totalMinutes < 0) totalMinutes += 24 * 60;
-            const totalHours = totalMinutes / 60;
 
-            const shiftT = parseShiftTiming(record.employees?.shift_timing);
-            const expMin = (shiftT.totalHours || 9) * 60;
-            const fixStatus = totalMinutes >= expMin ? 'present' : totalMinutes >= 300 ? 'half_day' : 'absent';
+            // 15-hour hard cap: this repair path used to trust attendance_sessions.clock_out_time
+            // blindly, with no ceiling and no 'missing' status — that produced the exact bug
+            // reported for B2B241205 (total_hours 23.97, status 'present'). If the session's
+            // recorded close time implies 15h+ elapsed, defer to the same rule as
+            // closeStaleOpenAttendance: cap at clock_in + 15h and mark 'missing'.
+            let finalClockOutMs = coMsVal;
+            let fixStatus;
+            if (totalMinutes >= MISSING_CLOCKOUT_THRESHOLD_MS / 60000) {
+                finalClockOutMs = ciMs + MISSING_CLOCKOUT_THRESHOLD_MS;
+                totalMinutes = MISSING_CLOCKOUT_THRESHOLD_MS / 60000;
+                fixStatus = 'missing';
+            } else {
+                const shiftT = parseShiftTiming(record.employees?.shift_timing);
+                const expMin = (shiftT.totalHours || 9) * 60;
+                fixStatus = totalMinutes >= expMin ? 'present' : totalMinutes >= 300 ? 'half_day' : 'absent';
+            }
+            const totalHours = totalMinutes / 60;
+            const finalClockOutISO = new Date(finalClockOutMs).toISOString();
+            const finalClockOutIST = utcMsToISTString(finalClockOutMs);
 
             const { error: updateErr } = await supabase.from('attendance').update({
-                clock_out: sessionClockOutTime.toISOString(),
-                clock_out_ist: clockOutIST,
+                clock_out: finalClockOutISO,
+                clock_out_ist: finalClockOutIST,
                 total_hours: parseFloat(totalHours.toFixed(2)),
                 total_minutes: totalMinutes,
                 total_hours_display: `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`,
@@ -3397,7 +3424,7 @@ exports.fixOrphanedAttendance = async (req, res) => {
 
             if (updateErr) { console.error(`❌ Failed to fix ${record.employee_id} ${recDate}:`, updateErr); skipped++; }
             else {
-                console.log(`✅ Fixed ${record.employee_id} (${recDate}): clock_out=${clockOutIST}, status=${fixStatus}`);
+                console.log(`✅ Fixed ${record.employee_id} (${recDate}): clock_out=${finalClockOutIST}, status=${fixStatus}`);
                 fixed++;
             }
         }

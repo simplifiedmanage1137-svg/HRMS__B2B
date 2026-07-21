@@ -179,7 +179,7 @@ const ManagerListItem = ({ mgr, isSelected, onClick, selCount, type = 'TL' }) =>
 };
 
 // ── ManagerDetail — right-panel full view ─────────────────────────────────────
-const ManagerDetail = ({ mgr, type = 'TL', onAssign, onRemove, onDeactivate, navigate, selectedEmps, onToggleSelect, onToggleSelectAll }) => {
+const ManagerDetail = ({ mgr, type = 'TL', onAssign, onAssignMembers, onRemove, onDeactivate, navigate, selectedEmps, onToggleSelect, onToggleSelectAll }) => {
     const color = mgrColor(mgr.employee_id);
     const totalEmps     = mgr.employees.length;
     const selectedCount = mgr.employees.filter(e => selectedEmps.has(e.employee_id)).length;
@@ -270,9 +270,23 @@ const ManagerDetail = ({ mgr, type = 'TL', onAssign, onRemove, onDeactivate, nav
                                 </Badge>
                             )}
                         </div>
-                        <Badge style={{ background: color, fontSize: 11, padding: '4px 10px' }}>
-                            {totalEmps} {totalEmps === 1 ? 'member' : 'members'}
-                        </Badge>
+                        <div className="d-flex align-items-center gap-2">
+                            <Badge style={{ background: color, fontSize: 11, padding: '4px 10px' }}>
+                                {totalEmps} {totalEmps === 1 ? 'member' : 'members'}
+                            </Badge>
+                            <button onClick={() => onAssignMembers(mgr, type)}
+                                style={{
+                                    padding: '5px 12px', border: `1px solid ${color}55`, borderRadius: 7,
+                                    background: `${color}12`, cursor: 'pointer', display: 'flex',
+                                    alignItems: 'center', gap: 5, fontSize: 12, color, fontWeight: 600,
+                                    transition: 'all 0.15s', flexShrink: 0,
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.background = color; e.currentTarget.style.color = '#fff'; }}
+                                onMouseLeave={e => { e.currentTarget.style.background = `${color}12`; e.currentTarget.style.color = color; }}
+                            >
+                                <FaUserTie size={11} /> Assign Team Member
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -282,7 +296,16 @@ const ManagerDetail = ({ mgr, type = 'TL', onAssign, onRemove, onDeactivate, nav
                         <div className="text-center text-muted py-4 rounded-3"
                             style={{ background: '#f8fafc', border: '1px dashed #e2e8f0' }}>
                             <FaUsers size={28} className="mb-2 opacity-25" />
-                            <div style={{ fontSize: 13 }}>No employees assigned to this manager</div>
+                            <div style={{ fontSize: 13, marginBottom: 12 }}>No employees assigned to this manager</div>
+                            <button onClick={() => onAssignMembers(mgr, type)}
+                                style={{
+                                    padding: '7px 16px', border: 'none', borderRadius: 8,
+                                    background: color, cursor: 'pointer', display: 'inline-flex',
+                                    alignItems: 'center', gap: 6, fontSize: 13, color: '#fff', fontWeight: 600,
+                                }}
+                            >
+                                <FaUserTie size={12} /> Assign Team Member
+                            </button>
                         </div>
                     ) : (
                         <div className="d-flex flex-column gap-2">
@@ -509,6 +532,14 @@ const Teams = () => {
     const [bulkError, setBulkError]   = useState('');
     const [bulkSaving, setBulkSaving] = useState(false);
 
+    // "Assign Team Member" modal — add unassigned employees directly to a manager's own team page
+    const [assignMembersModal, setAssignMembersModal]       = useState(false);
+    const [assignMembersMgr, setAssignMembersMgr]           = useState(null);
+    const [assignMembersSearch, setAssignMembersSearch]     = useState('');
+    const [assignMembersSelected, setAssignMembersSelected] = useState(new Set());
+    const [assignMembersSaving, setAssignMembersSaving]     = useState(false);
+    const [assignMembersError, setAssignMembersError]       = useState('');
+
     const fetchHierarchy = useCallback(async () => {
         setLoading(true);
         try {
@@ -626,6 +657,42 @@ const Teams = () => {
         }
     };
 
+    const openAssignMembers = (mgr) => {
+        setAssignMembersMgr(mgr);
+        setAssignMembersSearch('');
+        setAssignMembersSelected(new Set());
+        setAssignMembersError('');
+        setAssignMembersModal(true);
+    };
+
+    const toggleAssignMembersCandidate = (empId) => {
+        setAssignMembersSelected(prev => {
+            const next = new Set(prev);
+            next.has(empId) ? next.delete(empId) : next.add(empId);
+            return next;
+        });
+    };
+
+    const handleAssignMembersSave = async () => {
+        if (!assignMembersSelected.size) return setAssignMembersError('Select at least one employee');
+        setAssignMembersSaving(true);
+        setAssignMembersError('');
+        const mgrName = `${assignMembersMgr.first_name} ${assignMembersMgr.last_name}`.trim();
+        try {
+            const chosen = allTrueUnassigned.filter(e => assignMembersSelected.has(e.employee_id));
+            await Promise.all(
+                chosen.map(emp => axios.put(API_ENDPOINTS.EMPLOYEE_BY_ID(emp.id), { reporting_manager: mgrName }))
+            );
+            showNotification(`${chosen.length} employee${chosen.length !== 1 ? 's' : ''} assigned to ${mgrName}`, 'success');
+            setAssignMembersModal(false);
+            fetchHierarchy();
+        } catch (err) {
+            setAssignMembersError(err.response?.data?.message || 'Failed to assign');
+        } finally {
+            setAssignMembersSaving(false);
+        }
+    };
+
     const q = search.trim().toLowerCase();
 
     const filteredHierarchy = useMemo(() => {
@@ -688,6 +755,24 @@ const Teams = () => {
         );
         return filteredUnassigned.filter(e => !assignedToSubAdmin.has(e.employee_id));
     }, [filteredUnassigned, subAdminTeams]);
+
+    // Same as trueUnassigned but independent of the page-level search box — used as the
+    // candidate pool for the "Assign Team Member" modal, which has its own search field.
+    const allTrueUnassigned = useMemo(() => {
+        const assignedToSubAdmin = new Set(
+            subAdminTeams.flatMap(sa => sa.employees.map(e => e.employee_id))
+        );
+        return unassigned.filter(e => !assignedToSubAdmin.has(e.employee_id));
+    }, [unassigned, subAdminTeams]);
+
+    const assignMembersCandidates = useMemo(() => {
+        const s = assignMembersSearch.trim().toLowerCase();
+        if (!s) return allTrueUnassigned;
+        return allTrueUnassigned.filter(e =>
+            `${e.first_name} ${e.last_name}`.toLowerCase().includes(s) ||
+            e.employee_id.toLowerCase().includes(s)
+        );
+    }, [allTrueUnassigned, assignMembersSearch]);
 
     // Resolve currently selected item — check TL hierarchy first, then sub_admin teams
     const [selectedType, setSelectedType] = useState('TL'); // 'TL' | 'M'
@@ -911,6 +996,7 @@ const Teams = () => {
                                 mgr={selectedMgr}
                                 type={selectedType}
                                 onAssign={openAssign}
+                                onAssignMembers={openAssignMembers}
                                 onRemove={handleRemove}
                                 onDeactivate={handleDeactivateEmployee}
                                 navigate={navigate}
@@ -1088,6 +1174,74 @@ const Teams = () => {
                         {bulkSaving
                             ? <><Spinner size="sm" animation="border" /> Saving…</>
                             : <><FaCheck size={10} /> Assign {selectedCount}</>}
+                    </Button>
+                </Modal.Footer>
+            </Modal>
+
+            {/* ── Assign Team Member Modal — add unassigned employees to a manager's team directly ── */}
+            <Modal show={assignMembersModal} onHide={() => setAssignMembersModal(false)} centered>
+                <Modal.Header closeButton className="py-2">
+                    <Modal.Title as="h6" className="fw-semibold d-flex align-items-center gap-2">
+                        <FaUserTie size={14} className="text-primary" />
+                        Assign Team Member{assignMembersMgr ? ` — ${assignMembersMgr.first_name} ${assignMembersMgr.last_name}` : ''}
+                    </Modal.Title>
+                </Modal.Header>
+                <Modal.Body className="p-3">
+                    {assignMembersError && <Alert variant="danger" className="py-2 small mb-2">{assignMembersError}</Alert>}
+                    <div className="position-relative mb-2">
+                        <FaSearch style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: 12 }} />
+                        <Form.Control size="sm" placeholder="Search unassigned employees…"
+                            value={assignMembersSearch} onChange={e => setAssignMembersSearch(e.target.value)}
+                            style={{ paddingLeft: 30, borderRadius: 8 }} />
+                    </div>
+                    <div className="text-muted mb-2" style={{ fontSize: 11 }}>
+                        {assignMembersSelected.size > 0
+                            ? `${assignMembersSelected.size} employee${assignMembersSelected.size !== 1 ? 's' : ''} selected`
+                            : 'Only employees without a TL/manager are shown here.'}
+                    </div>
+                    <div style={{ maxHeight: 320, overflowY: 'auto', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                        {assignMembersCandidates.length === 0 ? (
+                            <div className="text-center text-muted py-4" style={{ fontSize: 13 }}>
+                                {allTrueUnassigned.length === 0
+                                    ? 'All employees already have a TL/manager.'
+                                    : 'No matching employees.'}
+                            </div>
+                        ) : (
+                            <div className="d-flex flex-column">
+                                {assignMembersCandidates.map((emp, i) => {
+                                    const isSelected = assignMembersSelected.has(emp.employee_id);
+                                    return (
+                                        <div key={emp.employee_id}
+                                            onClick={() => toggleAssignMembersCandidate(emp.employee_id)}
+                                            className="d-flex align-items-center gap-2 px-3 py-2"
+                                            style={{
+                                                cursor: 'pointer',
+                                                borderBottom: i < assignMembersCandidates.length - 1 ? '1px solid #f1f5f9' : 'none',
+                                                background: isSelected ? '#eff6ff' : '#fff',
+                                            }}>
+                                            <Checkbox checked={isSelected} onChange={() => toggleAssignMembersCandidate(emp.employee_id)} size={14} />
+                                            <Avatar name={`${emp.first_name} ${emp.last_name}`} size={28} bg="#94a3b8" />
+                                            <div className="flex-grow-1 min-w-0">
+                                                <div className="small fw-semibold text-truncate">{emp.first_name} {emp.last_name}</div>
+                                                <div className="text-muted text-truncate" style={{ fontSize: 10 }}>
+                                                    {emp.employee_id}{emp.designation ? ` · ${emp.designation}` : ''}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </Modal.Body>
+                <Modal.Footer className="py-2">
+                    <Button variant="secondary" size="sm" onClick={() => setAssignMembersModal(false)}>Cancel</Button>
+                    <Button variant="primary" size="sm" onClick={handleAssignMembersSave}
+                        disabled={assignMembersSaving || !assignMembersSelected.size}
+                        className="d-flex align-items-center gap-2">
+                        {assignMembersSaving
+                            ? <><Spinner size="sm" animation="border" /> Saving…</>
+                            : <><FaCheck size={10} /> Assign {assignMembersSelected.size || ''}</>}
                     </Button>
                 </Modal.Footer>
             </Modal>
