@@ -53,6 +53,13 @@ const TeamAttendanceReport = () => {
     const [showDetails, setShowDetails] = useState({});
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
+    const [liveNow, setLiveNow] = useState(Date.now());
+
+    // Tick every 30s so "Hours" for currently-working team members updates without a manual refresh
+    useEffect(() => {
+        const timer = setInterval(() => setLiveNow(Date.now()), 30000);
+        return () => clearInterval(timer);
+    }, []);
 
     const months = [
         { value: 1, label: 'January', short: 'Jan' },
@@ -309,6 +316,33 @@ const TeamAttendanceReport = () => {
         if (hours === 0) return `${minutes}m`;
         if (minutes === 0) return `${hours}h`;
         return `${hours}h ${minutes}m`;
+    };
+
+    // clock_in/clock_in_ist from the backend is a naive "YYYY-MM-DD HH:MM:SS" IST wall-clock
+    // string with no timezone marker — parse it as IST explicitly rather than letting the
+    // browser's Date constructor guess based on local timezone.
+    const istStringToUTCMs = (val) => {
+        if (!val) return null;
+        const s = String(val).trim().replace('T', ' ').substring(0, 19);
+        const [datePart, timePart] = s.split(' ');
+        if (!datePart || !timePart) return null;
+        const [y, mo, d] = datePart.split('-').map(Number);
+        const [h, mi, sec = 0] = timePart.split(':').map(Number);
+        if ([y, mo, d, h, mi].some(isNaN)) return null;
+        const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+        return Date.UTC(y, mo - 1, d, h, mi, sec) - IST_OFFSET_MS;
+    };
+
+    // For a team member who is still clocked in (status 'working', no clock_out yet), the
+    // backend can't report total_hours because it only computes that once clock_out is set.
+    // Compute it live client-side instead, ticked by liveNow so it keeps advancing on screen.
+    const getLiveHoursDisplay = (record) => {
+        if (record.status !== 'working' || !record.clock_in) return null;
+        const clockInMs = istStringToUTCMs(record.clock_in);
+        if (clockInMs == null) return null;
+        const diffMs = Math.max(0, liveNow - clockInMs);
+        const totalMinutes = Math.floor(diffMs / 60000);
+        return formatDecimalHoursToHMS(totalMinutes / 60);
     };
 
     // Today's Stats Card Component - Matching main website design
@@ -609,7 +643,12 @@ const TeamAttendanceReport = () => {
                                                         {formatTime(record.clock_out) || '--:--'}
                                                     </td>
                                                     <td className="small d-none d-lg-table-cell">
-                                                        {record.total_hours > 0 ? formatDecimalHoursToHMS(parseFloat(record.total_hours)) : '-'}
+                                                        {record.status === 'working' ? (
+                                                            <span className="text-info fw-semibold">
+                                                                <FaClock className="me-1" size={9} />
+                                                                {getLiveHoursDisplay(record)}
+                                                            </span>
+                                                        ) : record.total_hours > 0 ? formatDecimalHoursToHMS(parseFloat(record.total_hours)) : '-'}
                                                     </td>
                                                     <td>
                                                         {getStatusBadge(record.status, record.is_late, record.late_display, record.overtime_hours)}
@@ -630,7 +669,12 @@ const TeamAttendanceReport = () => {
                                                                 <Col xs={12} md={4}><strong>Date:</strong> {formatDate(record.attendance_date)}</Col>
                                                                 <Col xs={12} md={4}><strong>Clock In:</strong> {formatTime(record.clock_in) || '--:--'}</Col>
                                                                 <Col xs={12} md={4}><strong>Clock Out:</strong> {formatTime(record.clock_out) || '--:--'}</Col>
-                                                                <Col xs={12} md={4}><strong>Total Hours:</strong> {record.total_hours || 0}h</Col>
+                                                                <Col xs={12} md={4}>
+                                                                    <strong>Total Hours:</strong>{' '}
+                                                                    {record.status === 'working'
+                                                                        ? <span className="text-info">{getLiveHoursDisplay(record)} (live)</span>
+                                                                        : `${record.total_hours || 0}h`}
+                                                                </Col>
                                                                 {record.is_late && <Col xs={12} md={4}><strong className="text-warning">Late Duration:</strong> {record.late_display}</Col>}
                                                                 {record.overtime_hours > 0 && <Col xs={12} md={4}><strong className="text-success">Overtime:</strong> +{record.overtime_hours}h</Col>}
                                                                 {record.leave_type && <Col xs={12}><strong>Leave Type:</strong> {record.leave_type}</Col>}
