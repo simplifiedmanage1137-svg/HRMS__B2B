@@ -1,22 +1,6 @@
 {
   "version": 2,
-  "experimentalServices": {
-    "frontend": {
-      "root": "frontend",
-      "routePrefix": "/",
-      "framework": "vite"
-    },
-    "backend": {
-      "root": "backend",
-      "routePrefix": "/_/backend",
-      "entrypoint": "server.js"
-    }
-  },
   "crons": [
-    {
-      "path": "/api/cron/missing-clockout",
-      "schedule": "*/15 * * * *"
-    },
     {
       "path": "/api/cron/daily-absent",
       "schedule": "29 18 * * *"
