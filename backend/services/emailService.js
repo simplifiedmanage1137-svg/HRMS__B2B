@@ -7,6 +7,7 @@ const { Resend } = require('resend');
 const DEFAULT_FROM  = 'HRMS <noreply@hrms.b2bindemand.agency>';
 const DEFAULT_FRONT = 'https://hrms.b2bindemand.agency';
 
+
 // Helper: returns the env value only when it is a non-empty string
 const envStr = (key, fallback) => {
     const val = process.env[key];
