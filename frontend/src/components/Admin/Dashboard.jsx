@@ -1622,7 +1622,7 @@ const AdminDashboard = () => {
               <div>
                 <h4 style={{ color: '#fff', margin: 0, fontWeight: 800, fontSize: 22 }}>{user?.role === 'hr' ? 'HR Dashboard' : 'Manager Dashboard'}</h4>
                 <div style={{ color: 'rgba(255,255,255,.82)', fontSize: 13, marginTop: 3 }}>
-                  Welcome back, <strong style={{ color: '#fff' }}>{user?.employeeId}</strong>
+                  Welcome by B2B, <strong style={{ color: '#fff' }}>{user?.employeeId}</strong>
                   {lastUpdated && <span style={{ marginLeft: 8, opacity: 0.65 }}>· Updated {lastUpdated.toLocaleTimeString()}</span>}
                 </div>
               </div>
