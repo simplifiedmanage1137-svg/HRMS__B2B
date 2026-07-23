@@ -1,9 +1,29 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
+  "installCommand": "cd frontend && npm install && cd ../backend && npm install",
+  "buildCommand": "cd frontend && npm run build",
+  "outputDirectory": "frontend/dist",
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/((?!api).*)", "destination": "/index.html" }
+  ],
   "crons": [
+    {
+      "path": "/api/cron/missing-clockout",
+      "schedule": "0 20 * * *"
+    },
     {
       "path": "/api/cron/daily-absent",
       "schedule": "29 18 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-cleanup",
+      "schedule": "30 20 * * 6"
+    },
+    {
+      "path": "/api/cron/monthly-accrual",
+      "schedule": "30 19 1 * *"
     }
   ]
 }

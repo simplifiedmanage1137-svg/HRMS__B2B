@@ -55,22 +55,8 @@ const PORT = process.env.PORT || 5000;
 console.log('='.repeat(70));
 console.log('🚀 SERVER INITIALIZING');
 console.log(`   Environment : ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'}`);
-console.log(`   Runtime     : ${process.env.VERCEL ? 'Vercel Service' : 'Node.js'}`);
+console.log(`   Runtime     : ${process.env.VERCEL ? 'Vercel Function' : 'Node.js'}`);
 console.log('='.repeat(70));
-
-// ─── Vercel service prefix stripping ─────────────────────────────────────────
-// When deployed as a Vercel service with routePrefix "/_/backend", Vercel
-// forwards the FULL path (e.g. /_/backend/api/auth/login) without stripping
-// the prefix. This middleware strips it so Express sees /api/auth/login.
-if (process.env.VERCEL) {
-    const SERVICE_PREFIX = '/_/backend';
-    app.use((req, _res, next) => {
-        if (req.url.startsWith(SERVICE_PREFIX)) {
-            req.url = req.url.slice(SERVICE_PREFIX.length) || '/';
-        }
-        next();
-    });
-}
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = new Set([
@@ -278,10 +264,12 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Start the HTTP server when run directly OR when deployed as a Vercel service.
-// The process.env.VERCEL guard covers the case where Vercel imports this file
-// as a module rather than executing it directly with `node server.js`.
-if (require.main === module || process.env.VERCEL) {
+// Start the HTTP server only when this file is run directly (`node server.js`), i.e. local
+// dev or a traditional Node host. On Vercel, api/index.js requires this file as a module to
+// get the Express `app` export — Vercel's Node runtime invokes that handler directly per
+// request and never needs (or wants) a bound listening port, so `require.main === module`
+// correctly evaluates to false in that case and this whole block is skipped.
+if (require.main === module) {
     app.listen(PORT, '0.0.0.0', () => {
         console.log('='.repeat(70));
         console.log('Backend service started');
@@ -289,7 +277,7 @@ if (require.main === module || process.env.VERCEL) {
         console.log('🚀 SERVER STARTED');
         console.log(`   Port        : ${PORT}`);
         console.log(`   Environment : ${process.env.NODE_ENV || 'development'}`);
-        console.log(`   Runtime     : ${process.env.VERCEL ? 'Vercel Service' : 'local Node.js'}`);
+        console.log(`   Runtime     : local Node.js`);
         console.log('='.repeat(70));
 
         supabase.from('employees').select('count', { count: 'exact', head: true }).then(({ error }) => {

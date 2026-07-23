@@ -1,23 +1,23 @@
 // src/config/api.js
 
-const API_BASE_URL = (() => {
-  const url = import.meta.env.VITE_API_URL || '';
-  return url.replace(/\/$/, '');
-})();
+// NOTE: VITE_API_URL is applied ONCE, as `baseURL` on the shared axios instance
+// (see src/config/axios.js). Every endpoint below must stay a bare relative path
+// (e.g. "/api/auth/login") — do NOT prepend VITE_API_URL here too. Doing so
+// previously caused every request to carry the prefix twice
+// (e.g. "/_/backend/_/backend/api/...") whenever VITE_API_URL was non-empty.
 
 // ─── Startup diagnostics (browser console) ────────────────────────────────────
 if (import.meta.env.DEV) {
   console.group('[HRMS] Frontend configuration');
   console.log('MODE         :', import.meta.env.MODE);
   console.log('VITE_API_URL :', import.meta.env.VITE_API_URL || '(not set — /api/* forwarded via Vite proxy → localhost:5000)');
-  console.log('API base URL :', API_BASE_URL || '(relative paths)');
   console.groupEnd();
 } else {
   // Production: single-line summary
-  console.log('[HRMS] mode=production  api=' + (API_BASE_URL || '(relative — served via Vercel rewrite)'));
+  console.log('[HRMS] mode=production  api base=' + (import.meta.env.VITE_API_URL || '(relative — served via Vercel rewrite)'));
 }
 
-const ep = (path) => `${API_BASE_URL}${path}`;
+const ep = (path) => path;
 
 export const API_ENDPOINTS = {
   // Manager

@@ -2,5 +2,12 @@
   "name": "hrms-b2b",
   "version": "1.0.0",
   "private": true,
-  "description": "HRMS monorepo — frontend (Vite) + backend (Express) deployed via Vercel experimentalServices"
+  "description": "HRMS monorepo — frontend (Vite static build) + backend (Express, deployed as a Vercel Serverless Function via /api/index.js)",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "install:all": "cd frontend && npm install && cd ../backend && npm install",
+    "build": "cd frontend && npm run build"
+  }
 }
