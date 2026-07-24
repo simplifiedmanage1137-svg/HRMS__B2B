@@ -382,8 +382,12 @@ exports.getLeaves = async (req, res) => {
             .select('*, employees!inner(first_name, last_name, department, designation)');
 
         const isAdmin = (userRole === 'admin' || userRole === 'desktop_support' || userRole === 'hr') && req.query.all === 'true';
-        const isReportingManager = req.query.reporting_manager === 'true';
-        
+        // sub_admin/manager share the /admin/leave-requests page (which always calls ?all=true),
+        // but unlike full admin/hr they must only see their own team + leaves tagged to them —
+        // never the whole company's leaves.
+        const isReportingManager = req.query.reporting_manager === 'true'
+            || (req.query.all === 'true' && !isAdmin && (userRole === 'sub_admin' || userRole === 'manager'));
+
         console.log('🔍 Query flags:', { isAdmin, isReportingManager });
 
         if (isAdmin) {
@@ -409,12 +413,25 @@ exports.getLeaves = async (req, res) => {
                 .eq('reporting_manager', managerName);
             const teamIds = (teamEmps || []).map(e => e.employee_id);
 
-            if (teamIds.length === 0) {
+            // Also pick up leaves explicitly tagged to this manager at the time of applying —
+            // an employee can pick a different manager/TL in the Apply Leave form than the one
+            // assigned on their profile, so team membership alone can miss those requests.
+            const { data: taggedLeaves } = await supabase
+                .from('leaves')
+                .select('id')
+                .eq('reporting_manager', managerName);
+            const taggedIds = (taggedLeaves || []).map(l => l.id);
+
+            if (teamIds.length === 0 && taggedIds.length === 0) {
                 return res.json([]);
             }
 
-            // Fetch leaves where employee is in team (covers both null and set reporting_manager)
-            query = query.in('employee_id', teamIds);
+            const orFilters = [];
+            if (teamIds.length > 0) orFilters.push(`employee_id.in.(${teamIds.join(',')})`);
+            if (taggedIds.length > 0) orFilters.push(`id.in.(${taggedIds.join(',')})`);
+
+            // Fetch leaves where employee is in team OR the leave was directly tagged to this manager
+            query = query.or(orFilters.join(','));
         } else {
             // Employee: own leaves only
             if (!authenticatedUserId) return res.json([]);
@@ -487,12 +504,16 @@ exports.updateLeaveStatus = async (req, res) => {
                 .from('employees').select('first_name, last_name')
                 .eq('employee_id', approver_id).single();
             const approverName = approver ? `${approver.first_name} ${approver.last_name}` : '';
-            // Check via employee's reporting_manager field (handles null reporting_manager in leave)
+            // Allow either the employee's officially assigned reporting manager, OR whoever the
+            // employee explicitly tagged as reporting manager on this specific leave request —
+            // the Apply Leave form lets an employee pick a different manager/TL than the one on
+            // their profile, and that tagged manager must be able to act on it too.
             const { data: empData } = await supabase
                 .from('employees').select('reporting_manager')
                 .eq('employee_id', leave.employee_id).single();
-            const empReportingManager = empData?.reporting_manager || leave.reporting_manager || '';
-            if (empReportingManager !== approverName) {
+            const empReportingManager = empData?.reporting_manager || '';
+            const leaveTaggedManager = leave.reporting_manager || '';
+            if (empReportingManager !== approverName && leaveTaggedManager !== approverName) {
                 return res.status(403).json({
                     success: false,
                     message: 'Only the assigned reporting manager or admin can approve or reject this leave'

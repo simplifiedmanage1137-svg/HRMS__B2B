@@ -1,28 +1,87 @@
 // src/components/Employee/ApplyLeave.jsx
 import React, { useState, useEffect } from 'react';
 import {
-  Card, Form, Button, Row, Col, Alert,
-  Spinner, Badge, ProgressBar
+  Form, Button, Row, Col, Alert,
+  Spinner, ProgressBar, Modal
 } from 'react-bootstrap';
 import {
   FaCalendarAlt,
   FaPaperPlane,
   FaTimes,
   FaInfoCircle,
-  FaUmbrellaBeach,
   FaClock,
   FaCheckCircle,
   FaExclamationTriangle,
-  FaMoneyBillWave,
   FaHourglassHalf,
   FaTrophy,
-  FaArrowLeft
+  FaArrowLeft,
+  FaShieldAlt,
+  FaUsers,
+  FaUserCircle,
+  FaFileAlt,
+  FaBriefcase
 } from 'react-icons/fa';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useNavigate } from 'react-router-dom';
+
+// ── Design tokens (indigo/enterprise palette — matches Admin Leave Requests) ──
+const AL = {
+  primary: '#4F46E5',
+  success: '#10B981',
+  warning: '#F59E0B',
+  danger: '#EF4444',
+  border: '#E5E7EB',
+  borderSoft: '#EEF2F7',
+};
+
+const TYPE_META = {
+  Unpaid:      { emoji: '💰', bg: '#FEF3E2', color: '#B45309' },
+  Annual:      { emoji: '🌴', bg: '#DCFCE7', color: '#15803D' },
+  'Comp-Off':  { emoji: '🎉', bg: '#F3E8FF', color: '#7C3AED' },
+  Sick:        { emoji: '🤒', bg: '#FEE2E2', color: '#B91C1C' },
+  Personal:    { emoji: '👤', bg: '#E0E7FF', color: '#4338CA' },
+  Maternity:   { emoji: '🤱', bg: '#FCE7F3', color: '#BE185D' },
+  Paternity:   { emoji: '👨‍👧', bg: '#E0F2FE', color: '#0369A1' },
+  Bereavement: { emoji: '💐', bg: '#F1F5F9', color: '#475569' },
+  Birthday:    { emoji: '🎂', bg: '#FEF9C3', color: '#854D0E' },
+};
+
+const STATUS_META = {
+  pending:  { bg: 'rgba(245,158,11,.14)', color: '#b45309' },
+  approved: { bg: 'rgba(16,185,129,.14)', color: '#047857' },
+  rejected: { bg: 'rgba(239,68,68,.14)', color: '#b91c1c' },
+};
+
+const AL_CSS = `
+.al-card { background:#fff; border-radius:20px; border:1px solid ${AL.borderSoft}; box-shadow:0 10px 35px rgba(16,24,40,.06); }
+.al-card-header { border-bottom:1px solid ${AL.borderSoft}; }
+.al-icon-circle { width:38px; height:38px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0; }
+.al-btn-outline { display:inline-flex; align-items:center; gap:6px; background:#fff; border:1px solid ${AL.border}; color:#344054; border-radius:10px; padding:7px 14px; font-size:12.5px; font-weight:600; cursor:pointer; white-space:nowrap; }
+.al-btn-outline:hover { background:#F9FAFB; }
+.al-btn-primary { display:inline-flex; align-items:center; justify-content:center; gap:8px; background:linear-gradient(135deg,#4F46E5,#6366F1); color:#fff; border:none; border-radius:12px; padding:10px 22px; font-weight:600; font-size:13.5px; box-shadow:0 6px 16px rgba(79,70,229,.28); cursor:pointer; transition:transform .12s ease, box-shadow .12s ease; }
+.al-btn-primary:hover { transform:translateY(-1px); box-shadow:0 10px 22px rgba(79,70,229,.35); color:#fff; }
+.al-btn-primary:disabled { opacity:.6; cursor:not-allowed; transform:none; }
+.al-recent-row { display:flex; align-items:center; gap:12px; padding:11px 0; border-bottom:1px solid #F5F6F8; }
+.al-recent-row:last-child { border-bottom:none; }
+.al-recent-icon { width:38px; height:38px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+.al-status-pill { display:inline-flex; align-items:center; border-radius:999px; padding:4px 12px; font-size:11.5px; font-weight:700; white-space:nowrap; text-transform:capitalize; }
+.al-policy-icon { width:32px; height:32px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.al-policy-list { list-style:disc; padding-left:18px; margin:6px 0 0; font-size:12px; color:#667085; }
+.al-policy-list li { margin-bottom:4px; }
+.al-form-control, .al-select, .al-textarea, textarea.al-textarea { border:1px solid ${AL.border} !important; border-radius:12px !important; font-size:13.5px !important; }
+.al-form-control:focus, .al-select:focus, .al-textarea:focus { border-color:${AL.primary} !important; box-shadow:0 0 0 3px rgba(79,70,229,.12) !important; }
+.al-radio .form-check-input { cursor:pointer; }
+.al-radio .form-check-input:checked { background-color:${AL.primary}; border-color:${AL.primary}; }
+.al-radio .form-check-label { cursor:pointer; }
+.al-balance-banner { border-radius:14px; padding:16px; text-align:center; }
+.al-balance-icon-check { width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 8px; }
+.al-select-icon-wrap { position:relative; }
+.al-select-icon-wrap .al-select-emoji { position:absolute; left:12px; top:50%; transform:translateY(-50%); pointer-events:none; font-size:14px; z-index:5; }
+.al-select-icon-wrap select { padding-left:34px !important; }
+`;
 
 const ApplyLeave = () => {
   const { user } = useAuth();
@@ -42,6 +101,9 @@ const ApplyLeave = () => {
     eligible_from_date: ''
   });
   const [recentLeaves, setRecentLeaves] = useState([]);
+  const [allLeaves, setAllLeaves] = useState([]);
+  const [showAllRecent, setShowAllRecent] = useState(false);
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
   const [employeeDetails, setEmployeeDetails] = useState({
     joining_date: '',
     reporting_manager: '',
@@ -95,7 +157,7 @@ const ApplyLeave = () => {
         : '';
       types.push({
         value: 'Birthday',
-        label: `🎂 Birthday Leave${formatted ? ` (${formatted})` : ''}`,
+        label: `Birthday Leave${formatted ? ` (${formatted})` : ''}`,
         icon: '🎂',
         birthday_date: birthdayDate
       });
@@ -143,10 +205,12 @@ const ApplyLeave = () => {
         clearTimeout(timeoutId);
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   useEffect(() => {
     calculateDays();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.start_date, formData.end_date, formData.leave_duration]);
 
   useEffect(() => {
@@ -183,28 +247,8 @@ const ApplyLeave = () => {
         end_date: bd,
       }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.leave_type, employeeDetails.dob]);
-
-  // In ApplyLeave.jsx - Add this helper function
-  const calculateMonthsFromJoining = (joiningDate, currentDate = new Date()) => {
-    const join = new Date(joiningDate);
-    const today = new Date(currentDate);
-
-    if (today < join) {
-      return 0;
-    }
-
-    let totalMonths = (today.getFullYear() - join.getFullYear()) * 12 +
-      (today.getMonth() - join.getMonth());
-
-    if (today.getDate() < join.getDate()) {
-      totalMonths = Math.max(0, totalMonths - 1);
-    }
-
-    return totalMonths;
-  };
-
-  // In ApplyLeave.jsx - Replace the fetchEmployeeDetails function with this:
 
   const fetchEmployeeDetails = async () => {
     try {
@@ -213,19 +257,16 @@ const ApplyLeave = () => {
       const joiningDate = new Date(response.data.joining_date);
       const today = new Date();
 
-      // LOCAL CALCULATION FUNCTION - Don't rely on backend service
-      const calculateMonthsFromJoining = (joiningDate, currentDate = new Date()) => {
-        const join = new Date(joiningDate);
-        const today = new Date(currentDate);
+      const calculateMonthsFromJoining = (joinDateVal, currentDate = new Date()) => {
+        const join = new Date(joinDateVal);
+        const now = new Date(currentDate);
 
-        if (today < join) {
-          return 0;
-        }
+        if (now < join) return 0;
 
-        let totalMonths = (today.getFullYear() - join.getFullYear()) * 12 +
-          (today.getMonth() - join.getMonth());
+        let totalMonths = (now.getFullYear() - join.getFullYear()) * 12 +
+          (now.getMonth() - join.getMonth());
 
-        if (today.getDate() < join.getDate()) {
+        if (now.getDate() < join.getDate()) {
           totalMonths = Math.max(0, totalMonths - 1);
         }
 
@@ -251,7 +292,6 @@ const ApplyLeave = () => {
 
     } catch (error) {
       console.error('Error fetching employee details:', error);
-      // Set default values on error
       setEmployeeDetails({
         joining_date: '',
         reporting_manager: '',
@@ -263,12 +303,8 @@ const ApplyLeave = () => {
   const fetchLeaveBalance = async () => {
     try {
       setLoading(true);
-      console.log('📊 Fetching leave balance for employee:', user?.employeeId);
-
       const response = await axios.get(API_ENDPOINTS.LEAVE_BALANCE(user?.employeeId));
-      console.log('📊 Leave balance response:', response.data);
 
-      // The API already returns months_completed
       const isProbationComplete = response.data.is_probation_complete === true || response.data.is_eligible === true;
       setLeaveBalance({
         available: parseFloat(response.data.available) || 0,
@@ -283,19 +319,15 @@ const ApplyLeave = () => {
         completed_months_in_year: response.data.accrual_info?.months_this_year || 0,
         message: response.data.message || '',
         is_eligible: isProbationComplete,
-        months_completed: response.data.months_completed || 0,  // ✅ This comes from API
+        months_completed: response.data.months_completed || 0,
         is_probation_complete: isProbationComplete,
         eligible_from_date: response.data.eligible_from_date || ''
       });
 
-      console.log('✅ Leave balance set successfully');
       setLoading(false);
 
     } catch (error) {
       console.error('❌ Error fetching leave balance:', error);
-      console.error('Error details:', error.response?.data);
-
-      // Set default values on error
       setLeaveBalance({
         available: 0,
         total_accrued: 0,
@@ -319,7 +351,9 @@ const ApplyLeave = () => {
   const fetchRecentLeaves = async () => {
     try {
       const response = await axios.get(API_ENDPOINTS.LEAVE_BY_EMPLOYEE(user.employeeId));
-      setRecentLeaves(response.data.slice(0, 3));
+      const leaves = response.data || [];
+      setAllLeaves(leaves);
+      setRecentLeaves(leaves.slice(0, 3));
     } catch (error) {
       console.error('Error fetching recent leaves:', error);
     }
@@ -333,7 +367,6 @@ const ApplyLeave = () => {
       ]);
       const tls  = (tlRes.status  === 'fulfilled' ? tlRes.value.data.managers  : []) || [];
       const mgrs = (mgrRes.status === 'fulfilled' ? mgrRes.value.data.managers : []) || [];
-      // tag each entry so the dropdown can group them
       setManagers([
         ...tls.map(m  => ({ ...m, _group: 'TL' })),
         ...mgrs.map(m => ({ ...m, _group: 'Manager' })),
@@ -385,12 +418,10 @@ const ApplyLeave = () => {
       [name]: value
     }));
 
-    // Clear error for this field
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
 
-    // Auto-set end date for half day
     if (name === 'leave_duration' && value === 'Half Day') {
       setFormData(prev => ({
         ...prev,
@@ -398,8 +429,6 @@ const ApplyLeave = () => {
       }));
     }
 
-    // Full Day (default selection): a single-day leave only needs the start date,
-    // so auto-fill end date with it unless the user already picked a different end date
     if (name === 'start_date' && formData.leave_duration === 'Full Day' && !formData.end_date) {
       setFormData(prev => ({
         ...prev,
@@ -441,7 +470,6 @@ const ApplyLeave = () => {
       newErrors.reporting_manager = 'Reporting manager is required';
     }
 
-    // Check leave balance (Birthday leave has no balance requirement)
     if (formData.leave_type === 'Birthday') {
       if (employeeDetails.dob) {
         const bd = getBirthdayThisYear();
@@ -476,12 +504,11 @@ const ApplyLeave = () => {
     try {
       const leaveData = {
         ...formData,
-        employee_id: user.employeeId,  // This is already in the body
+        employee_id: user.employeeId,
         days_count: calculatedDays,
         applied_date: new Date().toISOString().split('T')[0]
       };
 
-      // REMOVE the custom headers - just use default axios instance
       const response = await axios.post(API_ENDPOINTS.LEAVE_APPLY, leaveData);
 
       if (response.data.success) {
@@ -492,7 +519,6 @@ const ApplyLeave = () => {
           'success'
         );
 
-        // Reset form
         setFormData({
           leave_type: leaveBalance.is_eligible ? 'Annual' : (leaveBalance.comp_off_balance > 0 ? 'Comp-Off' : 'Unpaid'),
           leave_duration: 'Full Day',
@@ -503,11 +529,9 @@ const ApplyLeave = () => {
           reporting_manager: employeeDetails.reporting_manager
         });
 
-        // Refresh data
         await fetchLeaveBalance();
         await fetchRecentLeaves();
 
-        // Navigate back after short delay
         setTimeout(() => {
           navigate('/employee/dashboard');
         }, 2000);
@@ -570,51 +594,144 @@ const ApplyLeave = () => {
   }
 
   const availableLeaveTypes = getAvailableLeaveTypes();
+  const displayedRecent = showAllRecent ? allLeaves : recentLeaves;
+  const currentTypeMeta = TYPE_META[formData.leave_type];
 
   return (
-    <div className="p-2 p-md-3 p-lg-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
-      {/* Header - Responsive */}
-      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
-        <div>
-          <h5 className="mb-1 d-flex align-items-center">
-            <FaUmbrellaBeach className="me-2 text-primary" />
-            Apply for Leave
-          </h5>
-          <p className="text-muted mb-0 small">
-            {leaveBalance.is_eligible
-              ? 'You can apply for any type of leave'
-              : leaveBalance.comp_off_balance > 0
-                ? 'During probation, Comp-Off and Unpaid Leave are available'
-                : 'During probation, only Unpaid Leave is available'}
-          </p>
-        </div>
-        <div className="d-flex gap-2 ms-0 ms-md-auto">
-          <Button
-            variant="outline-secondary"
-            size="sm"
-            onClick={handleCancel}
-            className="d-inline-flex align-items-center"
-          >
-            <FaTimes className="me-2" size={12} />
-            Cancel
-          </Button>
-          <button
-            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
-            onClick={() => navigate(-1)}
-          >
-            <FaArrowLeft size={12} /> Back
-          </button>
-        </div>
-      </div>
+    <div className="p-2 p-md-3 p-lg-4" style={{ backgroundColor: '#F8FAFC', minHeight: '100vh' }}>
+      <style>{AL_CSS}</style>
 
+      {/* Row 1: Recent Requests + Leave Policy */}
+      <Row className="g-3 mb-3">
+        <Col lg={6}>
+          <div className="al-card h-100">
+            <div className="d-flex align-items-center justify-content-between p-3 al-card-header">
+              <div className="d-flex align-items-center gap-2">
+                <div className="al-icon-circle" style={{ background: 'rgba(79,70,229,.12)', color: AL.primary }}>
+                  <FaCalendarAlt size={15} />
+                </div>
+                <h6 className="mb-0 fw-bold">Recent Requests</h6>
+              </div>
+              {allLeaves.length > 3 && (
+                <button className="al-btn-outline" onClick={() => setShowAllRecent(v => !v)}>
+                  {showAllRecent ? 'Show Less' : 'View All'}
+                </button>
+              )}
+            </div>
+            <div className="p-3">
+              {displayedRecent.length === 0 ? (
+                <div className="text-muted text-center small py-4">No leave requests yet</div>
+              ) : (
+                <div style={showAllRecent ? { maxHeight: 320, overflowY: 'auto' } : {}}>
+                  {displayedRecent.map((leave, idx) => {
+                    const meta = TYPE_META[leave.leave_type] || { emoji: '📄', bg: '#F1F5F9', color: '#475569' };
+                    const status = STATUS_META[leave.status] || STATUS_META.pending;
+                    return (
+                      <div key={leave.id || idx} className="al-recent-row">
+                        <div className="al-recent-icon" style={{ background: meta.bg }}>
+                          <span>{meta.emoji}</span>
+                        </div>
+                        <div className="flex-grow-1 overflow-hidden">
+                          <div className="fw-semibold small">{leave.leave_type}</div>
+                          <div className="text-muted text-truncate" style={{ fontSize: 12 }}>
+                            {formatDate(leave.start_date)}
+                            {leave.start_date !== leave.end_date && ` - ${formatDate(leave.end_date)}`}
+                          </div>
+                        </div>
+                        <span className="al-status-pill" style={{ background: status.bg, color: status.color }}>
+                          {leave.status}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </Col>
+
+        <Col lg={6}>
+          <div className="al-card h-100">
+            <div className="d-flex align-items-center justify-content-between p-3 al-card-header">
+              <div className="d-flex align-items-center gap-2">
+                <div className="al-icon-circle" style={{ background: 'rgba(79,70,229,.12)', color: AL.primary }}>
+                  <FaShieldAlt size={14} />
+                </div>
+                <h6 className="mb-0 fw-bold">Leave Policy</h6>
+              </div>
+              <button className="al-btn-outline" onClick={() => setShowPolicyModal(true)}>
+                View Policy
+              </button>
+            </div>
+            <div className="p-3">
+              <Row className="g-3">
+                <Col xs={12} md={4}>
+                  <div className="al-policy-icon" style={{ background: '#E0E7FF', color: AL.primary }}>
+                    <FaCalendarAlt size={13} />
+                  </div>
+                  <div className="fw-semibold small mt-2">Comp-Off Leave</div>
+                  <ul className="al-policy-list">
+                    <li>Earned by working on holidays (8+ hours)</li>
+                    <li>1 holiday work = 1 Comp-Off day</li>
+                    <li>Can be used during probation period</li>
+                    <li>Valid for 90 days from earning</li>
+                  </ul>
+                </Col>
+                <Col xs={12} md={4}>
+                  <div className="al-policy-icon" style={{ background: '#DCFCE7', color: '#15803D' }}>
+                    <FaUsers size={13} />
+                  </div>
+                  <div className="fw-semibold small mt-2">
+                    During Probation <span className="text-muted fw-normal">(First 6 months)</span>
+                  </div>
+                  <ul className="al-policy-list">
+                    <li>Comp-Off and Unpaid Leave available</li>
+                    <li>Regular leaves accrue but cannot be used</li>
+                  </ul>
+                </Col>
+                <Col xs={12} md={4}>
+                  <div className="al-policy-icon" style={{ background: '#DBEAFE', color: '#1D4ED8' }}>
+                    <FaUserCircle size={13} />
+                  </div>
+                  <div className="fw-semibold small mt-2">
+                    After Probation <span className="text-muted fw-normal">(6+ months)</span>
+                  </div>
+                  <ul className="al-policy-list">
+                    <li>All leave types become available</li>
+                    <li>Annual leaves: 1.5 days/month (18 days/year)</li>
+                  </ul>
+                </Col>
+              </Row>
+            </div>
+          </div>
+        </Col>
+      </Row>
+
+      {/* Row 2: Leave Request Form + Leave Balance */}
       <Row className="g-3">
-        {/* Main Form Column */}
         <Col lg={8}>
-          <Card className="border-0 shadow-sm">
-            <Card.Header className="bg-white py-2 py-md-3">
-              <h6 className="mb-0 small">Leave Request Form</h6>
-            </Card.Header>
-            <Card.Body className="p-2 p-md-3">
+          <div className="al-card">
+            <div className="d-flex flex-column flex-sm-row align-items-start align-items-sm-center justify-content-between p-3 al-card-header gap-2">
+              <div className="d-flex align-items-center gap-2">
+                <div className="al-icon-circle" style={{ background: 'rgba(79,70,229,.12)', color: AL.primary }}>
+                  <FaFileAlt size={15} />
+                </div>
+                <div>
+                  <h6 className="mb-0 fw-bold">Leave Request Form</h6>
+                  <div className="text-muted" style={{ fontSize: 12.5 }}>Fill in the details to apply for leave</div>
+                </div>
+              </div>
+              <div className="d-flex gap-2">
+                <button type="button" className="al-btn-outline" onClick={handleCancel}>
+                  <FaTimes size={11} /> Cancel
+                </button>
+                <button type="button" className="al-btn-outline" onClick={() => navigate(-1)}>
+                  <FaArrowLeft size={11} /> Back
+                </button>
+              </div>
+            </div>
+
+            <div className="p-3">
               {/* Probation Status Alert */}
               {!leaveBalance.is_probation_complete && (
                 <Alert variant="info" className="mb-4 py-2">
@@ -669,81 +786,68 @@ const ApplyLeave = () => {
               )}
 
               <Form onSubmit={handleSubmit}>
-                {/* Leave Type */}
-                <Form.Group className="mb-3">
-                  <Form.Label className="small fw-semibold text-muted">
-                    Leave Type <span className="text-danger">*</span>
-                  </Form.Label>
-                  <Form.Select
-                    name="leave_type"
-                    value={formData.leave_type}
-                    onChange={handleChange}
-                    size="sm"
-                    isInvalid={!!errors.leave_type}
-                  >
-                    {availableLeaveTypes.map(type => (
-                      <option key={type.value} value={type.value}>
-                        {type.icon} {type.label}
-                      </option>
-                    ))}
-                  </Form.Select>
-                  {errors.leave_type && (
-                    <Form.Control.Feedback type="invalid">
-                      {errors.leave_type}
-                    </Form.Control.Feedback>
-                  )}
-                  {formData.leave_type === 'Comp-Off' && (
-                    <Form.Text className="text-purple small d-block mt-1">
-                      <FaTrophy className="me-1" size={10} />
-                      Using Comp-Off leave - this won't affect your regular leave balance
-                    </Form.Text>
-                  )}
-                  {formData.leave_type === 'Birthday' && (
-                    <div className="mt-2 px-3 py-2 rounded-3 d-flex align-items-start gap-2"
-                      style={{ background: '#fef9c3', border: '1px solid #fde047' }}>
-                      <span style={{ fontSize: 18 }}>🎂</span>
-                      <div>
-                        <div className="fw-semibold small" style={{ color: '#854d0e' }}>Birthday Leave</div>
-                        <div className="small" style={{ color: '#713f12' }}>
-                          This is a paid day off on your birthday — no balance will be deducted.
-                          {getBirthdayThisYear() && (
-                            <span> Your birthday this year: <strong>{new Date(getBirthdayThisYear() + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>.</span>
-                          )}
-                        </div>
+                <Row className="g-3 mb-1">
+                  {/* Leave Type */}
+                  <Col xs={12} md={6}>
+                    <Form.Group>
+                      <Form.Label className="small fw-semibold text-muted">
+                        Leave Type <span className="text-danger">*</span>
+                      </Form.Label>
+                      <div className="al-select-icon-wrap">
+                        {currentTypeMeta && <span className="al-select-emoji">{currentTypeMeta.emoji}</span>}
+                        <Form.Select
+                          name="leave_type"
+                          value={formData.leave_type}
+                          onChange={handleChange}
+                          size="sm"
+                          className="al-select"
+                          isInvalid={!!errors.leave_type}
+                        >
+                          {availableLeaveTypes.map(type => (
+                            <option key={type.value} value={type.value}>
+                              {type.icon} {type.label}
+                            </option>
+                          ))}
+                        </Form.Select>
                       </div>
-                    </div>
-                  )}
-                </Form.Group>
+                      {errors.leave_type && (
+                        <Form.Control.Feedback type="invalid" className="d-block">
+                          {errors.leave_type}
+                        </Form.Control.Feedback>
+                      )}
+                    </Form.Group>
+                  </Col>
 
-                {/* Leave Duration */}
-                <Form.Group className="mb-3">
-                  <Form.Label className="small fw-semibold text-muted">
-                    Leave Duration <span className="text-danger">*</span>
-                  </Form.Label>
-                  <div className="d-flex flex-wrap">
-                    <Form.Check
-                      type="radio"
-                      label="Full Day"
-                      name="leave_duration"
-                      value="Full Day"
-                      checked={formData.leave_duration === 'Full Day'}
-                      onChange={handleChange}
-                      className="me-3 mb-2"
-                      id="full-day-radio"
-                    />
-                    <Form.Check
-                      type="radio"
-                      label="Half Day"
-                      name="leave_duration"
-                      value="Half Day"
-                      disabled={formData.leave_type === 'Birthday'}
-                      checked={formData.leave_duration === 'Half Day'}
-                      onChange={handleChange}
-                      className="mb-2"
-                      id="half-day-radio"
-                    />
-                  </div>
-                </Form.Group>
+                  {/* Leave Duration */}
+                  <Col xs={12} md={6}>
+                    <Form.Group>
+                      <Form.Label className="small fw-semibold text-muted d-block">
+                        Leave Duration <span className="text-danger">*</span>
+                      </Form.Label>
+                      <div className="d-flex align-items-center gap-4 al-radio" style={{ height: 31 }}>
+                        <Form.Check
+                          type="radio"
+                          label="Full Day"
+                          name="leave_duration"
+                          value="Full Day"
+                          checked={formData.leave_duration === 'Full Day'}
+                          onChange={handleChange}
+                          id="full-day-radio"
+                        />
+                        <Form.Check
+                          type="radio"
+                          label="Half Day"
+                          name="leave_duration"
+                          value="Half Day"
+                          disabled={formData.leave_type === 'Birthday'}
+                          checked={formData.leave_duration === 'Half Day'}
+                          onChange={handleChange}
+                          id="half-day-radio"
+                        />
+                      </div>
+                    </Form.Group>
+                  </Col>
+                </Row>
 
                 {/* Half Day Type */}
                 {formData.leave_duration === 'Half Day' && (
@@ -756,6 +860,7 @@ const ApplyLeave = () => {
                       value={formData.half_day_type}
                       onChange={handleChange}
                       size="sm"
+                      className="al-select"
                       isInvalid={!!errors.half_day_type}
                     >
                       <option value="">Choose which half...</option>
@@ -773,8 +878,30 @@ const ApplyLeave = () => {
                   </Form.Group>
                 )}
 
+                {formData.leave_type === 'Comp-Off' && (
+                  <Form.Text className="text-purple small d-block mb-3">
+                    <FaTrophy className="me-1" size={10} />
+                    Using Comp-Off leave - this won't affect your regular leave balance
+                  </Form.Text>
+                )}
+                {formData.leave_type === 'Birthday' && (
+                  <div className="mb-3 px-3 py-2 rounded-3 d-flex align-items-start gap-2"
+                    style={{ background: '#fef9c3', border: '1px solid #fde047' }}>
+                    <span style={{ fontSize: 18 }}>🎂</span>
+                    <div>
+                      <div className="fw-semibold small" style={{ color: '#854d0e' }}>Birthday Leave</div>
+                      <div className="small" style={{ color: '#713f12' }}>
+                        This is a paid day off on your birthday — no balance will be deducted.
+                        {getBirthdayThisYear() && (
+                          <span> Your birthday this year: <strong>{new Date(getBirthdayThisYear() + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>.</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Date Range */}
-                <Row className="g-2 mb-3">
+                <Row className="g-3 mb-3">
                   <Col sm={6}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
@@ -786,13 +913,14 @@ const ApplyLeave = () => {
                         value={formData.start_date}
                         onChange={handleChange}
                         size="sm"
+                        className="al-form-control"
                         isInvalid={!!errors.start_date}
                         min={formData.leave_type === 'Birthday' ? undefined : new Date().toISOString().split('T')[0]}
                         readOnly={formData.leave_type === 'Birthday'}
                         style={formData.leave_type === 'Birthday' ? { background: '#f0fdf4', cursor: 'not-allowed' } : {}}
                       />
                       {errors.start_date && (
-                        <Form.Control.Feedback type="invalid">
+                        <Form.Control.Feedback type="invalid" className="d-block">
                           {errors.start_date}
                         </Form.Control.Feedback>
                       )}
@@ -810,13 +938,14 @@ const ApplyLeave = () => {
                         value={formData.end_date}
                         onChange={handleChange}
                         size="sm"
+                        className="al-form-control"
                         isInvalid={!!errors.end_date}
                         disabled={formData.leave_duration === 'Half Day' || formData.leave_type === 'Birthday'}
                         min={formData.start_date || new Date().toISOString().split('T')[0]}
                         style={formData.leave_type === 'Birthday' ? { background: '#f0fdf4', cursor: 'not-allowed' } : {}}
                       />
                       {errors.end_date && (
-                        <Form.Control.Feedback type="invalid">
+                        <Form.Control.Feedback type="invalid" className="d-block">
                           {errors.end_date}
                         </Form.Control.Feedback>
                       )}
@@ -836,11 +965,12 @@ const ApplyLeave = () => {
                     value={formData.reason}
                     onChange={handleChange}
                     size="sm"
+                    className="al-textarea"
                     placeholder="Please provide detailed reason for your leave request..."
                     isInvalid={!!errors.reason}
                   />
                   {errors.reason && (
-                    <Form.Control.Feedback type="invalid">
+                    <Form.Control.Feedback type="invalid" className="d-block">
                       {errors.reason}
                     </Form.Control.Feedback>
                   )}
@@ -859,6 +989,7 @@ const ApplyLeave = () => {
                     value={formData.reporting_manager}
                     onChange={handleChange}
                     size="sm"
+                    className="al-select"
                     isInvalid={!!errors.reporting_manager}
                   >
                     <option value="">-- Select Reporting Manager --</option>
@@ -880,7 +1011,7 @@ const ApplyLeave = () => {
                     })}
                   </Form.Select>
                   {errors.reporting_manager && (
-                    <Form.Control.Feedback type="invalid">
+                    <Form.Control.Feedback type="invalid" className="d-block">
                       {errors.reporting_manager}
                     </Form.Control.Feedback>
                   )}
@@ -901,64 +1032,58 @@ const ApplyLeave = () => {
 
                 {/* Submit Buttons */}
                 <div className="d-flex flex-wrap gap-2">
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    size="sm"
-                    disabled={submitting}
-                    className="px-4 d-inline-flex align-items-center"
-                  >
+                  <button type="submit" className="al-btn-primary" disabled={submitting}>
                     {submitting ? (
                       <>
-                        <Spinner size="sm" animation="border" className="me-2" />
-                        <span className="d-none d-sm-inline">Submitting...</span>
+                        <Spinner size="sm" animation="border" />
+                        Submitting...
                       </>
                     ) : (
                       <>
-                        <FaPaperPlane className="me-2" size={12} />
+                        <FaPaperPlane size={12} />
                         Submit Request
                       </>
                     )}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline-secondary"
-                    size="sm"
-                    onClick={handleCancel}
-                  >
+                  </button>
+                  <button type="button" className="al-btn-outline px-4" onClick={handleCancel}>
                     Cancel
-                  </Button>
+                  </button>
                 </div>
               </Form>
-            </Card.Body>
-          </Card>
+            </div>
+          </div>
         </Col>
 
-        {/* Right Column - Leave Balance & Info */}
+        {/* Right Column - Leave Balance */}
         <Col lg={4}>
-          {/* Leave Balance Card */}
-          <Card className="border-0 shadow-sm mb-3">
-            <Card.Header className="bg-white py-2 py-md-3">
-              <h6 className="mb-0 small d-flex align-items-center">
-                <FaInfoCircle className="me-2 text-primary" size={14} />
-                Your Leave Balance
-              </h6>
-            </Card.Header>
-            <Card.Body className="p-2 p-md-3">
-              {/* Status Badge */}
-              {/* Status Badge */}
-              <div className={`text-center mb-3 p-2 rounded ${leaveBalance.is_probation_complete ? 'bg-success bg-opacity-10' : 'bg-info bg-opacity-10'}`}>
+          <div className="al-card">
+            <div className="d-flex align-items-center gap-2 p-3 al-card-header">
+              <div className="al-icon-circle" style={{ background: 'rgba(79,70,229,.12)', color: AL.primary }}>
+                <FaBriefcase size={14} />
+              </div>
+              <h6 className="mb-0 fw-bold">Your Leave Balance</h6>
+            </div>
+            <div className="p-3">
+              {/* Status Banner */}
+              <div
+                className="al-balance-banner mb-3"
+                style={{ background: leaveBalance.is_probation_complete ? 'rgba(16,185,129,.08)' : 'rgba(79,70,229,.08)' }}
+              >
                 {leaveBalance.is_probation_complete ? (
                   <>
-                    <FaCheckCircle className="text-success mb-2" size={24} />
-                    <p className="small text-success fw-semibold mb-0">Probation Completed</p>
-                    <p className="small text-muted mt-1">All leave types available</p>
+                    <div className="al-balance-icon-check" style={{ background: 'rgba(16,185,129,.15)' }}>
+                      <FaCheckCircle color={AL.success} size={18} />
+                    </div>
+                    <p className="small fw-semibold mb-0" style={{ color: AL.success }}>Probation Completed</p>
+                    <p className="small text-muted mt-1 mb-0">All leave types available</p>
                   </>
                 ) : (
                   <>
-                    <FaHourglassHalf className="text-info mb-2" size={24} />
-                    <p className="small text-info fw-semibold mb-0">Probation Period</p>
-                    <p className="small text-muted mt-1">
+                    <div className="al-balance-icon-check" style={{ background: 'rgba(79,70,229,.15)' }}>
+                      <FaHourglassHalf color={AL.primary} size={18} />
+                    </div>
+                    <p className="small fw-semibold mb-0" style={{ color: AL.primary }}>Probation Period</p>
+                    <p className="small text-muted mt-1 mb-0">
                       {leaveBalance.comp_off_balance > 0
                         ? 'Comp-Off & Unpaid Leave available'
                         : 'Only Unpaid Leave available'}
@@ -969,29 +1094,29 @@ const ApplyLeave = () => {
 
               {/* Comp-Off Balance Display */}
               {leaveBalance.comp_off_balance > 0 && (
-                <div className="text-center mb-3 p-2 bg-purple bg-opacity-10 rounded">
-                  <FaTrophy className="text-purple mb-2" size={24} />
-                  <h5 className="text-purple fw-bold mb-0">{leaveBalance.comp_off_balance}</h5>
-                  <p className="text-muted small">Comp-Off Days Available</p>
-                  <Badge bg="purple" className="mt-1">
+                <div className="al-balance-banner mb-3" style={{ background: 'rgba(124,58,237,.08)' }}>
+                  <FaTrophy color="#7C3AED" size={20} className="mb-2" />
+                  <h5 className="fw-bold mb-0" style={{ color: '#7C3AED' }}>{leaveBalance.comp_off_balance}</h5>
+                  <p className="text-muted small mb-0">Comp-Off Days Available</p>
+                  <span className="al-status-pill mt-1 d-inline-flex" style={{ background: 'rgba(124,58,237,.14)', color: '#7C3AED' }}>
                     Earned by working on holidays
-                  </Badge>
+                  </span>
                 </div>
               )}
 
               {/* Regular Leave Balance */}
               <div className="text-center mb-3">
-                <h3 className={`display-6 fw-bold ${leaveBalance.is_probation_complete ? 'text-primary' : 'text-muted'}`}>
+                <h2 className="fw-bold mb-0" style={{ color: leaveBalance.is_probation_complete ? AL.primary : '#98A2B3', fontSize: 40 }}>
                   {leaveBalance.is_probation_complete ? leaveBalance.available : '0'}
-                </h3>
-                <p className="text-muted small">
+                </h2>
+                <p className="text-muted small mb-0">
                   {leaveBalance.is_probation_complete ? 'Available Leaves' : 'Leaves Available (During Probation)'}
                 </p>
                 {!leaveBalance.is_probation_complete && (
                   <>
-                    <Badge bg="info" className="mt-1">
+                    <span className="al-status-pill mt-2 d-inline-flex" style={{ background: 'rgba(79,70,229,.12)', color: AL.primary }}>
                       Accrued: {leaveBalance.total_accrued} days (usable after probation)
-                    </Badge>
+                    </span>
                     <div className="mt-2 small text-muted">
                       <FaInfoCircle className="me-1" size={10} />
                       You have earned {leaveBalance.total_accrued} leaves, but can only use them after completing 6 months.
@@ -1002,40 +1127,39 @@ const ApplyLeave = () => {
 
               {/* Leave Balance Details */}
               <div className="mb-3">
-                <div className="d-flex justify-content-between mb-1 small">
+                <div className="d-flex justify-content-between mb-2 small">
                   <span className="text-muted">Total Accrued:</span>
                   <span className="fw-semibold">{leaveBalance.total_accrued} days</span>
                 </div>
-                <div className="d-flex justify-content-between mb-1 small">
+                <div className="d-flex justify-content-between mb-2 small">
                   <span className="text-muted">Used (Paid):</span>
                   <span className="fw-semibold">{leaveBalance.used} days</span>
                 </div>
-                <div className="d-flex justify-content-between mb-1 small">
+                <div className="d-flex justify-content-between mb-2 small">
                   <span className="text-muted">Pending (Paid):</span>
                   <span className="fw-semibold">{leaveBalance.pending} days</span>
                 </div>
                 {(leaveBalance.unpaid_used > 0 || leaveBalance.unpaid_pending > 0) && (
                   <>
-                    <div className="d-flex justify-content-between mb-1 small">
-                      <span className="text-danger">Unpaid Used:</span>
-                      <span className="fw-semibold text-danger">{leaveBalance.unpaid_used} days</span>
+                    <div className="d-flex justify-content-between mb-2 small">
+                      <span style={{ color: AL.danger }}>Unpaid Used:</span>
+                      <span className="fw-semibold" style={{ color: AL.danger }}>{leaveBalance.unpaid_used} days</span>
                     </div>
                     {leaveBalance.unpaid_pending > 0 && (
-                      <div className="d-flex justify-content-between mb-1 small">
-                        <span className="text-warning">Unpaid Pending:</span>
-                        <span className="fw-semibold text-warning">{leaveBalance.unpaid_pending} days</span>
+                      <div className="d-flex justify-content-between mb-2 small">
+                        <span style={{ color: AL.warning }}>Unpaid Pending:</span>
+                        <span className="fw-semibold" style={{ color: AL.warning }}>{leaveBalance.unpaid_pending} days</span>
                       </div>
                     )}
                   </>
                 )}
 
-                {/* Progress Bar - Only show if eligible or for display */}
                 {leaveBalance.total_accrued > 0 && (
                   <>
                     <ProgressBar
                       now={(leaveBalance.used / leaveBalance.total_accrued) * 100}
                       variant={getLeaveBalanceColor()}
-                      style={{ height: '6px' }}
+                      style={{ height: '8px', borderRadius: 999 }}
                     />
                     <small className="text-muted d-block text-center mt-1">
                       {((leaveBalance.used / leaveBalance.total_accrued) * 100 || 0).toFixed(1)}% used
@@ -1073,7 +1197,7 @@ const ApplyLeave = () => {
               )}
 
               {/* Joining Info */}
-              <div className="mt-3 pt-2 border-top small text-muted">
+              <div className="mt-3 pt-3 small text-muted" style={{ borderTop: `1px solid ${AL.borderSoft}` }}>
                 <p className="mb-1">
                   <strong>Joining Date:</strong> {formatJoiningDate(employeeDetails.joining_date)}
                 </p>
@@ -1081,96 +1205,60 @@ const ApplyLeave = () => {
                   <strong>Months Completed:</strong> {leaveBalance.months_completed} / 6
                 </p>
                 {!leaveBalance.is_eligible ? (
-                  <p className="mb-0 text-info">
+                  <p className="mb-0" style={{ color: AL.primary }}>
                     <strong>Probation ends:</strong> {leaveBalance.eligible_from_date || 'N/A'}
                   </p>
                 ) : (
-                  <p className="mb-0 text-success">
+                  <p className="mb-0" style={{ color: AL.success }}>
                     <strong>Probation completed on:</strong> {leaveBalance.eligible_from_date}
                   </p>
                 )}
               </div>
-            </Card.Body>
-          </Card>
-
-          {/* Recent Leaves Card */}
-          {recentLeaves.length > 0 && (
-            <Card className="border-0 shadow-sm mb-3">
-              <Card.Header className="bg-white py-2 py-md-3">
-                <h6 className="mb-0 small d-flex align-items-center">
-                  <FaCalendarAlt className="me-2 text-primary" size={14} />
-                  Recent Requests
-                </h6>
-              </Card.Header>
-              <Card.Body className="p-0">
-                <div className="list-group list-group-flush">
-                  {recentLeaves.map((leave, index) => (
-                    <div key={leave.id || index} className="list-group-item py-2">
-                      <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
-                        <div>
-                          <span className="small fw-semibold d-block">
-                            {leave.leave_type === 'Comp-Off' ? '🎉 ' :
-                              leave.leave_type === 'Unpaid' ? '💰 ' : '🌴 '}
-                            {leave.leave_type}
-                          </span>
-                          <small className="text-muted d-block">
-                            {formatDate(leave.start_date)}
-                            {leave.start_date !== leave.end_date && ` - ${formatDate(leave.end_date)}`}
-                          </small>
-                        </div>
-                        <Badge
-                          bg={
-                            leave.status === 'approved' ? 'success' :
-                              leave.status === 'pending' ? 'warning' : 'danger'
-                          }
-                          pill
-                          className="ms-0 ms-sm-auto"
-                        >
-                          {leave.status}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card.Body>
-            </Card>
-          )}
-
-          {/* Info Card */}
-          <Card className="border-0 shadow-sm bg-light">
-            <Card.Body className="p-2 p-md-3">
-              <h6 className="small fw-semibold mb-2">Leave Policy</h6>
-              <ul className="small text-muted ps-3 mb-0">
-                <li>
-                  <strong>Comp-Off Leave:</strong>
-                  <ul className="ps-3 mt-1">
-                    <li>Earned by working on holidays (8+ hours)</li>
-                    <li>1 holiday work = 1 Comp-Off day</li>
-                    <li>Can be used during probation period</li>
-                    <li>Valid for 90 days from earning</li>
-                  </ul>
-                </li>
-                <li className="mt-2">
-                  <strong>During Probation (First 6 months):</strong>
-                  <ul className="ps-3 mt-1">
-                    <li>Comp-Off and Unpaid Leave available</li>
-                    <li>Regular leaves accrue but cannot be used</li>
-                  </ul>
-                </li>
-                <li className="mt-2">
-                  <strong>After Probation (6+ months):</strong>
-                  <ul className="ps-3 mt-1">
-                    <li>All leave types become available</li>
-                    <li>Annual leaves: 1.5 days/month (18 days/year)</li>
-                  </ul>
-                </li>
-                <li className="mt-2">Submit at least 3 days in advance</li>
-                <li>Medical leaves require doctor's note</li>
-              </ul>
-            </Card.Body>
-          </Card>
+            </div>
+          </div>
         </Col>
       </Row>
+
+      {/* Leave Policy Modal (full detail, includes items not shown in the compact card) */}
+      <Modal show={showPolicyModal} onHide={() => setShowPolicyModal(false)} centered size="lg">
+        <Modal.Header closeButton style={{ background: AL.primary, color: '#fff' }}>
+          <Modal.Title as="h6" className="mb-0 small fw-semibold d-flex align-items-center">
+            <FaShieldAlt className="me-2" size={13} /> Leave Policy
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="p-3">
+          <ul className="small text-muted ps-3 mb-0">
+            <li>
+              <strong>Comp-Off Leave:</strong>
+              <ul className="ps-3 mt-1">
+                <li>Earned by working on holidays (8+ hours)</li>
+                <li>1 holiday work = 1 Comp-Off day</li>
+                <li>Can be used during probation period</li>
+                <li>Valid for 90 days from earning</li>
+              </ul>
+            </li>
+            <li className="mt-2">
+              <strong>During Probation (First 6 months):</strong>
+              <ul className="ps-3 mt-1">
+                <li>Comp-Off and Unpaid Leave available</li>
+                <li>Regular leaves accrue but cannot be used</li>
+              </ul>
+            </li>
+            <li className="mt-2">
+              <strong>After Probation (6+ months):</strong>
+              <ul className="ps-3 mt-1">
+                <li>All leave types become available</li>
+                <li>Annual leaves: 1.5 days/month (18 days/year)</li>
+              </ul>
+            </li>
+            <li className="mt-2">Submit at least 3 days in advance</li>
+            <li>Medical leaves require doctor's note</li>
+          </ul>
+        </Modal.Body>
+        <Modal.Footer className="py-2">
+          <Button variant="secondary" size="sm" onClick={() => setShowPolicyModal(false)}>Close</Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 };
