@@ -29,8 +29,9 @@ import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import {
     DA, STATUS_PILL, LATE_PILL_ON_TIME, LATE_PILL_LATE, DA_TH_STYLE,
-    avatarColorFor, initialsFor, DA_CARD_STYLE, DA_GRADIENT_BAR, ATTENDANCE_TABLE_CSS,
+    DA_CARD_STYLE, DA_GRADIENT_BAR, ATTENDANCE_TABLE_CSS,
 } from '../Common/attendanceTheme';
+import Avatar from '../Common/Avatar';
 
 const TeamAttendanceReport = () => {
     const { user } = useAuth();
@@ -608,17 +609,13 @@ const TeamAttendanceReport = () => {
                                                     <td className="small text-center" style={{ color: DA.secondary }}>{index + 1}</td>
                                                     <td>
                                                         <div className="d-flex align-items-center gap-2">
-                                                            <div style={{
-                                                                width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
-                                                                background: avatarColorFor(record.employee_id), color: '#fff',
-                                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                                fontWeight: 700, fontSize: 13,
-                                                            }}>
-                                                                {initialsFor(
-                                                                    (record.employee_name || '').split(' ')[0],
-                                                                    (record.employee_name || '').split(' ')[1]
-                                                                )}
-                                                            </div>
+                                                            <Avatar
+                                                                photo={record.profile_image}
+                                                                id={record.employee_id}
+                                                                firstName={(record.employee_name || '').split(' ')[0]}
+                                                                lastName={(record.employee_name || '').split(' ')[1]}
+                                                                size={36}
+                                                            />
                                                             <div className="min-w-0">
                                                                 <div className="text-truncate" style={{ maxWidth: 140, fontSize: 15, fontWeight: 600, color: DA.text }} title={record.employee_name}>
                                                                     {record.employee_name}

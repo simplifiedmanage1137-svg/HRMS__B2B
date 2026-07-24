@@ -379,7 +379,7 @@ exports.getLeaves = async (req, res) => {
 
         let query = supabase
             .from('leaves')
-            .select('*, employees!inner(first_name, last_name, department, designation)');
+            .select('*, employees!inner(first_name, last_name, department, designation, profile_image)');
 
         const isAdmin = (userRole === 'admin' || userRole === 'desktop_support' || userRole === 'hr') && req.query.all === 'true';
         // sub_admin/manager share the /admin/leave-requests page (which always calls ?all=true),
@@ -453,6 +453,7 @@ exports.getLeaves = async (req, res) => {
             last_name: l.employees?.last_name || l.employee_name?.split(' ').slice(1).join(' ') || '',
             department: l.employees?.department || '',
             designation: l.employees?.designation || '',
+            profile_image: l.employees?.profile_image || null,
             employees: undefined
         }));
         

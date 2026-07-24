@@ -70,6 +70,28 @@ const STATUS_STYLES = {
 
 const AVATAR_COLORS = ['#4F46E5', '#059669', '#d97706', '#dc2626', '#0891b2', '#7c3aed', '#db2777'];
 const avatarColor = (str) => AVATAR_COLORS[((str || '').charCodeAt(0) || 0) % AVATAR_COLORS.length];
+
+// Shows the employee's uploaded profile photo when available, falling back to the
+// colored-initials circle (same indigo palette as the rest of this page) otherwise.
+const LeaveAvatar = ({ photo, firstName, lastName }) => {
+  const [error, setError] = useState(false);
+  if (photo && !error) {
+    return (
+      <img
+        src={photo}
+        alt=""
+        onError={() => setError(true)}
+        className="lr-avatar"
+        style={{ objectFit: 'cover' }}
+      />
+    );
+  }
+  return (
+    <div className="lr-avatar" style={{ background: avatarColor(firstName) }}>
+      {initials(firstName, lastName)}
+    </div>
+  );
+};
 const initials = (f, l) => ((f || '')[0] || '?').toUpperCase() + ((l || '')[0] || '').toUpperCase();
 
 const LR_CSS = `
@@ -625,9 +647,7 @@ const LeaveRequests = () => {
 
                     <td>
                       <div className="d-flex align-items-center gap-2">
-                        <div className="lr-avatar" style={{ background: avatarColor(leave.first_name) }}>
-                          {initials(leave.first_name, leave.last_name)}
-                        </div>
+                        <LeaveAvatar photo={leave.profile_image} firstName={leave.first_name} lastName={leave.last_name} />
                         <div className="overflow-hidden">
                           <div className="fw-semibold text-truncate" style={{ fontSize: 13.5, maxWidth: 130 }} title={`${leave.first_name} ${leave.last_name}`}>
                             {leave.first_name} {leave.last_name}

@@ -34,8 +34,9 @@ import { holidays as holidayData } from '../../data/holidays';
 import AttendanceImportPanel from './AttendanceImportPanel';
 import {
   DA, STATUS_PILL, LATE_PILL_ON_TIME, LATE_PILL_LATE, DA_TH_STYLE,
-  avatarColorFor, initialsFor, DA_CARD_STYLE, DA_GRADIENT_BAR, ATTENDANCE_TABLE_CSS,
+  DA_CARD_STYLE, DA_GRADIENT_BAR, ATTENDANCE_TABLE_CSS,
 } from '../Common/attendanceTheme';
+import Avatar from '../Common/Avatar';
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 const getISTNow = () => new Date(Date.now() + IST_OFFSET_MS);
@@ -1666,14 +1667,13 @@ const AttendanceReports = () => {
                         </td>
                         <td>
                           <div className="d-flex align-items-center gap-2">
-                            <div style={{
-                              width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
-                              background: avatarColorFor(record.employee_id), color: '#fff',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontWeight: 700, fontSize: 13,
-                            }}>
-                              {initialsFor(record.first_name, record.last_name)}
-                            </div>
+                            <Avatar
+                              photo={record.profile_image}
+                              id={record.employee_id}
+                              firstName={record.first_name}
+                              lastName={record.last_name}
+                              size={36}
+                            />
                             <div className="min-w-0">
                               <div className="text-truncate" style={{ maxWidth: 140, fontSize: 15, fontWeight: 600, color: DA.text }} title={`${record.first_name} ${record.last_name}`}>
                                 {record.first_name} {record.last_name}

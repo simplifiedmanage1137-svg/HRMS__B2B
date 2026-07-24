@@ -20,6 +20,8 @@ const Sidebar = () => {
   const location = useLocation();
   const [employeeName, setEmployeeName]               = useState('');
   const [employeeDesignation, setEmployeeDesignation] = useState('');
+  const [employeePhoto, setEmployeePhoto]             = useState('');
+  const [photoError, setPhotoError]                   = useState(false);
   const [isOpen, setIsOpen]     = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
@@ -75,6 +77,7 @@ const Sidebar = () => {
       if (res.data) {
         setEmployeeName(`${res.data.first_name || ''} ${res.data.last_name || ''}`.trim() || 'Employee');
         setEmployeeDesignation(res.data.designation || '');
+        setEmployeePhoto(res.data.profile_image || '');
       }
     } catch {
       setEmployeeName(user?.role === 'admin' ? 'Administrator' : user?.role === 'sub_admin' ? 'Manager' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'finance' ? 'Finance' : user?.role === 'hr' ? 'HR' : 'Employee');
@@ -311,8 +314,17 @@ const Sidebar = () => {
         <div className="hrms-sidebar__footer">
           {isOpen ? (
             <div className="hrms-sidebar__user">
-              <div className="hrms-sidebar__user-avatar">
-                {getInitials(employeeName)}
+              <div className="hrms-sidebar__user-avatar" style={{ padding: 0, overflow: 'hidden' }}>
+                {employeePhoto && !photoError ? (
+                  <img
+                    src={employeePhoto}
+                    alt=""
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+                    onError={() => setPhotoError(true)}
+                  />
+                ) : (
+                  getInitials(employeeName)
+                )}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="hrms-sidebar__user-name">{employeeName}</div>
@@ -326,8 +338,17 @@ const Sidebar = () => {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', padding: '4px 0' }}>
-              <div className="hrms-sidebar__user-avatar" style={{ width: '32px', height: '32px', fontSize: '12px' }}>
-                {getInitials(employeeName)}
+              <div className="hrms-sidebar__user-avatar" style={{ width: '32px', height: '32px', fontSize: '12px', padding: 0, overflow: 'hidden' }}>
+                {employeePhoto && !photoError ? (
+                  <img
+                    src={employeePhoto}
+                    alt=""
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+                    onError={() => setPhotoError(true)}
+                  />
+                ) : (
+                  getInitials(employeeName)
+                )}
               </div>
               <button className="hrms-logout-btn" onClick={logout} title="Logout">
                 <FaSignOutAlt size={11} />

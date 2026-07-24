@@ -1609,7 +1609,7 @@ exports.getAttendanceReport = async (req, res) => {
         }
         let query = supabase
             .from('attendance')
-            .select('*, employees(first_name, last_name, department, shift_timing, comp_off_balance)')
+            .select('*, employees(first_name, last_name, department, shift_timing, comp_off_balance, profile_image)')
             .gte('attendance_date', start)
             .lte('attendance_date', end);
         if (employee_id) query = query.eq('employee_id', employee_id);
@@ -1717,7 +1717,8 @@ exports.getAttendanceReport = async (req, res) => {
                 is_regularized: record.is_regularized || false,
                 first_name: employee.first_name || '',
                 last_name: employee.last_name || '',
-                department: employee.department || ''
+                department: employee.department || '',
+                profile_image: employee.profile_image || null
             };
         }));
 
@@ -2488,7 +2489,7 @@ exports.getEmployeeAttendanceReport = async (req, res) => {
         }
         const { data: attendance } = await supabase
             .from('attendance')
-            .select('*, employees!inner(first_name, last_name, department, shift_timing, comp_off_balance)')
+            .select('*, employees!inner(first_name, last_name, department, shift_timing, comp_off_balance, profile_image)')
             .eq('employee_id', employee_id)
             .gte('attendance_date', start)
             .lte('attendance_date', end)
@@ -2568,7 +2569,8 @@ exports.getEmployeeAttendanceReport = async (req, res) => {
                 is_regularized: record.is_regularized || false,
                 first_name: employee.first_name || '',
                 last_name: employee.last_name || '',
-                department: employee.department || ''
+                department: employee.department || '',
+                profile_image: employee.profile_image || null
             };
         }));
 
@@ -3027,7 +3029,7 @@ exports.getTeamAttendanceReport = async (req, res) => {
         // Get team member details
         const { data: teamMembers, error: teamError } = await supabase
             .from('employees')
-            .select('employee_id, first_name, last_name, department, designation, joining_date, shift_timing')
+            .select('employee_id, first_name, last_name, department, designation, joining_date, shift_timing, profile_image')
             .in('employee_id', teamEmployeeIds);
 
         if (teamError) throw teamError;
@@ -3272,6 +3274,7 @@ exports.getTeamAttendanceReport = async (req, res) => {
                     employee_id: emp.employee_id,
                     employee_name: `${emp.first_name} ${emp.last_name}`,
                     department: emp.department,
+                    profile_image: emp.profile_image || null,
                     attendance_date: date,
                     clock_in: clockIn,
                     clock_out: clockOut,
