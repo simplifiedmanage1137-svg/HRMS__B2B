@@ -1,5 +1,5 @@
 // src/components/Admin/AttendanceReports.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Card, Table, Badge, Form, Row, Col,
   Button, Spinner, Alert
@@ -23,17 +23,42 @@ import {
   FaMoon,
   FaTrophy,
   FaCheckCircle,
-  FaInfoCircle
+  FaInfoCircle,
+  FaSearch,
+  FaEllipsisV
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import * as XLSX from 'xlsx';
 import { holidays as holidayData } from '../../data/holidays';
 import AttendanceImportPanel from './AttendanceImportPanel';
+import {
+  DA, STATUS_PILL, LATE_PILL_ON_TIME, LATE_PILL_LATE, DA_TH_STYLE,
+  avatarColorFor, initialsFor, DA_CARD_STYLE, DA_GRADIENT_BAR, ATTENDANCE_TABLE_CSS,
+} from '../Common/attendanceTheme';
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 const getISTNow = () => new Date(Date.now() + IST_OFFSET_MS);
 const getISTDateString = () => getISTNow().toISOString().split('T')[0];
+
+// Light "glass" badge styling for the Daily Attendance status column — Present/Working share
+// a green treatment, Absent gets a soft translucent red instead of the plain grey badge.
+const GLASS_BADGE = {
+  present: {
+    background: 'rgba(25, 135, 84, 0.12)',
+    color: '#198754',
+    border: '1px solid rgba(25, 135, 84, 0.35)',
+    backdropFilter: 'blur(4px)',
+    fontWeight: 600,
+  },
+  absent: {
+    background: 'rgba(220, 53, 69, 0.12)',
+    color: '#dc3545',
+    border: '1px solid rgba(220, 53, 69, 0.3)',
+    backdropFilter: 'blur(4px)',
+    fontWeight: 600,
+  },
+};
 
 const AttendanceReports = () => {
   const navigate = useNavigate();
@@ -52,6 +77,18 @@ const AttendanceReports = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('danger');
+
+  // Daily table: search / infinite-scroll pagination (premium redesign)
+  const [dailySearch, setDailySearch] = useState('');
+  const [dailyPageSize, setDailyPageSize] = useState(10);
+  // Number of chunks loaded so far. Rows accumulate (chunk 1 stays visible while chunk 2+
+  // appends below) rather than being replaced, so scrolling down never jumps the view.
+  const [dailyPage, setDailyPage] = useState(1);
+
+  // Reaching the bottom of the scroll area loads the next chunk in place — no scroll reset.
+  const dailyTableScrollRef = useRef(null);
+  const dailyAutoAdvanceLockRef = useRef(false);
+  const [dailyLoadingMore, setDailyLoadingMore] = useState(false);
 
   const currentDate = getISTNow();
   const currentDay = currentDate.getDate();
@@ -195,6 +232,32 @@ const AttendanceReports = () => {
     }
   }, [activeView, selectedDate]);
 
+  // Reset to chunk 1 whenever the daily table's filters/data change, and jump the scroll
+  // area back to the top — this is a deliberate new view, unlike scroll-triggered loading.
+  useEffect(() => {
+    setDailyPage(1);
+    const el = dailyTableScrollRef.current;
+    if (el) el.scrollTop = 0;
+  }, [dailySearch, department, selectedDate, dailyPageSize]);
+
+  // Infinite-scroll: reaching the bottom loads the next chunk IN PLACE (appended below the
+  // rows already on screen) — the scroll position is never touched, so it feels continuous
+  // rather than jumping back to the top. A brief "Loading more…" row gives visual feedback.
+  const handleDailyTableScroll = (e) => {
+    const el = e.target;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+    const hasMore = dailyPage * dailyPageSize < filteredDailyAttendance.length;
+    if (nearBottom && hasMore && !dailyAutoAdvanceLockRef.current) {
+      dailyAutoAdvanceLockRef.current = true;
+      setDailyLoadingMore(true);
+      setTimeout(() => {
+        setDailyPage(p => p + 1);
+        setDailyLoadingMore(false);
+        setTimeout(() => { dailyAutoAdvanceLockRef.current = false; }, 400);
+      }, 300);
+    }
+  };
+
   // Monthly view: fetch when month/year/dept/refreshKey changes, but only once employees are loaded
   useEffect(() => {
     if (activeView === 'monthly' && allEmployees.length > 0) {
@@ -267,7 +330,13 @@ const AttendanceReports = () => {
         let totalHours = record.total_hours || 0;
         let totalHoursDisplay = record.total_hours_display || '0h 0m';
 
-        if (clockInTime && !record.clock_out && !record.clock_out_ist) {
+        // Only compute a "live, still ticking" duration when the selected date is actually
+        // today — otherwise a past date's never-closed record (e.g. one not yet auto-closed
+        // by the 15h missing-clockout rule) would show a nonsensical "hours worked" number
+        // computed against the CURRENT moment instead of that historical day.
+        const isSelectedDateToday = selectedDate === getISTDateString();
+
+        if (clockInTime && !record.clock_out && !record.clock_out_ist && isSelectedDateToday) {
           // Employee is still working - calculate real-time hours
           const now = new Date();
           let diffMinutes = Math.round((now - clockInTime) / (1000 * 60));
@@ -1087,17 +1156,234 @@ const AttendanceReports = () => {
       day === todayDay;
   };
 
+  const isDailyView = activeView === 'daily';
+
+  // Daily table: search + department filter, then paginate
+  const filteredDailyAttendance = dailyAttendance.filter(r => {
+    if (department !== 'all' && r.department !== department) return false;
+    if (dailySearch.trim()) {
+      const q = dailySearch.trim().toLowerCase();
+      const name = `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase();
+      if (!name.includes(q) && !(r.employee_id || '').toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+  // Accumulate rows as dailyPage grows — chunk 1 stays on screen while later chunks append
+  // below it (infinite scroll), rather than replacing the visible set with a windowed slice.
+  const visibleDailyAttendance = filteredDailyAttendance.slice(0, dailyPage * dailyPageSize);
+  const dailyHasMore = visibleDailyAttendance.length < filteredDailyAttendance.length;
+
+  const renderMonthlyBody = () => {
+    const { cycleStart, cycleEnd } = getSalaryCycle(selectedMonth, selectedYear);
+    const cycleDateList = [];
+    const cur = new Date(cycleStart);
+    while (cur <= cycleEnd) { cycleDateList.push(new Date(cur)); cur.setDate(cur.getDate() + 1); }
+
+    const STATUS_CELL = {
+      present:  { bg: '#dcfce7', color: '#15803d', label: 'P'   },
+      working:  { bg: '#dbeafe', color: '#1d4ed8', label: 'W'   },
+      absent:   { bg: '#fee2e2', color: '#b91c1c', label: 'A'   },
+      half_day: { bg: '#fef9c3', color: '#a16207', label: 'HD'  },
+      on_leave: { bg: '#ede9fe', color: '#6d28d9', label: 'L'   },
+      holiday:  { bg: '#fef3c7', color: '#92400e', label: 'H'   },
+      weekend:  { bg: '#f1f5f9', color: '#64748b', label: 'W-OFF'},
+      comp_off: { bg: '#e0f2fe', color: '#0369a1', label: 'CO'  },
+    };
+
+    const empIds = Object.keys(monthlyStats);
+    const totalP    = empIds.reduce((s, id) => s + (monthlyStats[id].present   || 0), 0);
+    const totalA    = empIds.reduce((s, id) => s + (monthlyStats[id].absent    || 0), 0);
+    const totalHD   = empIds.reduce((s, id) => s + (monthlyStats[id].half_day  || 0), 0);
+    const totalL    = empIds.reduce((s, id) => s + (monthlyStats[id].on_leave  || 0), 0);
+    const totalLate = empIds.reduce((s, id) => s + (monthlyStats[id].late_count|| 0), 0);
+
+    const SUMMARY_COLS = [
+      { key: 'P',   label: 'P',    bg: '#dcfce7', color: '#15803d', title: 'Present',    val: e => e.present   || 0 },
+      { key: 'HD',  label: 'HD',   bg: '#fef9c3', color: '#a16207', title: 'Half Day',   val: e => e.half_day  || 0 },
+      { key: 'W',   label: 'W',    bg: '#dbeafe', color: '#e1e6f3', title: 'Working',    val: e => e.working   || 0 },
+      { key: 'L',   label: 'L',    bg: '#ede9fe', color: '#6d28d9', title: 'On Leave',   val: e => e.on_leave  || 0 },
+      { key: 'H',   label: 'H',    bg: '#fef3c7', color: '#92400e', title: 'Holiday',    val: e => e.holiday   || 0 },
+      { key: 'WO',  label: 'W-OFF',bg: '#f1f5f9', color: '#64748b', title: 'Weekend Off',val: e => e.weekend   || 0 },
+      { key: 'A',   label: 'A',    bg: '#fee2e2', color: '#b91c1c', title: 'Absent',     val: e => e.absent    || 0 },
+      { key: 'LT',  label: '⚠️',   bg: '#fff7ed', color: '#c2410c', title: 'Late',       val: e => e.late_count|| 0 },
+      { key: 'OT',  label: 'OT',   bg: '#f0fdf4', color: '#15803d', title: 'Overtime',   val: e => e.overtime_hours > 0 ? e.overtime_hours + 'h' : 0 },
+      { key: 'CO',  label: 'CO',   bg: '#e0f2fe', color: '#0369a1', title: 'Comp-Off',   val: e => e.comp_off_count|| 0 },
+    ];
+
+    return (
+      <>
+        {/* ── Summary strip ── */}
+        <div style={{ display: 'flex', gap: 8, padding: '10px 14px', background: '#f9fafb', borderBottom: '1px solid #e5e7eb', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '5px 14px', textAlign: 'center' }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: '#374151' }}>{empIds.length}</div>
+            <div style={{ fontSize: 10, color: '#6b7280' }}>Employees</div>
+          </div>
+          {[
+            { label: 'Present',  value: totalP,    bg: '#dcfce7', color: '#15803d' },
+            { label: 'Half Day', value: totalHD,   bg: '#fef9c3', color: '#a16207' },
+            { label: 'Absent',   value: totalA,    bg: '#fee2e2', color: '#b91c1c' },
+            { label: 'On Leave', value: totalL,    bg: '#ede9fe', color: '#6d28d9' },
+            { label: 'Late',     value: totalLate, bg: '#fff7ed', color: '#c2410c' },
+          ].map(({ label, value, bg, color }) => (
+            <div key={label} style={{ background: bg, borderRadius: 8, padding: '5px 12px', textAlign: 'center' }}>
+              <div style={{ fontSize: 17, fontWeight: 800, color }}>{value}</div>
+              <div style={{ fontSize: 10, color }}>{label}</div>
+            </div>
+          ))}
+          <div style={{ marginLeft: 'auto', fontSize: 11, color: '#6b7280', fontWeight: 600 }}>
+            {formatCycleLabel(selectedMonth, selectedYear)}
+          </div>
+        </div>
+
+        {/* ── Date grid ── */}
+        <div style={{ overflowX: 'auto', maxHeight: '460px' }}>
+          <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+            <thead>
+              <tr>
+                <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', borderRight: '2px solid #d1d5db', position: 'sticky', left: 0, top: 0, background: '#f9fafb', zIndex: 3, minWidth: 160, whiteSpace: 'nowrap' }}>
+                  Employee
+                </th>
+                {cycleDateList.map((d, i) => {
+                  const dn  = d.getDate();
+                  const mon = d.toLocaleString('en-US', { month: 'short' });
+                  const dow = ['Su','Mo','Tu','We','Th','Fr','Sa'][d.getDay()];
+                  const isWknd  = d.getDay() === 0 || d.getDay() === 6;
+                  const isToday = d.toDateString() === new Date().toDateString();
+                  return (
+                    <th key={i} style={{ padding: '3px 2px', textAlign: 'center', borderBottom: '2px solid #e5e7eb', borderRight: '1px solid #f3f4f6', minWidth: 30, position: 'sticky', top: 0, zIndex: 2, background: isToday ? '#1e40af' : isWknd ? '#eff6ff' : '#f9fafb' }}>
+                      <div style={{ color: isToday ? '#fff' : isWknd ? '#1d4ed8' : '#374151', fontSize: 11, fontWeight: 800, lineHeight: 1.1 }}>{dn}</div>
+                      <div style={{ color: isToday ? '#bfdbfe' : isWknd ? '#3b82f6' : '#9ca3af', fontSize: 9, lineHeight: 1.2 }}>{mon}</div>
+                      <div style={{ color: isToday ? '#93c5fd' : isWknd ? '#93c5fd' : '#d1d5db', fontSize: 9, lineHeight: 1.2 }}>{dow}</div>
+                    </th>
+                  );
+                })}
+                {/* Summary column headers */}
+                {SUMMARY_COLS.map(({ key, label, bg, color, title }) => (
+                  <th key={key} title={title} style={{ padding: '4px 2px', textAlign: 'center', borderBottom: '2px solid #e5e7eb', borderLeft: key === 'P' ? '2px solid #d1d5db' : '1px solid #f3f4f6', minWidth: 30, position: 'sticky', top: 0, zIndex: 2, background: bg }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, color }}>{label}</span>
+                  </th>
+                ))}
+                <th style={{ padding: '4px 6px', textAlign: 'center', borderBottom: '2px solid #e5e7eb', borderLeft: '1px solid #e5e7eb', minWidth: 52, position: 'sticky', top: 0, zIndex: 2, background: '#f9fafb' }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: '#374151' }}>Avg Hrs</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {empIds.length > 0 ? empIds.map((empId, idx) => {
+                const empStats   = monthlyStats[empId];
+                const empRecords = monthlyAttendance.filter(r => r.employee_id === empId);
+                const rowBg      = idx % 2 === 0 ? '#fff' : '#fafafa';
+
+                return (
+                  <tr key={empId} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '4px 10px', position: 'sticky', left: 0, zIndex: 1, background: rowBg, borderRight: '2px solid #d1d5db', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontWeight: 600, color: '#111827', fontSize: 11 }}>{empStats.name}</div>
+                      <div style={{ fontSize: 9, color: '#9ca3af' }}>{empId}</div>
+                    </td>
+                    {cycleDateList.map((d, i) => {
+                      const yr  = d.getFullYear();
+                      const mo  = String(d.getMonth() + 1).padStart(2, '0');
+                      const dy  = String(d.getDate()).padStart(2, '0');
+                      const ds  = `${yr}-${mo}-${dy}`;
+                      const rec = empRecords.find(r => r.date === ds);
+                      const cs  = rec ? (STATUS_CELL[rec.status] || { bg: '#f3f4f6', color: '#6b7280', label: '?' }) : null;
+                      const isTd = d.toDateString() === new Date().toDateString();
+                      return (
+                        <td key={i} title={rec?.tooltip} style={{ padding: '2px 1px', textAlign: 'center', background: isTd ? '#eff6ff' : rowBg, borderRight: '1px solid #f3f4f6' }}>
+                          {rec ? (
+                            <span style={{ position: 'relative', display: 'inline-block' }}>
+                              <span style={{ display: 'inline-block', background: cs.bg, color: cs.color, borderRadius: 3, padding: '1px 2px', fontSize: 10, fontWeight: 700, minWidth: 26, textAlign: 'center', lineHeight: 1.5 }}>{cs.label}</span>
+                              {rec.is_late && rec.status !== 'weekend' && rec.status !== 'holiday' && (
+                                <span style={{ position: 'absolute', top: -3, right: -3, color: '#ea580c', fontSize: 8, fontWeight: 900, lineHeight: 1 }}>⚠</span>
+                              )}
+                              {rec.overtime_hours > 0 && (
+                                <span style={{ position: 'absolute', top: -3, left: -3, color: '#15803d', fontSize: 8, fontWeight: 900, lineHeight: 1 }}>+</span>
+                              )}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#e5e7eb', fontSize: 10 }}>·</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                    {/* Summary cells */}
+                    {SUMMARY_COLS.map(({ key, bg, color, val }) => {
+                      const v = val(empStats);
+                      return (
+                        <td key={key} style={{ padding: '3px 2px', textAlign: 'center', background: rowBg, borderLeft: key === 'P' ? '2px solid #d1d5db' : '1px solid #f3f4f6' }}>
+                          {v !== 0
+                            ? <span style={{ background: bg, color, borderRadius: 4, padding: '1px 4px', fontSize: 10, fontWeight: 700 }}>{v}</span>
+                            : <span style={{ color: '#d1d5db', fontSize: 10 }}>—</span>}
+                        </td>
+                      );
+                    })}
+                    <td style={{ padding: '3px 6px', textAlign: 'center', background: rowBg, borderLeft: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#374151' }}>{empStats.avg_hours ? formatHours(empStats.avg_hours) : '—'}</span>
+                      <div style={{ fontSize: 9, color: '#9ca3af' }}>{empStats.total_hours ? empStats.total_hours.toFixed(0) + 'h' : ''}</div>
+                    </td>
+                  </tr>
+                );
+              }) : (
+                <tr>
+                  <td colSpan={cycleDateList.length + SUMMARY_COLS.length + 2} style={{ textAlign: 'center', padding: '32px', color: '#9ca3af', fontSize: 13 }}>
+                    No attendance data for this period
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </>
+    );
+  };
+
   return (
-    <div className="p-2 p-md-3 p-lg-4">
+    <div
+      className="p-2 p-md-3 p-lg-4"
+      style={isDailyView ? { background: DA.bg, minHeight: '100vh' } : undefined}
+    >
       <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-3 gap-2">
-        <h5 className="mb-0 d-flex align-items-center">
-          <FaCalendarAlt className="me-2 text-primary" />
-          Attendance Reports
-        </h5>
+        <div className="d-flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            onClick={() => setActiveView('daily')}
+            style={isDailyView
+              ? { background: DA.primaryGreen, borderColor: DA.primaryGreen }
+              : { background: '#fff', borderColor: DA.border, color: DA.secondary }}
+          >
+            <FaEye className="me-1" size={12} /> Daily View
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => setActiveView('monthly')}
+            style={activeView === 'monthly'
+             ? { background: DA.primaryGreen, borderColor: DA.primaryGreen }
+              : { background: '#fff', borderColor: DA.border, color: DA.secondary }}
+          >
+            <FaCalendarAlt className="me-1" size={12} /> Monthly Calendar
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => setActiveView('import')}
+            style={activeView === 'import'
+              ? { background: DA.primaryGreen, borderColor: DA.primaryGreen }
+              : { background: '#fff', borderColor: DA.border, color: DA.secondary }}
+          >
+            <FaFileExcel className="me-1" size={12} /> Import
+          </Button>
+        </div>
         <div className="d-flex align-items-center gap-2">
-          <small className="text-muted">
-            {activeView === 'daily' ? 'Daily View' : `Salary Cycle: ${formatCycleLabel(selectedMonth, selectedYear)}`}
-          </small>
+          <Button
+            variant="outline-secondary"
+            size="sm"
+            disabled={loading}
+            onClick={() => activeView === 'daily' ? fetchDailyAttendance() : activeView === 'monthly' ? fetchMonthlyAttendance() : null}
+            title="Refresh current view"
+          >
+            {loading
+              ? <><Spinner animation="border" size="sm" style={{ width: 11, height: 11 }} className="me-1" /> Refreshing…</>
+              : <><FaSyncAlt className="me-1" size={11} /> Refresh</>}
+          </Button>
           <button
             className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
             onClick={() => navigate(-1)}
@@ -1113,42 +1399,48 @@ const AttendanceReports = () => {
         </Alert>
       )}
 
-      <div className="mb-3 border-bottom pb-2 d-flex flex-wrap gap-2">
-        <Button
-          variant={activeView === 'daily' ? 'primary' : 'light'}
-          size="sm"
-          onClick={() => setActiveView('daily')}
-          className="me-1"
-        >
-          <FaEye className="me-1" size={12} /> Daily View
-        </Button>
-        <Button
-          variant={activeView === 'monthly' ? 'primary' : 'light'}
-          size="sm"
-          onClick={() => setActiveView('monthly')}
-        >
-          <FaCalendarAlt className="me-1" size={12} /> Monthly Calendar
-        </Button>
-        <Button
-          variant={activeView === 'import' ? 'primary' : 'light'}
-          size="sm"
-          onClick={() => setActiveView('import')}
-        >
-          <FaFileExcel className="me-1" size={12} /> Import
-        </Button>
-        <Button
-          variant="outline-secondary"
-          size="sm"
-          className="ms-auto"
-          disabled={loading}
-          onClick={() => activeView === 'daily' ? fetchDailyAttendance() : activeView === 'monthly' ? fetchMonthlyAttendance() : null}
-          title="Refresh current view"
-        >
-          {loading
-            ? <><Spinner animation="border" size="sm" style={{ width: 11, height: 11 }} className="me-1" /> Refreshing…</>
-            : <><FaSyncAlt className="me-1" size={11} /> Refresh</>}
-        </Button>
-      </div>
+      {isDailyView && (() => {
+        const presentCount  = dailyAttendance.filter(r => ['present', 'working'].includes(r.status)).length;
+        const absentCount   = dailyAttendance.filter(r => r.status === 'absent').length;
+        const halfDayCount  = dailyAttendance.filter(r => r.status === 'half_day').length;
+        const weekOffCount  = dailyAttendance.filter(r => r.status === 'weekend').length;
+        const compOffCount  = dailyAttendance.filter(r => r.comp_off_awarded).length;
+        const pills = [
+          { label: 'Present',  value: presentCount, bg: 'rgba(22,163,74,.1)',  color: '#16a34a', icon: '🟢' },
+          { label: 'Absent',   value: absentCount,  bg: 'rgba(239,68,68,.1)',  color: '#ef4444', icon: '🔴' },
+          { label: 'Half Day', value: halfDayCount, bg: 'rgba(245,158,11,.12)', color: '#d97706', icon: '🟠' },
+          { label: 'Week Off', value: weekOffCount, bg: '#f1f5f9',              color: '#64748b', icon: '⚪' },
+          { label: 'Comp Off', value: compOffCount, bg: 'rgba(139,92,246,.1)', color: '#7c3aed', icon: '🟣' },
+        ];
+        return (
+          <div className="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center mb-4 gap-3 da-fade-in">
+            <div>
+              <h4 className="mb-1 fw-bold d-flex align-items-center" style={{ color: DA.text }}>
+                <span className="me-2">📅</span> Daily Attendance
+              </h4>
+              <div style={{ color: DA.secondary, fontSize: 14 }}>
+                View and manage employee daily attendance records
+              </div>
+            </div>
+            <div className="d-flex flex-wrap gap-2">
+              {pills.map(p => (
+                <div
+                  key={p.label}
+                  className="da-stat-pill d-flex align-items-center gap-2"
+                  style={{
+                    background: p.bg, color: p.color, borderRadius: 999,
+                    padding: '10px 18px', fontWeight: 600, fontSize: 13,
+                  }}
+                >
+                  <span>{p.icon}</span>
+                  <span>{p.label}</span>
+                  <span style={{ fontWeight: 700 }}>{p.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {activeView === 'import' ? (
         <AttendanceImportPanel
@@ -1162,36 +1454,67 @@ const AttendanceReports = () => {
           }}
         />
       ) : activeView === 'daily' ? (
-        <div className="d-flex flex-column flex-sm-row mb-3 gap-2 align-items-start align-items-sm-center">
+        <div className="d-flex flex-column flex-lg-row mb-3 gap-2 align-items-start align-items-lg-center justify-content-between">
+          <div className="d-flex flex-wrap gap-2 align-items-center">
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              onClick={() => {
+                const ist = getISTNow();
+                ist.setDate(ist.getDate() - 1);
+                setSelectedDate(ist.toISOString().split('T')[0]);
+              }}
+              className="text-nowrap rounded-3"
+            >
+              <FaArrowLeft size={10} className="me-1" /> Yesterday
+            </Button>
+            <Form.Control
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              size="sm"
+              className="rounded-3"
+              style={{ maxWidth: '260px', maxHeight: '72px' }}
+            />
+            <Button
+              variant="outline-primary"
+              size="sm"
+              onClick={() => setSelectedDate(getISTDateString())}
+              className="text-nowrap rounded-3"
+              disabled={selectedDate === getISTDateString()}
+            >
+              Today
+            </Button>
+            <div className="position-relative">
+              <FaSearch style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: DA.secondary, fontSize: 16 }} />
+              <Form.Control
+                type="text"
+                placeholder="Search employee…"
+                value={dailySearch}
+                onChange={(e) => setDailySearch(e.target.value)}
+                size="sm"
+                className="rounded-3"
+                style={{ paddingLeft: 32, minWidth: 180 }}
+              />
+            </div>
+            <Form.Select
+              size="sm"
+              value={department}
+              onChange={(e) => setDepartment(e.target.value)}
+              className="rounded-3"
+              style={{ width: 150 }}
+            >
+              {departments.map(dept => (
+                <option key={dept} value={dept}>{dept === 'all' ? 'All Departments' : dept}</option>
+              ))}
+            </Form.Select>
+          </div>
           <Button
-            variant="outline-secondary"
             size="sm"
-            onClick={() => {
-              const ist = getISTNow();
-              ist.setDate(ist.getDate() - 1);
-              setSelectedDate(ist.toISOString().split('T')[0]);
-            }}
-            className="text-nowrap"
+            onClick={handleExportExcel}
+            className="text-nowrap rounded-3"
+            style={{ background: DA.primaryGreen, borderColor: DA.primaryGreen }}
           >
-            <FaArrowLeft size={10} className="me-1" /> Yesterday
-          </Button>
-          <Form.Control
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            size="sm"
-            style={{ maxWidth: '160px' }}
-          />
-          <Button
-            variant="outline-primary"
-            size="sm"
-            onClick={() => setSelectedDate(getISTDateString())}
-            className="text-nowrap"
-            disabled={selectedDate === getISTDateString()}
-          >
-            Today
-          </Button>
-          <Button variant="success" size="sm" onClick={handleExportExcel} className="text-nowrap">
             <FaFileExcel className="me-2" size={12} /> Export
           </Button>
         </div>
@@ -1258,7 +1581,7 @@ const AttendanceReports = () => {
         </div>
       )}
 
-      <div className="d-flex flex-wrap gap-2 gap-md-3 mb-3 small justify-content-center justify-content-md-start">
+      <div className={`d-flex flex-wrap gap-2 gap-md-3 mb-3 small justify-content-center justify-content-md-start ${isDailyView ? 'd-none' : ''}`}>
         <span className="d-flex align-items-center"><Badge bg="success" pill className="me-1">P</Badge> Present</span>
         <span className="d-flex align-items-center"><Badge bg="warning" pill className="me-1">HD</Badge> Half Day</span>
         <span className="d-flex align-items-center"><Badge bg="info" pill className="me-1">W</Badge> Working</span>
@@ -1272,327 +1595,221 @@ const AttendanceReports = () => {
       </div>
 
       {loading ? (
-        <div className="text-center py-5">
-          <Spinner animation="border" variant="primary" size="sm" />
-          <p className="mt-2 small text-muted">Loading attendance data...</p>
+        isDailyView ? (
+          <div style={DA_CARD_STYLE}>
+            <div style={DA_GRADIENT_BAR} />
+            <div className="p-4">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="d-flex align-items-center gap-3 mb-3">
+                  <div className="da-skeleton" style={{ width: 36, height: 36, borderRadius: '50%' }} />
+                  <div className="da-skeleton" style={{ width: '20%', height: 14, borderRadius: 6 }} />
+                  <div className="da-skeleton d-none d-md-block" style={{ width: '12%', height: 14, borderRadius: 6 }} />
+                  <div className="da-skeleton d-none d-sm-block" style={{ width: '10%', height: 14, borderRadius: 6 }} />
+                  <div className="da-skeleton" style={{ width: '10%', height: 14, borderRadius: 6 }} />
+                  <div className="da-skeleton" style={{ width: '15%', height: 14, borderRadius: 6, marginLeft: 'auto' }} />
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-5">
+            <Spinner animation="border" variant="primary" size="sm" />
+            <p className="mt-2 small text-muted">Loading attendance data...</p>
+          </div>
+        )
+      ) : isDailyView ? (
+        <div className="da-fade-in" style={DA_CARD_STYLE}>
+          <div style={DA_GRADIENT_BAR} />
+          <div
+            ref={dailyTableScrollRef}
+            className="table-responsive da-scroll"
+            style={{ maxHeight: 560, overflow: 'auto' }}
+            onScroll={handleDailyTableScroll}
+          >
+            <Table className="mb-0 da-table">
+              <thead className="sticky-top" style={{ top: 0, zIndex: 10 }}>
+                <tr>
+                  <th style={{ ...DA_TH_STYLE, textAlign: 'center', width: 60 }}>Sr No</th>
+                  <th style={DA_TH_STYLE} className="d-none d-md-table-cell">Date</th>
+                  <th style={DA_TH_STYLE}>Employee</th>
+                  <th style={DA_TH_STYLE} className="d-none d-sm-table-cell">Department</th>
+                  <th style={DA_TH_STYLE} className="d-none d-md-table-cell">Shift</th>
+                  <th style={DA_TH_STYLE}>Clock In</th>
+                  <th style={DA_TH_STYLE}>Late</th>
+                  <th style={DA_TH_STYLE} className="d-none d-lg-table-cell">Clock Out</th>
+                  <th style={DA_TH_STYLE} className="d-none d-xl-table-cell">Working Hours</th>
+                  <th style={DA_TH_STYLE} className="d-none d-xl-table-cell">Comp Off</th>
+                  <th style={DA_TH_STYLE}>Status</th>
+                  <th style={{ ...DA_TH_STYLE, textAlign: 'center' }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleDailyAttendance.length > 0 ? (
+                  visibleDailyAttendance.map((record, index) => {
+                    const lateDisplay = record.late_display || (record.late_minutes > 0 ? formatLateDisplay(record.late_minutes) : null);
+                    const srNo = index + 1;
+                    const statusKey = record.status || 'absent';
+                    const pillStyle = STATUS_PILL[statusKey] || STATUS_PILL.absent;
+                    const statusLabel = statusKey === 'present' ? 'Present'
+                      : statusKey === 'working' ? 'Working'
+                      : statusKey === 'half_day' ? 'Half Day'
+                      : statusKey === 'on_leave' ? 'On Leave'
+                      : statusKey === 'holiday' ? 'Holiday'
+                      : statusKey === 'weekend' ? 'Week Off'
+                      : 'Absent';
+
+                    return (
+                      <tr key={record.id || index} className="da-row da-row-enter" style={{ height: 82, borderBottom: '1px solid #f1f5f9' }}>
+                        <td className="small text-center" style={{ color: DA.secondary }}>{srNo}</td>
+                        <td className="small d-none d-md-table-cell text-nowrap" style={{ color: DA.secondary }}>
+                          {formatDate(record.attendance_date || selectedDate)}
+                        </td>
+                        <td>
+                          <div className="d-flex align-items-center gap-2">
+                            <div style={{
+                              width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                              background: avatarColorFor(record.employee_id), color: '#fff',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontWeight: 700, fontSize: 13,
+                            }}>
+                              {initialsFor(record.first_name, record.last_name)}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-truncate" style={{ maxWidth: 140, fontSize: 15, fontWeight: 600, color: DA.text }} title={`${record.first_name} ${record.last_name}`}>
+                                {record.first_name} {record.last_name}
+                              </div>
+                              <div className="text-truncate" style={{ maxWidth: 140, fontSize: 12, color: '#98A2B3' }}>
+                                {record.employee_id}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="small d-none d-sm-table-cell" style={{ color: DA.text }}>
+                          <span className="text-truncate d-inline-block" style={{ maxWidth: 100 }} title={record.department}>{record.department}</span>
+                        </td>
+                        <td className="small d-none d-md-table-cell text-nowrap" style={{ color: DA.secondary }}>
+                          {record.shift_time_used || '-'}
+                        </td>
+                        <td className="small text-nowrap" style={{ color: record.clock_in ? DA.primaryGreen : DA.secondary, fontWeight: 600 }}>
+                          {formatShortTime(record.clock_in) || '--:--'}
+                        </td>
+                        <td className="small">
+                          {lateDisplay ? (
+                            <span className="da-badge d-inline-flex align-items-center gap-1 text-nowrap" style={{ ...LATE_PILL_LATE, borderRadius: 999, padding: '4px 10px', fontSize: 12, fontWeight: 600 }}>
+                              ⚠ {lateDisplay}
+                            </span>
+                          ) : record.clock_in ? (
+                            <span className="da-badge d-inline-flex align-items-center gap-1 text-nowrap" style={{ ...LATE_PILL_ON_TIME, borderRadius: 999, padding: '4px 10px', fontSize: 12, fontWeight: 600 }}>
+                              ✓ On Time
+                            </span>
+                          ) : (
+                            <span style={{ color: DA.secondary }}>-</span>
+                          )}
+                        </td>
+                        <td className="small d-none d-lg-table-cell text-nowrap" style={{ color: record.clock_out ? DA.primaryGreen : DA.secondary, fontWeight: 600 }}>
+                          {formatShortTime(record.clock_out) || '--:--'}
+                          {(() => {
+                            if (!record.clock_in || !record.clock_out) return null;
+                            const inDate = record.clock_in.split(' ')[0] || record.clock_in.substring(0, 10);
+                            const outDate = record.clock_out.split(' ')[0] || record.clock_out.substring(0, 10);
+                            return inDate && outDate && inDate !== outDate
+                              ? <span className="ms-1" style={{ fontSize: 10, color: DA.warning }} title="Clock-out is next day">+1d</span>
+                              : null;
+                          })()}
+                        </td>
+                        <td className="small d-none d-xl-table-cell text-nowrap" style={{ color: DA.text }}>
+                          {record.total_hours ? (record.total_hours_display || formatHours(parseFloat(record.total_hours))) : '-'}
+                        </td>
+                        <td className="small d-none d-xl-table-cell">
+                          {record.comp_off_awarded ? (
+                            <span className="da-badge d-inline-flex align-items-center gap-1" style={{ background: 'rgba(139,92,246,.14)', color: '#7c3aed', borderRadius: 999, padding: '3px 8px', fontSize: 11, fontWeight: 600 }}>
+                              <FaTrophy size={9} /> +{record.comp_off_days}
+                            </span>
+                          ) : <span style={{ color: DA.secondary }}>-</span>}
+                        </td>
+                        <td className="small">
+                          <span className="da-badge d-inline-flex align-items-center gap-1 text-nowrap" style={{ ...pillStyle, borderRadius: 999, padding: '5px 12px', fontSize: 12, fontWeight: 600 }}>
+                            {statusKey === 'working' && <span style={{ fontSize: 8 }}>●</span>}
+                            {statusKey === 'present' && <FaCheckCircle size={10} />}
+                            {statusLabel}
+                          </span>
+                        </td>
+                        <td className="text-center">
+                          <button
+                            className="btn btn-sm da-action-btn d-inline-flex align-items-center gap-1"
+                            style={{ borderRadius: 999, border: `1px solid ${DA.border}`, background: '#fff', color: DA.secondary, fontSize: 12 }}
+                          >
+                            <FaEllipsisV size={11} /> Action
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan="12" className="text-center py-5">
+                      <div style={{ color: DA.secondary }}>
+                        <FaCalendarAlt size={36} className="mb-2" style={{ opacity: 0.3 }} />
+                        <div style={{ fontSize: 14, fontWeight: 500 }}>No attendance records for this day</div>
+                        <div style={{ fontSize: 12 }}>Try a different date or clear your search/department filter</div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                {dailyLoadingMore && (
+                  <tr>
+                    <td colSpan="12" className="text-center py-3 da-row-enter">
+                      <div className="d-inline-flex align-items-center gap-2" style={{ color: DA.secondary, fontSize: 12 }}>
+                        <Spinner animation="border" size="sm" style={{ width: 14, height: 14, color: DA.primaryGreen }} />
+                        Loading more…
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </Table>
+          </div>
+
+          {/* Footer: entries summary — scrolling to the bottom loads more automatically */}
+          <div className="d-flex flex-column flex-sm-row justify-content-between align-items-center gap-2 px-3 py-3" style={{ borderTop: `1px solid ${DA.border}` }}>
+            <small style={{ color: DA.secondary }}>
+              {filteredDailyAttendance.length === 0
+                ? 'Showing 0 entries'
+                : `Showing ${visibleDailyAttendance.length} of ${filteredDailyAttendance.length} entries`}
+            </small>
+            <div className="d-flex align-items-center gap-2">
+              {dailyHasMore && (
+                <button
+                  className="btn btn-sm"
+                  style={{ borderRadius: 999, border: `1px solid ${DA.primaryGreen}`, background: '#fff', color: DA.primaryGreen, fontWeight: 600, padding: '5px 16px' }}
+                  onClick={() => setDailyPage(p => p + 1)}
+                >
+                  Load More
+                </button>
+              )}
+              <Form.Select
+                size="sm"
+                value={dailyPageSize}
+                onChange={(e) => setDailyPageSize(parseInt(e.target.value))}
+                style={{ width: 110, borderRadius: 8 }}
+              >
+                {[10, 25, 50, 100].map(n => <option key={n} value={n}>{n} / load</option>)}
+              </Form.Select>
+            </div>
+          </div>
         </div>
       ) : (
         <Card className="border-0 shadow-sm">
           <Card.Header className="bg-light py-2 d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
-            <h6 className="mb-0 fw-semibold small">
-              {activeView === 'daily' ? 'Daily Attendance' : 'Monthly Attendance'}
-            </h6>
-            {activeView === 'daily' && (
-              <div className="d-flex gap-2 ms-0 ms-sm-auto flex-wrap">
-                <Badge bg="success" pill>
-                  {dailyAttendance.filter(r => ['present','working','half_day'].includes(r.status)).length} Present
-                </Badge>
-                <Badge bg="danger" pill>
-                  {dailyAttendance.filter(r => r.status === 'absent').length} Absent
-                </Badge>
-                <Badge bg="secondary" pill>
-                  {dailyAttendance.length} Total
-                </Badge>
-              </div>
-            )}
+            <h6 className="mb-0 fw-semibold small">Monthly Attendance</h6>
           </Card.Header>
           <Card.Body className="p-0">
-            {activeView === 'daily' ? (
-              <div className="table-responsive" style={{ maxHeight: '400px', overflow: 'auto' }}>
-                <Table size="sm" striped className="mb-0">
-                  <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
-                    <tr className="small">
-                      <th className="text-dark fw-normal small text-center" style={{ width: '50px' }}>Sr No</th>
-                      <th className="text-dark fw-normal small">Employee</th>
-                      <th className="text-dark fw-normal small d-none d-sm-table-cell">Dept</th>
-                      <th className="text-dark fw-normal small d-none d-md-table-cell">Shift</th>
-                      <th className="text-dark fw-normal small">In</th>
-                      <th className="text-dark fw-normal small">Late</th>
-                      <th className="text-dark fw-normal small d-none d-lg-table-cell">Out</th>
-                      <th className="text-dark fw-normal small d-none d-xl-table-cell">Hours</th>
-                      <th className="text-dark fw-normal small d-none d-xl-table-cell">OT</th>
-                      <th className="text-dark fw-normal small d-none d-xl-table-cell">Comp-Off</th>
-                      <th className="text-dark fw-normal small">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dailyAttendance.length > 0 ? (
-                      dailyAttendance.map((record, index) => {
-                        // Calculate late display
-                        const lateDisplay = record.late_display || (record.late_minutes > 0 ? formatLateDisplay(record.late_minutes) : null);
-
-                        return (
-                          <tr key={index} className={record.late_minutes > 0 ? 'table-warning' : ''}>
-                            <td className="text-center small">{index + 1}</td>
-                            <td className="small">
-                              <div className="text-truncate" style={{ maxWidth: '100px' }} title={`${record.first_name} ${record.last_name}`}>
-                                {record.first_name} {record.last_name}
-                              </div>
-                              <small className="text-muted text-truncate d-block" style={{ maxWidth: '100px' }} title={record.employee_id}>
-                                {record.employee_id}
-                              </small>
-                            </td>
-                            <td className="small d-none d-sm-table-cell">
-                              <span className="text-truncate d-inline-block" style={{ maxWidth: '80px' }} title={record.department}>
-                                {record.department}
-                              </span>
-                            </td>
-                            <td className="small d-none d-md-table-cell">
-                              <span className="text-nowrap">{record.shift_time_used || '-'}</span>
-                            </td>
-                            <td className={`small ${record.clock_in ? 'text-success' : 'text-muted'}`}>
-                              <span className="text-nowrap" title={formatShortTime(record.clock_in)}>
-                                {formatShortTime(record.clock_in) || '--:--'}
-                              </span>
-                            </td>
-                            <td className="small">
-                              {lateDisplay ? (
-                                <Badge bg="warning" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#fd7e14' }}>
-                                  <FaExclamationTriangle className="me-1" size={10} />
-                                  {lateDisplay}
-                                </Badge>
-                              ) : (
-                                <span className="text-muted">-</span>
-                              )}
-                            </td>
-                            <td className={`small d-none d-lg-table-cell ${record.clock_out ? 'text-danger' : 'text-muted'}`}>
-                              <span className="text-nowrap" title={formatShortTime(record.clock_out)}>
-                                {formatShortTime(record.clock_out) || '--:--'}
-                                {(() => {
-                                  if (!record.clock_in || !record.clock_out) return null;
-                                  const inDate = record.clock_in.split(' ')[0] || record.clock_in.substring(0, 10);
-                                  const outDate = record.clock_out.split(' ')[0] || record.clock_out.substring(0, 10);
-                                  return inDate && outDate && inDate !== outDate
-                                    ? <span className="text-warning ms-1" style={{ fontSize: '10px' }} title="Clock-out is next day">+1d</span>
-                                    : null;
-                                })()}
-                              </span>
-                            </td>
-                            <td className="small d-none d-xl-table-cell">
-                              {record.total_hours ? (
-                                <span className="text-nowrap">
-                                  {record.total_hours_display || formatHours(parseFloat(record.total_hours))}
-                                </span>
-                              ) : '-'}
-                            </td>
-                            <td className="small d-none d-xl-table-cell">
-                              {record.overtime_hours > 0 ? (
-                                <Badge bg="success" pill className="text-nowrap">
-                                  +{record.overtime_hours}h
-                                </Badge>
-                              ) : '-'}
-                            </td>
-                            <td className="small d-none d-xl-table-cell">
-                              {record.comp_off_awarded ? (
-                                <Badge bg="purple" pill className="text-nowrap" style={{ backgroundColor: '#9b59b6' }}>
-                                  <FaTrophy className="me-1" size={8} /> +{record.comp_off_days}
-                                </Badge>
-                              ) : '-'}
-                            </td>
-                            <td className="small">
-                              {record.status === 'present' ? (
-                                <Badge bg="success" className="px-2 py-1 text-nowrap">
-                                  <FaCheckCircle className="me-1" size={10} />
-                                  Present
-                                </Badge>
-                              ) : record.status === 'working' ? (
-                                <Badge bg="info" className="px-2 py-1 text-nowrap">Working</Badge>
-                              ) : record.status === 'half_day' ? (
-                                <Badge bg="warning" className="px-2 py-1 text-nowrap">Half Day</Badge>
-                              ) : record.status === 'on_leave' ? (
-                                <Badge bg="purple" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#6f42c1' }}>On Leave</Badge>
-                              ) : record.status === 'holiday' ? (
-                                <Badge bg="warning" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#ffc107' }}>Holiday</Badge>
-                              ) : record.status === 'weekend' ? (
-                                <Badge bg="secondary" className="px-2 py-1 text-nowrap">
-                                  <FaMoon className="me-1" size={10} /> W-OFF
-                                </Badge>
-                              ) : record.status === 'late' ? (
-                                <Badge bg="warning" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#fd7e14' }}>
-                                  <FaExclamationTriangle className="me-1" size={10} />
-                                  Late {lateDisplay}
-                                </Badge>
-                              ) : (
-                                <Badge bg="secondary" className="px-2 py-1 text-nowrap">Absent</Badge>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    ) : (
-                      <tr>
-                        <td colSpan="11" className="text-center py-4">No attendance records</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </Table>
-              </div>
-            ) : (() => {
-                const { cycleStart, cycleEnd } = getSalaryCycle(selectedMonth, selectedYear);
-                const cycleDateList = [];
-                const cur = new Date(cycleStart);
-                while (cur <= cycleEnd) { cycleDateList.push(new Date(cur)); cur.setDate(cur.getDate() + 1); }
-
-                const STATUS_CELL = {
-                  present:  { bg: '#dcfce7', color: '#15803d', label: 'P'   },
-                  working:  { bg: '#dbeafe', color: '#1d4ed8', label: 'W'   },
-                  absent:   { bg: '#fee2e2', color: '#b91c1c', label: 'A'   },
-                  half_day: { bg: '#fef9c3', color: '#a16207', label: 'HD'  },
-                  on_leave: { bg: '#ede9fe', color: '#6d28d9', label: 'L'   },
-                  holiday:  { bg: '#fef3c7', color: '#92400e', label: 'H'   },
-                  weekend:  { bg: '#f1f5f9', color: '#64748b', label: 'W-OFF'},
-                  comp_off: { bg: '#e0f2fe', color: '#0369a1', label: 'CO'  },
-                };
-
-                const empIds = Object.keys(monthlyStats);
-                const totalP    = empIds.reduce((s, id) => s + (monthlyStats[id].present   || 0), 0);
-                const totalA    = empIds.reduce((s, id) => s + (monthlyStats[id].absent    || 0), 0);
-                const totalHD   = empIds.reduce((s, id) => s + (monthlyStats[id].half_day  || 0), 0);
-                const totalL    = empIds.reduce((s, id) => s + (monthlyStats[id].on_leave  || 0), 0);
-                const totalLate = empIds.reduce((s, id) => s + (monthlyStats[id].late_count|| 0), 0);
-
-                const SUMMARY_COLS = [
-                  { key: 'P',   label: 'P',    bg: '#dcfce7', color: '#15803d', title: 'Present',    val: e => e.present   || 0 },
-                  { key: 'HD',  label: 'HD',   bg: '#fef9c3', color: '#a16207', title: 'Half Day',   val: e => e.half_day  || 0 },
-                  { key: 'W',   label: 'W',    bg: '#dbeafe', color: '#1d4ed8', title: 'Working',    val: e => e.working   || 0 },
-                  { key: 'L',   label: 'L',    bg: '#ede9fe', color: '#6d28d9', title: 'On Leave',   val: e => e.on_leave  || 0 },
-                  { key: 'H',   label: 'H',    bg: '#fef3c7', color: '#92400e', title: 'Holiday',    val: e => e.holiday   || 0 },
-                  { key: 'WO',  label: 'W-OFF',bg: '#f1f5f9', color: '#64748b', title: 'Weekend Off',val: e => e.weekend   || 0 },
-                  { key: 'A',   label: 'A',    bg: '#fee2e2', color: '#b91c1c', title: 'Absent',     val: e => e.absent    || 0 },
-                  { key: 'LT',  label: '⚠️',   bg: '#fff7ed', color: '#c2410c', title: 'Late',       val: e => e.late_count|| 0 },
-                  { key: 'OT',  label: 'OT',   bg: '#f0fdf4', color: '#15803d', title: 'Overtime',   val: e => e.overtime_hours > 0 ? e.overtime_hours + 'h' : 0 },
-                  { key: 'CO',  label: 'CO',   bg: '#e0f2fe', color: '#0369a1', title: 'Comp-Off',   val: e => e.comp_off_count|| 0 },
-                ];
-
-                return (
-                  <>
-                    {/* ── Summary strip ── */}
-                    <div style={{ display: 'flex', gap: 8, padding: '10px 14px', background: '#f9fafb', borderBottom: '1px solid #e5e7eb', flexWrap: 'wrap', alignItems: 'center' }}>
-                      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '5px 14px', textAlign: 'center' }}>
-                        <div style={{ fontSize: 17, fontWeight: 800, color: '#374151' }}>{empIds.length}</div>
-                        <div style={{ fontSize: 10, color: '#6b7280' }}>Employees</div>
-                      </div>
-                      {[
-                        { label: 'Present',  value: totalP,    bg: '#dcfce7', color: '#15803d' },
-                        { label: 'Half Day', value: totalHD,   bg: '#fef9c3', color: '#a16207' },
-                        { label: 'Absent',   value: totalA,    bg: '#fee2e2', color: '#b91c1c' },
-                        { label: 'On Leave', value: totalL,    bg: '#ede9fe', color: '#6d28d9' },
-                        { label: 'Late',     value: totalLate, bg: '#fff7ed', color: '#c2410c' },
-                      ].map(({ label, value, bg, color }) => (
-                        <div key={label} style={{ background: bg, borderRadius: 8, padding: '5px 12px', textAlign: 'center' }}>
-                          <div style={{ fontSize: 17, fontWeight: 800, color }}>{value}</div>
-                          <div style={{ fontSize: 10, color }}>{label}</div>
-                        </div>
-                      ))}
-                      <div style={{ marginLeft: 'auto', fontSize: 11, color: '#6b7280', fontWeight: 600 }}>
-                        {formatCycleLabel(selectedMonth, selectedYear)}
-                      </div>
-                    </div>
-
-                    {/* ── Date grid ── */}
-                    <div style={{ overflowX: 'auto', maxHeight: '460px' }}>
-                      <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
-                        <thead>
-                          <tr>
-                            <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', borderRight: '2px solid #d1d5db', position: 'sticky', left: 0, top: 0, background: '#f9fafb', zIndex: 3, minWidth: 160, whiteSpace: 'nowrap' }}>
-                              Employee
-                            </th>
-                            {cycleDateList.map((d, i) => {
-                              const dn  = d.getDate();
-                              const mon = d.toLocaleString('en-US', { month: 'short' });
-                              const dow = ['Su','Mo','Tu','We','Th','Fr','Sa'][d.getDay()];
-                              const isWknd  = d.getDay() === 0 || d.getDay() === 6;
-                              const isToday = d.toDateString() === new Date().toDateString();
-                              return (
-                                <th key={i} style={{ padding: '3px 2px', textAlign: 'center', borderBottom: '2px solid #e5e7eb', borderRight: '1px solid #f3f4f6', minWidth: 30, position: 'sticky', top: 0, zIndex: 2, background: isToday ? '#1e40af' : isWknd ? '#eff6ff' : '#f9fafb' }}>
-                                  <div style={{ color: isToday ? '#fff' : isWknd ? '#1d4ed8' : '#374151', fontSize: 11, fontWeight: 800, lineHeight: 1.1 }}>{dn}</div>
-                                  <div style={{ color: isToday ? '#bfdbfe' : isWknd ? '#3b82f6' : '#9ca3af', fontSize: 9, lineHeight: 1.2 }}>{mon}</div>
-                                  <div style={{ color: isToday ? '#93c5fd' : isWknd ? '#93c5fd' : '#d1d5db', fontSize: 9, lineHeight: 1.2 }}>{dow}</div>
-                                </th>
-                              );
-                            })}
-                            {/* Summary column headers */}
-                            {SUMMARY_COLS.map(({ key, label, bg, color, title }) => (
-                              <th key={key} title={title} style={{ padding: '4px 2px', textAlign: 'center', borderBottom: '2px solid #e5e7eb', borderLeft: key === 'P' ? '2px solid #d1d5db' : '1px solid #f3f4f6', minWidth: 30, position: 'sticky', top: 0, zIndex: 2, background: bg }}>
-                                <span style={{ fontSize: 10, fontWeight: 800, color }}>{label}</span>
-                              </th>
-                            ))}
-                            <th style={{ padding: '4px 6px', textAlign: 'center', borderBottom: '2px solid #e5e7eb', borderLeft: '1px solid #e5e7eb', minWidth: 52, position: 'sticky', top: 0, zIndex: 2, background: '#f9fafb' }}>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: '#374151' }}>Avg Hrs</span>
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {empIds.length > 0 ? empIds.map((empId, idx) => {
-                            const empStats   = monthlyStats[empId];
-                            const empRecords = monthlyAttendance.filter(r => r.employee_id === empId);
-                            const rowBg      = idx % 2 === 0 ? '#fff' : '#fafafa';
-
-                            return (
-                              <tr key={empId} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                                <td style={{ padding: '4px 10px', position: 'sticky', left: 0, zIndex: 1, background: rowBg, borderRight: '2px solid #d1d5db', whiteSpace: 'nowrap' }}>
-                                  <div style={{ fontWeight: 600, color: '#111827', fontSize: 11 }}>{empStats.name}</div>
-                                  <div style={{ fontSize: 9, color: '#9ca3af' }}>{empId}</div>
-                                </td>
-                                {cycleDateList.map((d, i) => {
-                                  const yr  = d.getFullYear();
-                                  const mo  = String(d.getMonth() + 1).padStart(2, '0');
-                                  const dy  = String(d.getDate()).padStart(2, '0');
-                                  const ds  = `${yr}-${mo}-${dy}`;
-                                  const rec = empRecords.find(r => r.date === ds);
-                                  const cs  = rec ? (STATUS_CELL[rec.status] || { bg: '#f3f4f6', color: '#6b7280', label: '?' }) : null;
-                                  const isTd = d.toDateString() === new Date().toDateString();
-                                  return (
-                                    <td key={i} title={rec?.tooltip} style={{ padding: '2px 1px', textAlign: 'center', background: isTd ? '#eff6ff' : rowBg, borderRight: '1px solid #f3f4f6' }}>
-                                      {rec ? (
-                                        <span style={{ position: 'relative', display: 'inline-block' }}>
-                                          <span style={{ display: 'inline-block', background: cs.bg, color: cs.color, borderRadius: 3, padding: '1px 2px', fontSize: 10, fontWeight: 700, minWidth: 26, textAlign: 'center', lineHeight: 1.5 }}>{cs.label}</span>
-                                          {rec.is_late && rec.status !== 'weekend' && rec.status !== 'holiday' && (
-                                            <span style={{ position: 'absolute', top: -3, right: -3, color: '#ea580c', fontSize: 8, fontWeight: 900, lineHeight: 1 }}>⚠</span>
-                                          )}
-                                          {rec.overtime_hours > 0 && (
-                                            <span style={{ position: 'absolute', top: -3, left: -3, color: '#15803d', fontSize: 8, fontWeight: 900, lineHeight: 1 }}>+</span>
-                                          )}
-                                        </span>
-                                      ) : (
-                                        <span style={{ color: '#e5e7eb', fontSize: 10 }}>·</span>
-                                      )}
-                                    </td>
-                                  );
-                                })}
-                                {/* Summary cells */}
-                                {SUMMARY_COLS.map(({ key, bg, color, val }) => {
-                                  const v = val(empStats);
-                                  return (
-                                    <td key={key} style={{ padding: '3px 2px', textAlign: 'center', background: rowBg, borderLeft: key === 'P' ? '2px solid #d1d5db' : '1px solid #f3f4f6' }}>
-                                      {v !== 0
-                                        ? <span style={{ background: bg, color, borderRadius: 4, padding: '1px 4px', fontSize: 10, fontWeight: 700 }}>{v}</span>
-                                        : <span style={{ color: '#d1d5db', fontSize: 10 }}>—</span>}
-                                    </td>
-                                  );
-                                })}
-                                <td style={{ padding: '3px 6px', textAlign: 'center', background: rowBg, borderLeft: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
-                                  <span style={{ fontSize: 10, fontWeight: 700, color: '#374151' }}>{empStats.avg_hours ? formatHours(empStats.avg_hours) : '—'}</span>
-                                  <div style={{ fontSize: 9, color: '#9ca3af' }}>{empStats.total_hours ? empStats.total_hours.toFixed(0) + 'h' : ''}</div>
-                                </td>
-                              </tr>
-                            );
-                          }) : (
-                            <tr>
-                              <td colSpan={cycleDateList.length + SUMMARY_COLS.length + 2} style={{ textAlign: 'center', padding: '32px', color: '#9ca3af', fontSize: 13 }}>
-                                No attendance data for this period
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                );
-            })()}
+            {renderMonthlyBody()}
           </Card.Body>
         </Card>
       )}
+
+      <style>{ATTENDANCE_TABLE_CSS}</style>
 
       <div className="text-center mt-3 text-muted small">
         <p className="mb-0 d-flex flex-wrap justify-content-center gap-2">

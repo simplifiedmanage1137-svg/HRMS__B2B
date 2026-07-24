@@ -24,6 +24,9 @@ import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
 import { useMobileDevice } from '../../hooks/useMobileDevice';
+import {
+  DA, STATUS_PILL, DA_TH_STYLE, DA_CARD_STYLE, DA_GRADIENT_BAR, ATTENDANCE_TABLE_CSS,
+} from '../Common/attendanceTheme';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -47,6 +50,32 @@ ChartJS.register(
   Legend,
   Filler
 );
+
+// Tiny inline-SVG trend line for the stat cards. Renders a flat baseline when there
+// isn't enough history yet, rather than a fake/decorative curve.
+const Sparkline = ({ data, color, width = 72, height = 28 }) => {
+  const points = Array.isArray(data) ? data : [];
+  if (points.length < 2) {
+    return (
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+        <line x1="0" y1={height - 2} x2={width} y2={height - 2} stroke={color} strokeWidth="2" strokeLinecap="round" opacity="0.35" />
+      </svg>
+    );
+  }
+  const max = Math.max(...points);
+  const min = Math.min(...points);
+  const range = max - min || 1;
+  const step = width / (points.length - 1);
+  const coords = points.map((v, i) => [i * step, height - 2 - ((v - min) / range) * (height - 4)]);
+  const linePath = coords.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const areaPath = `${linePath} L${width},${height} L0,${height} Z`;
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      <path d={areaPath} fill={color} opacity="0.12" />
+      <path d={linePath} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+};
 
 const Attendance = () => {
   const navigate = useNavigate();
@@ -338,22 +367,33 @@ const Attendance = () => {
     return 'present';
   };
 
+  // Shared "premium" pill renderer — same STATUS_PILL colors used on the Admin and Manager
+  // attendance tables, so this employee's own history looks consistent with everywhere else.
+  const statusPill = (key, label, icon) => (
+    <span
+      className="da-badge d-inline-flex align-items-center gap-1 text-nowrap"
+      style={{ ...(STATUS_PILL[key] || STATUS_PILL.absent), borderRadius: 999, padding: '5px 12px', fontSize: 12, fontWeight: 600 }}
+    >
+      {icon}{label}
+    </span>
+  );
+
   const getAttendanceStatusBadge = (record) => {
     const today = new Date().toISOString().split('T')[0];
     const isToday = record.attendance_date === today;
 
     const isWeekend = record.dayOfWeek === 0 || record.dayOfWeek === 6;
     if (record.isWeeklyOff || (isWeekend && !record.clock_in)) {
-      return <Badge bg="secondary" className="px-2 py-1"><FaMoon className="me-1" size={10} /> W-Off</Badge>;
+      return statusPill('weekend', 'W-Off', <FaMoon size={10} />);
     }
 
     if (!record.clock_in) {
-      return <Badge bg="secondary" className="px-2 py-1"><FaClock className="me-1" size={10} /> Not Clocked</Badge>;
+      return statusPill('not_clocked', 'Not Clocked', <FaClock size={10} />);
     }
 
     // Today with active session (no clock out yet)
     if (isToday && record.clock_in && !record.clock_out) {
-      return <Badge bg="info" className="px-2 py-1">Working</Badge>;
+      return statusPill('working', 'Working', <span style={{ fontSize: 8 }}>●</span>);
     }
 
     // Clock in + clock out: calculate from hours — plain word, no extra info
@@ -362,21 +402,21 @@ const Attendance = () => {
       const hoursStatus = getStatusFromHours(totalHours);
 
       if (hoursStatus === 'absent') {
-        return <Badge bg="danger" className="px-2 py-1">Absent</Badge>;
+        return statusPill('absent', 'Absent');
       }
       if (hoursStatus === 'half_day') {
-        return <Badge className="px-2 py-1" style={{ backgroundColor: '#EA580C', color: '#fff' }}>Half Day</Badge>;
+        return statusPill('half_day', 'Half Day');
       }
       // present (9h+)
-      return <Badge bg="success" className="px-2 py-1">Present</Badge>;
+      return statusPill('present', 'Present', <FaCheckCircle size={10} />);
     }
 
     // Clock in but no clock out (not today = missed)
     if (record.clock_in && !record.clock_out) {
-      return <Badge bg="danger" className="px-2 py-1"><FaExclamationTriangle className="me-1" size={10} /> Missed CO</Badge>;
+      return statusPill('absent', 'Missed CO', <FaExclamationTriangle size={10} />);
     }
 
-    return <Badge bg="secondary" className="px-2 py-1">Not Clocked</Badge>;
+    return statusPill('not_clocked', 'Not Clocked', <FaClock size={10} />);
   };
 
   const saveSessionToStorage = (session) => {
@@ -1639,11 +1679,22 @@ const Attendance = () => {
   };
 
   const getLocationBadge = () => {
+    // Reflects whether we actually have a live coordinate fix, rather than a hardcoded label.
+    const enabled = !!location;
     return (
-      <Badge bg="info" className="px-3 py-2">
-        <FaLocationArrow className="me-2" />
-        Location Tracking Disabled
-      </Badge>
+      <div
+        className="d-inline-flex align-items-center gap-2 text-nowrap"
+        style={{
+          borderRadius: 999,
+          border: `1px solid ${enabled ? 'rgba(22,163,74,.35)' : 'rgba(107,114,128,.3)'}`,
+          background: enabled ? 'rgba(22,163,74,.08)' : 'rgba(107,114,128,.08)',
+          color: enabled ? DA.primaryGreen : DA.secondary,
+          fontWeight: 600, fontSize: 13, padding: '8px 16px',
+        }}
+      >
+        <FaLocationArrow size={12} />
+        Location Tracking {enabled ? 'Enabled' : 'Disabled'}
+      </div>
     );
   };
 
@@ -1674,7 +1725,11 @@ const Attendance = () => {
 
       return (
         <div className="text-center">
-          <Button variant="warning" size="lg" className="w-100 py-3" onClick={handleClockOut} disabled={loading}>
+          <Button
+            onClick={handleClockOut}
+            disabled={loading}
+            style={{ background: DA.warning, borderColor: DA.warning, borderRadius: 12, padding: '10px 22px', fontWeight: 700, color: '#fff' }}
+          >
             {loading ? (
               <><Spinner size="sm" animation="border" className="me-2" />Processing...</>
             ) : (
@@ -1689,7 +1744,11 @@ const Attendance = () => {
     if (isClockedOut || hasClockedOutToday) {
       return (
         <div className="text-center">
-          <Button variant="success" size="lg" className="w-100 py-3" onClick={handleClockIn} disabled={loading}>
+          <Button
+            onClick={handleClockIn}
+            disabled={loading}
+            style={{ background: DA.primaryGreen, borderColor: DA.primaryGreen, borderRadius: 12, padding: '10px 22px', fontWeight: 700, color: '#fff' }}
+          >
             {loading ? (
               <><Spinner size="sm" animation="border" className="me-2" />Processing...</>
             ) : (
@@ -1723,11 +1782,9 @@ const Attendance = () => {
       return (
         <div className="text-center">
           <Button
-            variant="warning"
-            size="lg"
-            className="w-100 py-3"
             onClick={() => handleOpenRegularizationModal(eligibleRecord)}
             disabled={loading || submittingRequest}
+            style={{ background: DA.warning, borderColor: DA.warning, borderRadius: 12, padding: '10px 22px', fontWeight: 700, color: '#fff' }}
           >
             {loading || submittingRequest ? (
               <><Spinner size="sm" animation="border" className="me-2" />Processing...</>
@@ -1744,7 +1801,11 @@ const Attendance = () => {
 
     // ✅ DEFAULT: Clock In button
     return (
-      <Button variant="success" size="lg" className="w-100 py-3" onClick={handleClockIn} disabled={loading}>
+      <Button
+        onClick={handleClockIn}
+        disabled={loading}
+        style={{ background: DA.primaryGreen, borderColor: DA.primaryGreen, borderRadius: 12, padding: '10px 22px', fontWeight: 700, color: '#fff' }}
+      >
         {loading ? (
           <><Spinner size="sm" animation="border" className="me-2" />Processing...</>
         ) : (
@@ -1858,15 +1919,50 @@ const Attendance = () => {
     return () => window.removeEventListener('regularizationApproved', handleRegularizationEvent);
   }, [user?.employeeId]);
 
+  // Cumulative trend lines for the stat-card sparklines, derived from the already-fetched
+  // history (oldest → newest) rather than fabricated data.
+  const sortedHistoryForTrend = [...attendanceHistory].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const presentTrend = [];
+  const absentTrend = [];
+  const hoursTrend = [];
+  const avgHoursTrend = [];
+  {
+    let cumPresent = 0, cumAbsent = 0, cumHours = 0;
+    sortedHistoryForTrend.forEach((r, i) => {
+      const hrs = parseFloat(r.total_hours) || 0;
+      if (!r.isWeeklyOff) {
+        if (hrs > 0) cumPresent++;
+        else if (r.clock_in) cumAbsent++;
+      }
+      cumHours += hrs;
+      presentTrend.push(cumPresent);
+      absentTrend.push(cumAbsent);
+      hoursTrend.push(Math.round(cumHours));
+      avgHoursTrend.push(parseFloat((cumHours / (i + 1)).toFixed(1)));
+    });
+  }
+
   return (
     <div className="p-2 p-md-3 p-lg-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
-      <div className="d-flex align-items-center justify-content-between mb-4">
-        <h5 className="mb-0 d-flex align-items-center">
-          <FaClock className="me-2 text-primary" />
-          Attendance Management
-        </h5>
+      <div
+        className="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3"
+        style={{ background: '#fff', borderRadius: 16, padding: '18px 22px', boxShadow: '0 10px 35px rgba(16,24,40,.06)' }}
+      >
+        <div className="d-flex align-items-center gap-3">
+          <div
+            className="d-flex align-items-center justify-content-center"
+            style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(22,163,74,.12)', color: DA.primaryGreen, flexShrink: 0 }}
+          >
+            <FaClock size={20} />
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 18, color: '#101828' }}>Attendance Management</div>
+            <div style={{ fontSize: 13, color: DA.secondary }}>Track your time and attendance</div>
+          </div>
+        </div>
         <button
           className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+          style={{ borderRadius: 10, padding: '8px 16px', fontWeight: 600 }}
           onClick={() => navigate(-1)}
         >
           <FaArrowLeft size={12} /> Back
@@ -1986,8 +2082,8 @@ const Attendance = () => {
       )}
 
       {/* Main Attendance Card */}
-      <Card className="mb-4 border-0 shadow-sm">
-        <Card.Body className="p-2 p-md-3">
+      <div style={{ ...DA_CARD_STYLE, marginBottom: 24 }} className="da-fade-in">
+        <div className="p-3 p-md-4">
           <Row className="align-items-center g-3">
             <Col xs={12} md={3}>
               <div className="d-flex justify-content-center justify-content-md-start">
@@ -2000,44 +2096,50 @@ const Attendance = () => {
                 </small>
               )}
             </Col>
-            <Col xs={6} md={3}>
+            <Col xs={6} md={2}>
               <div className="text-center">
                 <small className="text-muted d-block">Current Time</small>
-                <strong>{currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</strong>
+                <strong style={{ fontSize: 18 }}>{currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</strong>
               </div>
             </Col>
-            <Col xs={6} md={3}>
-              <Row className="g-2">
-                <Col xs={6} className="text-center">
-                  <small className="text-muted d-block">Clock In</small>
-                  <strong className={attendance?.clock_in ? 'text-success' : 'text-muted'}>
-                    {attendance?.clock_in
-                      ? (attendance.clock_in_display || formatTimeIST(attendance.clock_in_ist || attendance.clock_in))
-                      : '--:--'}
-                  </strong>
-                  {attendance?.late_display && attendance.late_minutes > 0 && (
-                    <small className="text-danger d-block" style={{ fontSize: '10px' }}>
-                      <FaExclamationTriangle className="me-1" size={8} />
-                      Late {attendance.late_display}
-                    </small>
-                  )}
-                </Col>
-                <Col xs={6} className="text-center">
-                  <small className="text-muted d-block">Clock Out</small>
-                  <strong className={attendance?.clock_out ? 'text-warning' : 'text-muted'}>
-                    {attendance?.clock_out
-                      ? (attendance.clock_out_display || formatTimeIST(attendance.clock_out_ist || attendance.clock_out))
-                      : '--:--'}
-                  </strong>
-                  {attendance?.total_hours_display && (
-                    <small className="text-success d-block" style={{ fontSize: '10px' }}>
-                      {attendance.total_hours_display}
-                    </small>
-                  )}
-                </Col>
-              </Row>
+            <Col xs={6} md={2}>
+              <div className="text-center">
+                <small className="text-muted d-block">Clock In</small>
+                <strong style={{ fontSize: 18, color: attendance?.clock_in ? DA.primaryGreen : DA.secondary }}>
+                  {attendance?.clock_in
+                    ? (attendance.clock_in_display || formatTimeIST(attendance.clock_in_ist || attendance.clock_in))
+                    : '--:--'}
+                </strong>
+                {attendance?.late_display && attendance.late_minutes > 0 && (
+                  <small className="text-danger d-block" style={{ fontSize: '10px' }}>
+                    <FaExclamationTriangle className="me-1" size={8} />
+                    Late {attendance.late_display}
+                  </small>
+                )}
+              </div>
             </Col>
-            <Col xs={12} md={3}>
+            <Col xs={6} md={2}>
+              <div className="text-center">
+                <small className="text-muted d-block">Clock Out</small>
+                <strong style={{ fontSize: 18, color: attendance?.clock_out ? DA.warning : DA.secondary }}>
+                  {attendance?.clock_out
+                    ? (attendance.clock_out_display || formatTimeIST(attendance.clock_out_ist || attendance.clock_out))
+                    : '--:--'}
+                </strong>
+                {!attendance?.clock_out && attendance?.clock_in && (
+                  <small className="text-danger d-block" style={{ fontSize: '10px' }}>Not Clocked Out</small>
+                )}
+              </div>
+            </Col>
+            <Col xs={6} md={1}>
+              <div className="text-center">
+                <small className="text-muted d-block">Working Hours</small>
+                <strong style={{ fontSize: 18, color: '#2563eb' }}>
+                  {attendance?.total_hours_display || '0h 0m'}
+                </strong>
+              </div>
+            </Col>
+            <Col xs={12} md={2}>
               <div className="d-flex justify-content-center justify-content-md-end">
                 {renderClockButton()}
               </div>
@@ -2054,50 +2156,49 @@ const Attendance = () => {
               {message.text}
             </Alert>
           )}
-        </Card.Body>
-      </Card>
+        </div>
+      </div>
 
       {/* Stats Cards */}
-      <Row className="mb-3 g-2">
-        <Col xs={6} md={3}>
-          <Card className="border-0 shadow-sm bg-light">
-            <Card.Body className="p-2 text-center">
-              <small className="text-muted d-block">Present Days</small>
-              <h6 className="mb-0 fw-bold">{monthlyStats.presentDays}</h6>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col xs={6} md={3}>
-          <Card className="border-0 shadow-sm bg-light">
-            <Card.Body className="p-2 text-center">
-              <small className="text-muted d-block">Absent Days</small>
-              <h6 className="mb-0 fw-bold">{monthlyStats.absentDays}</h6>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col xs={6} md={3}>
-          <Card className="border-0 shadow-sm bg-light">
-            <Card.Body className="p-2 text-center">
-              <small className="text-muted d-block">Total Hours</small>
-              <h6 className="mb-0 fw-bold">{monthlyStats.totalHours}h</h6>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col xs={6} md={3}>
-          <Card className="border-0 shadow-sm bg-light">
-            <Card.Body className="p-2 text-center">
-              <small className="text-muted d-block">Avg Hours/Day</small>
-              <h6 className="mb-0 fw-bold">{monthlyStats.averageHours}h</h6>
-            </Card.Body>
-          </Card>
-        </Col>
+      <Row className="mb-4 g-3">
+        {[
+          { label: 'Present Days', value: monthlyStats.presentDays, icon: <FaCheckCircle size={16} />, color: DA.primaryGreen, bg: 'rgba(22,163,74,.12)', trend: presentTrend },
+          { label: 'Absent Days', value: monthlyStats.absentDays, icon: <FaExclamationTriangle size={16} />, color: '#ef4444', bg: 'rgba(239,68,68,.12)', trend: absentTrend },
+          { label: 'Total Hours', value: `${monthlyStats.totalHours}h`, icon: <FaClock size={16} />, color: '#7c3aed', bg: 'rgba(124,58,237,.12)', trend: hoursTrend },
+          { label: 'Avg Hours/Day', value: `${monthlyStats.averageHours}h`, icon: <FaRegClock size={16} />, color: '#2563eb', bg: 'rgba(37,99,235,.12)', trend: avgHoursTrend },
+        ].map((stat) => (
+          <Col xs={6} md={3} key={stat.label}>
+            <div style={{ ...DA_CARD_STYLE, height: '100%' }} className="da-fade-in">
+              <div className="p-3">
+                <div className="d-flex align-items-start justify-content-between">
+                  <div
+                    className="d-flex align-items-center justify-content-center"
+                    style={{ width: 40, height: 40, borderRadius: '50%', background: stat.bg, color: stat.color }}
+                  >
+                    {stat.icon}
+                  </div>
+                  <Sparkline data={stat.trend} color={stat.color} />
+                </div>
+                <h4 className="mb-0 fw-bold mt-2" style={{ color: stat.color }}>{stat.value}</h4>
+                <small className="text-muted d-block">{stat.label}</small>
+                <small className="text-muted" style={{ fontSize: 11 }}>This Month</small>
+              </div>
+            </div>
+          </Col>
+        ))}
       </Row>
+
+      <div className="text-muted text-center mb-4" style={{ fontSize: 12.5 }}>
+        <FaInfoCircle className="me-1" />
+        All times are in your local timezone (Asia/Kolkata)
+      </div>
 
       {/* Attendance History */}
       <Row>
         <Col lg={12}>
-          <Card className="border-0 shadow-sm">
-            <Card.Header className="bg-white py-2 py-md-3">
+          <div style={DA_CARD_STYLE} className="da-fade-in">
+            <div style={DA_GRADIENT_BAR} />
+            <div className="bg-white py-2 py-md-3 px-3">
               <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
                 <h6 className="mb-0 small d-flex align-items-center">
                   <FaHistory className="me-2 text-primary" />
@@ -2131,8 +2232,8 @@ const Attendance = () => {
                   </Badge>
                 </div>
               </div>
-            </Card.Header>
-            <Card.Body className="p-2 p-md-3">
+            </div>
+            <div className="p-2 p-md-3">
               <div className="mb-3 border-bottom">
                 <Button variant={activeTab === 'daily' ? 'primary' : 'light'} size="sm" onClick={() => setActiveTab('daily')} className="me-2" style={{ borderBottom: activeTab === 'daily' ? '3px solid #0d6efd' : 'none', borderRadius: '4px 4px 0 0' }}>
                   Daily View
@@ -2145,20 +2246,20 @@ const Attendance = () => {
               {activeTab === 'daily' ? (
                 <>
                   <div
-                    className="table-responsive"
-                    style={{ maxHeight: '500px', overflowY: 'auto' }}
+                    className="table-responsive da-scroll"
+                    style={{ maxHeight: 560, overflowY: 'auto' }}
                     onScroll={handleTableScroll}
                     ref={tableScrollRef}
                   >
-                    <Table hover size="sm" className="mb-0">
-                      <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
+                    <Table className="mb-0">
+                      <thead className="sticky-top" style={{ top: 0, zIndex: 10 }}>
                         <tr>
-                          <th style={{ width: '14%', whiteSpace: 'nowrap' }} className="small">Date</th>
-                          <th style={{ width: '9%', whiteSpace: 'nowrap' }} className="small d-none d-sm-table-cell">Day</th>
-                          <th style={{ width: '18%', whiteSpace: 'nowrap' }} className="small">Clock In</th>
-                          <th style={{ width: '16%', whiteSpace: 'nowrap' }} className="small">Clock Out</th>
-                          <th style={{ width: '14%', whiteSpace: 'nowrap' }} className="small">Hours</th>
-                          <th style={{ width: '34%' }} className="small">Status</th>
+                          <th style={{ ...DA_TH_STYLE, width: '14%' }}>Date</th>
+                          <th style={{ ...DA_TH_STYLE, width: '9%' }} className="d-none d-sm-table-cell">Day</th>
+                          <th style={{ ...DA_TH_STYLE, width: '18%' }}>Clock In</th>
+                          <th style={{ ...DA_TH_STYLE, width: '16%' }}>Clock Out</th>
+                          <th style={{ ...DA_TH_STYLE, width: '14%' }}>Hours</th>
+                          <th style={{ ...DA_TH_STYLE, width: '34%' }}>Status</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2166,22 +2267,8 @@ const Attendance = () => {
                           const today = new Date().toISOString().split('T')[0];
                           const isToday = record.attendance_date === today;
 
-                          const totalHours = parseFloat(record.total_hours) || 0;
-                          let rowClass = '';
-                          if (record.isWeeklyOff) {
-                            rowClass = 'bg-light';
-                          } else if (record.isToday) {
-                            rowClass = 'table-primary';
-                          } else if (record.is_regularized) {
-                            rowClass = 'table-info';
-                          } else if (totalHours >= 10) {
-                            rowClass = 'table-success';
-                          } else if (totalHours > 0 && totalHours < 9) {
-                            rowClass = 'table-danger';
-                          }
-
                           return (
-                            <tr key={index} className={`${rowClass} ${record.isToday ? 'fw-bold' : ''}`}>
+                            <tr key={index} className={`da-row da-row-enter ${record.isToday ? 'fw-bold' : ''}`} style={{ borderBottom: `1px solid ${DA.border}` }}>
                               <td className="small">
                                 <div>
                                   <span className="fw-semibold">{formatShortDate(record.date)}</span>
@@ -2197,28 +2284,28 @@ const Attendance = () => {
                               </td>
                               <td className="small">
                                 {record.isWeeklyOff ? (
-                                  <span className="text-muted">---</span>
+                                  <span style={{ color: DA.secondary }}>---</span>
                                 ) : record.formatted_clock_in ? (
-                                  <span className="text-nowrap">{record.formatted_clock_in}</span>
+                                  <span className="text-nowrap" style={{ color: DA.primaryGreen, fontWeight: 600 }}>{record.formatted_clock_in}</span>
                                 ) : record.clock_in ? (
-                                  <span className="text-nowrap">{formatTimeIST(record.clock_in)}</span>
+                                  <span className="text-nowrap" style={{ color: DA.primaryGreen, fontWeight: 600 }}>{formatTimeIST(record.clock_in)}</span>
                                 ) : (
-                                  <span className="text-muted">---</span>
+                                  <span style={{ color: DA.secondary }}>---</span>
                                 )}
                               </td>
                               <td className="small">
                                 {record.isWeeklyOff ? (
-                                  <span className="text-muted">---</span>
+                                  <span style={{ color: DA.secondary }}>---</span>
                                 ) : record.formatted_clock_out ? (
-                                  <span className="text-nowrap">{record.formatted_clock_out}</span>
+                                  <span className="text-nowrap" style={{ color: DA.primaryGreen, fontWeight: 600 }}>{record.formatted_clock_out}</span>
                                 ) : record.clock_out ? (
-                                  <span className="text-nowrap">{formatTimeIST(record.clock_out)}</span>
+                                  <span className="text-nowrap" style={{ color: DA.primaryGreen, fontWeight: 600 }}>{formatTimeIST(record.clock_out)}</span>
                                 ) : record.clock_in && isToday ? (
-                                  <span className="text-muted">--</span>
+                                  <span style={{ color: DA.secondary }}>--</span>
                                 ) : record.clock_in && !record.clock_out && !isToday ? (
-                                  <Badge bg="danger" pill size="sm">Missed</Badge>
+                                  <span className="da-badge d-inline-flex align-items-center text-nowrap" style={{ ...STATUS_PILL.absent, borderRadius: 999, padding: '3px 10px', fontSize: 11, fontWeight: 600 }}>Missed</span>
                                 ) : (
-                                  <span className="text-muted">---</span>
+                                  <span style={{ color: DA.secondary }}>---</span>
                                 )}
                               </td>
                               <td className="small fw-bold">
@@ -2292,8 +2379,8 @@ const Attendance = () => {
                   </div>
                 </>
               )}
-            </Card.Body>
-          </Card>
+            </div>
+          </div>
         </Col>
       </Row>
 
@@ -2358,6 +2445,8 @@ const Attendance = () => {
           </Button>
         </Modal.Footer>
       </Modal>
+
+      <style>{ATTENDANCE_TABLE_CSS}</style>
     </div>
   );
 };

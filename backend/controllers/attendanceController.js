@@ -1629,16 +1629,8 @@ exports.getAttendanceReport = async (req, res) => {
 
             const existingClockOut = existing.clock_out_ist || existing.clock_out;
             const newClockOut = record.clock_out_ist || record.clock_out;
-            // An import record has no clock_in/clock_out — Excel status is source of truth
-            const newIsImport = !record.clock_in && !record.clock_in_ist && record.status;
-            const existingIsImport = !existing.clock_in && !existing.clock_in_ist && existing.status;
 
-            if (newIsImport && !existingIsImport) {
-                // Import record always wins over a raw clock-in record
-                dedupedAttendanceMap[key] = record;
-            } else if (!newIsImport && existingIsImport) {
-                // Keep existing import record
-            } else if (newClockOut && !existingClockOut) {
+            if (newClockOut && !existingClockOut) {
                 dedupedAttendanceMap[key] = record;
             } else if (newClockOut && existingClockOut) {
                 const existingMs = toUTCMs(existingClockOut);
@@ -1647,7 +1639,26 @@ exports.getAttendanceReport = async (req, res) => {
                     dedupedAttendanceMap[key] = record;
                 }
             } else if (!existingClockOut && !newClockOut) {
-                dedupedAttendanceMap[key] = record;
+                // Neither has clocked out. This is the tie that used to be resolved by an
+                // "is this an Excel import?" guess (no clock_in + a status set) — but that guess
+                // can't tell a genuine Excel-imported correction apart from the daily-absent
+                // cron's placeholder row (cron/absentEmployeeCheck.js creates exactly the same
+                // shape: clock_in null, status 'absent'). That misclassification meant a stale
+                // "absent" placeholder created before the employee clocked in would permanently
+                // beat their real, later clock-in record — hiding currently-working employees.
+                // Recency is a much more reliable signal: whichever row was actually written
+                // most recently reflects the true current state of the day.
+                const existingTime = new Date(existing.updated_at || existing.created_at).getTime() || 0;
+                const newTime = new Date(record.updated_at || record.created_at).getTime() || 0;
+                if (newTime > existingTime) {
+                    dedupedAttendanceMap[key] = record;
+                } else if (newTime === existingTime) {
+                    const existingHasClockIn = !!(existing.clock_in || existing.clock_in_ist);
+                    const newHasClockIn = !!(record.clock_in || record.clock_in_ist);
+                    if (newHasClockIn && !existingHasClockIn) {
+                        dedupedAttendanceMap[key] = record;
+                    }
+                }
             }
         });
 

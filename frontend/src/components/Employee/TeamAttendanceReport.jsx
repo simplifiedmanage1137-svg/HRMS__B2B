@@ -1,5 +1,5 @@
 // src/components/Employee/TeamAttendanceReport.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     Card, Table, Badge, Form, Row, Col,
     Button, Spinner, Alert, ButtonGroup, InputGroup
@@ -9,19 +9,14 @@ import {
     FaFileExcel,
     FaArrowLeft,
     FaArrowRight,
-    FaUsers,
     FaCheckCircle,
-    FaTimesCircle,
     FaClock,
-    FaUmbrellaBeach,
     FaExclamationTriangle,
-    FaTrophy,
     FaSearch,
     FaEye,
     FaEyeSlash,
-    FaChartBar,
+    FaEllipsisV,
     FaUserTie,
-    FaMoon,
     FaSun,
     FaInfoCircle,
     FaSyncAlt,
@@ -32,6 +27,10 @@ import API_ENDPOINTS from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
+import {
+    DA, STATUS_PILL, LATE_PILL_ON_TIME, LATE_PILL_LATE, DA_TH_STYLE,
+    avatarColorFor, initialsFor, DA_CARD_STYLE, DA_GRADIENT_BAR, ATTENDANCE_TABLE_CSS,
+} from '../Common/attendanceTheme';
 
 const TeamAttendanceReport = () => {
     const { user } = useAuth();
@@ -60,6 +59,15 @@ const TeamAttendanceReport = () => {
         const timer = setInterval(() => setLiveNow(Date.now()), 30000);
         return () => clearInterval(timer);
     }, []);
+
+    // Daily table: infinite-scroll pagination (accumulates — rows never get replaced/reset,
+    // scrolling to the bottom just appends the next chunk in place, same pattern as the
+    // Admin "Daily Attendance" table).
+    const [dailyLoadCount, setDailyLoadCount] = useState(25);
+    const [dailyLoadingMore, setDailyLoadingMore] = useState(false);
+    const dailyTableScrollRef = useRef(null);
+    const dailyAutoAdvanceLockRef = useRef(false);
+    const DAILY_CHUNK_SIZE = 25;
 
     const months = [
         { value: 1, label: 'January', short: 'Jan' },
@@ -218,31 +226,6 @@ const TeamAttendanceReport = () => {
         return parts.join(' ');
     };
 
-    const getStatusBadge = (status, isLate = false, lateDisplay = null, overtimeHours = 0, compOff = false, totalHours = 0) => {
-        if (overtimeHours > 0) {
-            return <Badge bg="success" className="px-2 py-1 text-nowrap"><FaClock className="me-1" size={10} /> OT +{overtimeHours}h</Badge>;
-        }
-        if (compOff) {
-            return <Badge bg="purple" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#9b59b6' }}><FaTrophy className="me-1" size={10} /> Comp-Off</Badge>;
-        }
-        if (status === 'present') {
-            if (isLate) {
-                return <Badge bg="warning" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#fd7e14' }}><FaExclamationTriangle className="me-1" size={10} /> Late {lateDisplay}</Badge>;
-            }
-            return <Badge bg="success" className="px-2 py-1 text-nowrap"><FaCheckCircle className="me-1" size={10} /> Present</Badge>;
-        }
-        if (status === 'half_day') {
-            if (isLate) {
-                return <Badge bg="warning" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#fd7e14' }}><FaSun className="me-1" size={10} /> Half Day (Late)</Badge>;
-            }
-            return <Badge bg="warning" className="px-2 py-1 text-nowrap"><FaSun className="me-1" size={10} /> Half Day</Badge>;
-        }
-        if (status === 'on_leave') return <Badge bg="purple" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#6f42c1' }}><FaUmbrellaBeach className="me-1" size={10} /> On Leave</Badge>;
-        if (status === 'working') return <Badge bg="info" className="px-2 py-1 text-nowrap"><FaClock className="me-1" size={10} /> Working</Badge>;
-        if (status === 'weekend') return <Badge bg="secondary" className="px-2 py-1 text-nowrap"><FaMoon className="me-1" size={10} /> W-OFF</Badge>;
-        return <Badge bg="secondary" className="px-2 py-1 text-nowrap"><FaTimesCircle className="me-1" size={10} /> Absent</Badge>;
-    };
-
     const exportToExcel = () => {
         try {
             const exportData = attendanceData.map(record => ({
@@ -286,6 +269,30 @@ const TeamAttendanceReport = () => {
             record.employee_id.toLowerCase().includes(term) ||
             record.department?.toLowerCase().includes(term);
     });
+
+    // Reset the infinite-scroll window whenever the underlying filtered set changes
+    useEffect(() => {
+        setDailyLoadCount(DAILY_CHUNK_SIZE);
+        const el = dailyTableScrollRef.current;
+        if (el) el.scrollTop = 0;
+    }, [searchTerm, selectedDate, selectedEmployee, activeView]);
+
+    const visibleAttendance = filteredAttendance.slice(0, dailyLoadCount);
+    const dailyHasMore = visibleAttendance.length < filteredAttendance.length;
+
+    const handleDailyTableScroll = (e) => {
+        const el = e.target;
+        const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+        if (nearBottom && dailyHasMore && !dailyAutoAdvanceLockRef.current) {
+            dailyAutoAdvanceLockRef.current = true;
+            setDailyLoadingMore(true);
+            setTimeout(() => {
+                setDailyLoadCount(c => c + DAILY_CHUNK_SIZE);
+                setDailyLoadingMore(false);
+                setTimeout(() => { dailyAutoAdvanceLockRef.current = false; }, 400);
+            }, 300);
+        }
+    };
 
     const uniqueDates = [...new Set(attendanceData.map(a => a.attendance_date))].sort();
 
@@ -375,81 +382,46 @@ const TeamAttendanceReport = () => {
 
         if (total === 0 && present === 0 && absent === 0 && onLeave === 0 && halfDay === 0 && late === 0) {
             return (
-                <Card className="border-0 shadow-sm mb-4 bg-light">
-                    <Card.Body className="p-3 text-center">
-                        <FaInfoCircle className="text-muted mb-2" size={24} />
-                        <p className="text-muted mb-0">No attendance data available for {formatDate(selectedDate)}</p>
-                    </Card.Body>
-                </Card>
+                <div className="text-center py-4 mb-4" style={{ background: '#fff', borderRadius: 18, border: `1px solid ${DA.border}` }}>
+                    <FaInfoCircle className="mb-2" size={24} style={{ color: DA.secondary, opacity: 0.5 }} />
+                    <p className="mb-0" style={{ color: DA.secondary }}>No attendance data available for {formatDate(selectedDate)}</p>
+                </div>
             );
         }
 
+        const pills = [
+            { label: 'Present',  value: present + halfDay, bg: 'rgba(22,163,74,.1)',  color: '#16a34a', icon: '🟢' },
+            { label: 'Absent',   value: absent,             bg: 'rgba(239,68,68,.1)',  color: '#ef4444', icon: '🔴' },
+            { label: 'Half Day', value: halfDay,             bg: 'rgba(245,158,11,.12)', color: '#d97706', icon: '🟠' },
+            { label: 'On Leave', value: onLeave,             bg: 'rgba(139,92,246,.1)', color: '#7c3aed', icon: '🟣' },
+            { label: 'Late',     value: late,                bg: 'rgba(245,158,11,.12)', color: '#d97706', icon: '⚠️' },
+            { label: 'Working',  value: working,             bg: 'rgba(22,163,74,.1)',  color: '#16a34a', icon: '●' },
+        ];
+
         return (
-            <Card className="border-0 shadow-sm mb-4">
-                <Card.Body className="p-3">
-                    <div className="d-flex justify-content-between align-items-center mb-3">
-                        <h6 className="mb-0 text-dark fw-semibold">
-                            <FaChartBar className="me-2 text-primary" />
-                            Today's Team Summary - {formatDate(selectedDate)}
-                        </h6>
-                        <Badge bg="secondary" pill>Total: {total} members</Badge>
+            <div className="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center mb-4 gap-3">
+                <div>
+                    <h4 className="mb-1 fw-bold d-flex align-items-center" style={{ color: DA.text }}>
+                        <span className="me-2">📅</span> Team Attendance — {formatDate(selectedDate)}
+                    </h4>
+                    <div style={{ color: DA.secondary, fontSize: 14 }}>
+                        {total} team member{total !== 1 ? 's' : ''} · Attendance rate {attendanceRate}%
                     </div>
-                    <Row className="g-3">
-                        <Col xs={6} sm={4} md={2}>
-                            <div className="bg-primary bg-opacity-10 rounded p-3 text-center">
-                                <FaUsers className="mb-2 text-primary" size={20} />
-                                <div className="h4 mb-0 fw-bold text-primary">{total}</div>
-                                <small className="text-muted">Total</small>
-                            </div>
-                        </Col>
-                        <Col xs={6} sm={4} md={2}>
-                            <div className="bg-success bg-opacity-10 rounded p-3 text-center">
-                                <FaCheckCircle className="mb-2 text-success" size={20} />
-                                <div className="h4 mb-0 fw-bold text-success">{present + halfDay}</div>
-                                <small className="text-muted">Present</small>
-                            </div>
-                        </Col>
-                        <Col xs={6} sm={4} md={2}>
-                            <div className="bg-danger bg-opacity-10 rounded p-3 text-center">
-                                <FaTimesCircle className="mb-2 text-danger" size={20} />
-                                <div className="h4 mb-0 fw-bold text-danger">{absent}</div>
-                                <small className="text-muted">Absent</small>
-                            </div>
-                        </Col>
-                        <Col xs={6} sm={4} md={2}>
-                            <div className="bg-purple bg-opacity-10 rounded p-3 text-center" style={{ backgroundColor: '#f3e8ff' }}>
-                                <FaUmbrellaBeach className="mb-2" style={{ color: '#6f42c1' }} size={20} />
-                                <div className="h4 mb-0 fw-bold" style={{ color: '#6f42c1' }}>{onLeave}</div>
-                                <small className="text-muted">On Leave</small>
-                            </div>
-                        </Col>
-                        <Col xs={6} sm={4} md={2}>
-                            <div className="bg-warning bg-opacity-10 rounded p-3 text-center">
-                                <FaSun className="mb-2 text-warning" size={20} />
-                                <div className="h4 mb-0 fw-bold text-warning">{halfDay}</div>
-                                <small className="text-muted">Half Day</small>
-                            </div>
-                        </Col>
-                        <Col xs={6} sm={4} md={2}>
-                            <div className="bg-orange bg-opacity-10 rounded p-3 text-center" style={{ backgroundColor: '#fff3e0' }}>
-                                <FaExclamationTriangle className="mb-2" style={{ color: '#fd7e14' }} size={20} />
-                                <div className="h4 mb-0 fw-bold" style={{ color: '#fd7e14' }}>{late}</div>
-                                <small className="text-muted">Late Login</small>
-                            </div>
-                        </Col>
-                    </Row>
-                    <div className="mt-3 text-center">
-                        <Badge bg="light" text="dark" className="px-3 py-2">
-                            Attendance Rate: {attendanceRate}%
-                        </Badge>
-                        {working > 0 && (
-                            <Badge bg="info" className="ms-2 px-3 py-2">
-                                Currently Working: {working}
-                            </Badge>
-                        )}
-                    </div>
-                </Card.Body>
-            </Card>
+                </div>
+                <div className="d-flex flex-wrap gap-2">
+                    {pills.map(p => (
+                        <div
+                            key={p.label}
+                            className="d-flex align-items-center gap-2"
+                            style={{ background: p.bg, color: p.color, borderRadius: 999, padding: '10px 18px', fontWeight: 600, fontSize: 13 }}
+                        >
+                            <span>{p.icon}</span>
+                            <span>{p.label}</span>
+                            <span style={{ fontWeight: 700 }}>{p.value}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
         );
     };
 
@@ -596,72 +568,113 @@ const TeamAttendanceReport = () => {
             </Card>
 
             {/* Main Content */}
-            <Card className="border-0 shadow-sm">
-                <Card.Header className="bg-white py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <h6 className="mb-0 small fw-semibold">
-                        {activeView === 'daily' ? 'Daily Attendance Records' : 'Monthly Attendance Calendar'}
-                        {activeView === 'monthly' && dateRange.start && dateRange.end && (
-                            <span className="text-muted ms-2 fw-normal">({formatDate(dateRange.start)} - {formatDate(dateRange.end)})</span>
-                        )}
-                    </h6>
-                    <Badge bg="secondary" pill>{filteredAttendance.length} Records</Badge>
-                </Card.Header>
-                <Card.Body className="p-0">
-                    {activeView === 'daily' ? (
-                        <div className="table-responsive" style={{ maxHeight: '500px', overflow: 'auto' }}>
-                            <Table hover className="mb-0" size="sm">
-                                <thead className="bg-light sticky-top">
-                                    <tr className="small">
-                                        <th className="fw-normal">#</th>
-                                        <th className="fw-normal">Employee</th>
-                                        <th className="fw-normal d-none d-md-table-cell">Department</th>
-                                        <th className="fw-normal">Clock In</th>
-                                        <th className="fw-normal d-none d-sm-table-cell">Clock Out</th>
-                                        <th className="fw-normal d-none d-lg-table-cell">Hours</th>
-                                        <th className="fw-normal">Status</th>
-                                        <th className="fw-normal text-center">Details</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filteredAttendance.length > 0 ? (
-                                        filteredAttendance.map((record, index) => (
-                                            <React.Fragment key={index}>
-                                                <tr className={record.is_late ? 'table-warning' : ''}>
-                                                    <td className="small text-center">{index + 1}</td>
-                                                    <td className="small">
-                                                        <div className="fw-semibold">{record.employee_name}</div>
-                                                        <small className="text-muted">{record.employee_id}</small>
+            {activeView === 'daily' ? (
+                <div style={DA_CARD_STYLE} className="da-fade-in">
+                    <div style={DA_GRADIENT_BAR} />
+                    <div
+                        ref={dailyTableScrollRef}
+                        className="table-responsive da-scroll"
+                        style={{ maxHeight: 560, overflow: 'auto' }}
+                        onScroll={handleDailyTableScroll}
+                    >
+                        <Table className="mb-0">
+                            <thead className="sticky-top" style={{ top: 0, zIndex: 10 }}>
+                                <tr>
+                                    <th style={{ ...DA_TH_STYLE, textAlign: 'center', width: 60 }}>Sr No</th>
+                                    <th style={DA_TH_STYLE}>Employee</th>
+                                    <th style={DA_TH_STYLE} className="d-none d-md-table-cell">Department</th>
+                                    <th style={DA_TH_STYLE}>Clock In</th>
+                                    <th style={DA_TH_STYLE}>Late</th>
+                                    <th style={DA_TH_STYLE} className="d-none d-sm-table-cell">Clock Out</th>
+                                    <th style={DA_TH_STYLE} className="d-none d-lg-table-cell">Hours</th>
+                                    <th style={DA_TH_STYLE}>Status</th>
+                                    <th style={{ ...DA_TH_STYLE, textAlign: 'center' }}>Details</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {visibleAttendance.length > 0 ? (
+                                    visibleAttendance.map((record, index) => {
+                                        const statusKey = record.status || 'absent';
+                                        const pillStyle = STATUS_PILL[statusKey] || STATUS_PILL.absent;
+                                        const statusLabel = statusKey === 'present' ? 'Present'
+                                            : statusKey === 'working' ? 'Working'
+                                            : statusKey === 'half_day' ? 'Half Day'
+                                            : statusKey === 'on_leave' ? 'On Leave'
+                                            : statusKey === 'weekend' ? 'Week Off'
+                                            : 'Absent';
+                                        return (
+                                        <React.Fragment key={record.id || index}>
+                                                <tr className="da-row da-row-enter" style={{ height: 82, borderBottom: '1px solid #f1f5f9' }}>
+                                                    <td className="small text-center" style={{ color: DA.secondary }}>{index + 1}</td>
+                                                    <td>
+                                                        <div className="d-flex align-items-center gap-2">
+                                                            <div style={{
+                                                                width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                                                                background: avatarColorFor(record.employee_id), color: '#fff',
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                fontWeight: 700, fontSize: 13,
+                                                            }}>
+                                                                {initialsFor(
+                                                                    (record.employee_name || '').split(' ')[0],
+                                                                    (record.employee_name || '').split(' ')[1]
+                                                                )}
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <div className="text-truncate" style={{ maxWidth: 140, fontSize: 15, fontWeight: 600, color: DA.text }} title={record.employee_name}>
+                                                                    {record.employee_name}
+                                                                </div>
+                                                                <div className="text-truncate" style={{ maxWidth: 140, fontSize: 12, color: '#98A2B3' }}>
+                                                                    {record.employee_id}
+                                                                </div>
+                                                            </div>
+                                                        </div>
                                                     </td>
-                                                    <td className="small d-none d-md-table-cell">{record.department || '-'}</td>
-                                                    <td className="small">
-                                                        <span className="text-nowrap text-success">{formatTime(record.clock_in) || '--:--'}</span>
-                                                        {record.is_late && record.late_display && (
-                                                            <div><small className="text-warning">Late: {record.late_display}</small></div>
-                                                        )}
+                                                    <td className="small d-none d-md-table-cell" style={{ color: DA.text }}>{record.department || '-'}</td>
+                                                    <td className="small text-nowrap" style={{ color: record.clock_in ? DA.primaryGreen : DA.secondary, fontWeight: 600 }}>
+                                                        {formatTime(record.clock_in) || '--:--'}
                                                     </td>
-                                                    <td className="small text-danger d-none d-sm-table-cell">
+                                                    <td className="small">
+                                                        {record.is_late && record.late_display ? (
+                                                            <span className="da-badge d-inline-flex align-items-center gap-1 text-nowrap" style={{ ...LATE_PILL_LATE, borderRadius: 999, padding: '4px 10px', fontSize: 12, fontWeight: 600 }}>
+                                                                ⚠ {record.late_display}
+                                                            </span>
+                                                        ) : record.clock_in ? (
+                                                            <span className="da-badge d-inline-flex align-items-center gap-1 text-nowrap" style={{ ...LATE_PILL_ON_TIME, borderRadius: 999, padding: '4px 10px', fontSize: 12, fontWeight: 600 }}>
+                                                                ✓ On Time
+                                                            </span>
+                                                        ) : <span style={{ color: DA.secondary }}>-</span>}
+                                                    </td>
+                                                    <td className="small d-none d-sm-table-cell text-nowrap" style={{ color: record.clock_out ? DA.primaryGreen : DA.secondary, fontWeight: 600 }}>
                                                         {formatTime(record.clock_out) || '--:--'}
                                                     </td>
-                                                    <td className="small d-none d-lg-table-cell">
+                                                    <td className="small d-none d-lg-table-cell text-nowrap" style={{ color: DA.text }}>
                                                         {record.status === 'working' ? (
-                                                            <span className="text-info fw-semibold">
+                                                            <span style={{ color: DA.primaryGreen, fontWeight: 600 }}>
                                                                 <FaClock className="me-1" size={9} />
                                                                 {getLiveHoursDisplay(record)}
                                                             </span>
                                                         ) : record.total_hours > 0 ? formatDecimalHoursToHMS(parseFloat(record.total_hours)) : '-'}
                                                     </td>
-                                                    <td>
-                                                        {getStatusBadge(record.status, record.is_late, record.late_display, record.overtime_hours)}
+                                                    <td className="small">
+                                                        <span className="da-badge d-inline-flex align-items-center gap-1 text-nowrap" style={{ ...pillStyle, borderRadius: 999, padding: '5px 12px', fontSize: 12, fontWeight: 600 }}>
+                                                            {statusKey === 'working' && <span style={{ fontSize: 8 }}>●</span>}
+                                                            {statusKey === 'present' && <FaCheckCircle size={10} />}
+                                                            {statusLabel}
+                                                        </span>
                                                     </td>
                                                     <td className="text-center">
-                                                        <Button variant="outline-secondary" size="sm" onClick={() => setShowDetails(prev => ({ ...prev, [index]: !prev[index] }))}>
-                                                            {showDetails[index] ? <FaEyeSlash size={10} /> : <FaEye size={10} />}
-                                                        </Button>
+                                                        <button
+                                                            className="btn btn-sm da-action-btn d-inline-flex align-items-center gap-1"
+                                                            style={{ borderRadius: 999, border: `1px solid ${DA.border}`, background: '#fff', color: DA.secondary, fontSize: 12 }}
+                                                            onClick={() => setShowDetails(prev => ({ ...prev, [index]: !prev[index] }))}
+                                                        >
+                                                            {showDetails[index] ? <FaEyeSlash size={11} /> : <FaEllipsisV size={11} />} Details
+                                                        </button>
                                                     </td>
                                                 </tr>
                                                 {showDetails[index] && (
                                                     <tr className="bg-light">
-                                                        <td colSpan="8" className="p-3">
+                                                        <td colSpan="9" className="p-3">
                                                             <Row className="g-2 small">
                                                                 <Col xs={12} md={4}><strong>Employee:</strong> {record.employee_name}</Col>
                                                                 <Col xs={12} md={4}><strong>ID:</strong> {record.employee_id}</Col>
@@ -672,7 +685,7 @@ const TeamAttendanceReport = () => {
                                                                 <Col xs={12} md={4}>
                                                                     <strong>Total Hours:</strong>{' '}
                                                                     {record.status === 'working'
-                                                                        ? <span className="text-info">{getLiveHoursDisplay(record)} (live)</span>
+                                                                        ? <span className="text-success">{getLiveHoursDisplay(record)} (live)</span>
                                                                         : `${record.total_hours || 0}h`}
                                                                 </Col>
                                                                 {record.is_late && <Col xs={12} md={4}><strong className="text-warning">Late Duration:</strong> {record.late_display}</Col>}
@@ -683,14 +696,60 @@ const TeamAttendanceReport = () => {
                                                     </tr>
                                                 )}
                                             </React.Fragment>
-                                        ))
-                                    ) : (
-                                        <tr><td colSpan="8" className="text-center py-4"><FaCalendarAlt size={30} className="text-muted mb-2 opacity-50" /><p className="text-muted mb-0">No attendance records found</p></td></tr>
-                                    )}
-                                </tbody>
-                            </Table>
-                        </div>
-                    ) : (
+                                        );
+                                    })
+                                ) : (
+                                    <tr>
+                                        <td colSpan="9" className="text-center py-5">
+                                            <div style={{ color: DA.secondary }}>
+                                                <FaCalendarAlt size={36} className="mb-2" style={{ opacity: 0.3 }} />
+                                                <div style={{ fontSize: 14, fontWeight: 500 }}>No attendance records found</div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                                {dailyLoadingMore && (
+                                    <tr>
+                                        <td colSpan="9" className="text-center py-3 da-row-enter">
+                                            <div className="d-inline-flex align-items-center gap-2" style={{ color: DA.secondary, fontSize: 12 }}>
+                                                <Spinner animation="border" size="sm" style={{ width: 14, height: 14, color: DA.primaryGreen }} />
+                                                Loading more…
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </Table>
+                    </div>
+                    <div className="d-flex flex-column flex-sm-row justify-content-between align-items-center gap-2 px-3 py-3" style={{ borderTop: `1px solid ${DA.border}` }}>
+                        <small style={{ color: DA.secondary }}>
+                            {filteredAttendance.length === 0
+                                ? 'Showing 0 entries'
+                                : `Showing ${visibleAttendance.length} of ${filteredAttendance.length} entries`}
+                        </small>
+                        {dailyHasMore && (
+                            <button
+                                className="btn btn-sm"
+                                style={{ borderRadius: 999, border: `1px solid ${DA.primaryGreen}`, background: '#fff', color: DA.primaryGreen, fontWeight: 600, padding: '5px 16px' }}
+                                onClick={() => setDailyLoadCount(c => c + DAILY_CHUNK_SIZE)}
+                            >
+                                Load More
+                            </button>
+                        )}
+                    </div>
+                </div>
+            ) : (
+            <Card className="border-0 shadow-sm">
+                <Card.Header className="bg-white py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h6 className="mb-0 small fw-semibold">
+                        Monthly Attendance Calendar
+                        {dateRange.start && dateRange.end && (
+                            <span className="text-muted ms-2 fw-normal">({formatDate(dateRange.start)} - {formatDate(dateRange.end)})</span>
+                        )}
+                    </h6>
+                    <Badge bg="secondary" pill>{filteredAttendance.length} Records</Badge>
+                </Card.Header>
+                <Card.Body className="p-0">
                         <div className="table-responsive" style={{ maxHeight: '500px', overflow: 'auto' }}>
                             <Table className="mb-0" size="sm" bordered>
                                 <thead className="bg-light sticky-top">
@@ -763,20 +822,25 @@ const TeamAttendanceReport = () => {
                                 </tbody>
                             </Table>
                         </div>
-                    )}
                 </Card.Body>
             </Card>
+            )}
 
-            {/* Legend */}
-            <div className="mt-3 d-flex flex-wrap justify-content-center gap-3 small text-muted">
-                <span><Badge bg="success" pill className="me-1">✓</Badge> Present</span>
-                <span><Badge bg="warning" pill className="me-1">½</Badge> Half Day</span>
-                <span><Badge bg="purple" pill className="me-1" style={{ backgroundColor: '#6f42c1' }}>L</Badge> On Leave</span>
-                <span><Badge bg="secondary" pill className="me-1">W</Badge> Weekend</span>
-                <span><Badge bg="danger" pill className="me-1">✗</Badge> Absent</span>
-                <span className="text-warning"><FaExclamationTriangle className="me-1" size={10} /> Late Login (*)</span>
-                <span className="text-success"><FaClock className="me-1" size={10} /> Overtime (+)</span>
-            </div>
+            {/* Legend — only meaningful for the Monthly calendar's coded cells; the Daily
+                table already shows full-word status pills, so it doesn't need one. */}
+            {activeView === 'monthly' && (
+                <div className="mt-3 d-flex flex-wrap justify-content-center gap-3 small text-muted">
+                    <span><Badge bg="success" pill className="me-1">✓</Badge> Present</span>
+                    <span><Badge bg="warning" pill className="me-1">½</Badge> Half Day</span>
+                    <span><Badge bg="purple" pill className="me-1" style={{ backgroundColor: '#6f42c1' }}>L</Badge> On Leave</span>
+                    <span><Badge bg="secondary" pill className="me-1">W</Badge> Weekend</span>
+                    <span><Badge bg="danger" pill className="me-1">✗</Badge> Absent</span>
+                    <span className="text-warning"><FaExclamationTriangle className="me-1" size={10} /> Late Login (*)</span>
+                    <span className="text-success"><FaClock className="me-1" size={10} /> Overtime (+)</span>
+                </div>
+            )}
+
+            <style>{ATTENDANCE_TABLE_CSS}</style>
         </div>
     );
 };

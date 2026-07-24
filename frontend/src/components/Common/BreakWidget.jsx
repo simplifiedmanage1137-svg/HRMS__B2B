@@ -51,7 +51,6 @@ function BreakDropdown({ activeBreak, usedTypes, canInteract, acting, error, onS
     const triggerRef = useRef(null);
     const dropRef    = useRef(null);
     const allUsed    = BREAK_TYPES.every(t => usedTypes.includes(t.key));
-    const activeType = BREAK_TYPES.find(t => t.key === activeBreak?.break_type);
     const pendingDef = BREAK_TYPES.find(t => t.key === pendingType);
 
     const openDropdown = () => {
@@ -86,16 +85,17 @@ function BreakDropdown({ activeBreak, usedTypes, canInteract, acting, error, onS
     if (activeBreak) return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
             <button onClick={onEnd} disabled={acting} style={{
-                ...btnBase, background: '#f97316', color: '#fff',
+                ...btnBase, background: '#f97316', color: '#fff', gap: 8,
                 cursor: acting ? 'not-allowed' : 'pointer', opacity: acting ? 0.7 : 1,
             }}>
-                {acting ? <Spinner size="sm" animation="border" /> : <Square size={13} />}
-                End {activeType?.label || 'Break'}
+                {acting ? <Spinner size="sm" animation="border" /> : <Square size={14} />}
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Clock size={13} />
+                    {fmtDuration(activeBreak.break_start)}
+                </span>
+                <span style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.5)' }} />
+                <span style={{ fontWeight: 700 }}>End</span>
             </button>
-            <span style={{ fontSize: 10, color: '#d97706', fontWeight: 600 }}>
-                <Clock size={9} style={{ marginRight: 2, verticalAlign: 'middle' }} />
-                {fmtDuration(activeBreak.break_start)}
-            </span>
             {error && <div style={{ fontSize: 10, color: '#ef4444' }}>{error}</div>}
         </div>
     );
@@ -302,9 +302,9 @@ export default function BreakWidget({ isClockedIn = false, isClockedOut = false,
     const [usedTypes,     setUsedTypes]     = useState([]);
     const [sessionBreaks, setSessionBreaks] = useState([]); // own breaks this session
     const [todayBreaks,   setTodayBreaks]   = useState([]); // team breaks today
-    const [loading,   setLoading]   = useState(true);
-    const [acting,    setActing]    = useState(false);
-    const [error,     setError]     = useState('');
+    const [loading,       setLoading]       = useState(true);
+    const [acting,        setActing]        = useState(false);
+    const [error,         setError]         = useState('');
     const [, setTicker] = useState(0);
     const timerRef = useRef(null);
 
