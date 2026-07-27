@@ -360,6 +360,64 @@ router.post('/change-password', passwordLimiter, async (req, res) => {
     }
 });
 
+// Self-service password reset — step 1: verify identity.
+// There's no email-sending service wired up in this project, so instead of an emailed
+// reset link, Date of Birth OR phone number (whichever the employee has on file) acts
+// as the second factor alongside the employee ID/email. This keeps a stranger from
+// resetting someone else's password with only their (often guessable) employee ID/email.
+const normalizeDate = (val) => String(val || '').split('T')[0].trim();
+const normalizePhone = (val) => String(val || '').replace(/\D/g, '').slice(-10);
+
+router.post('/verify-reset-identity', passwordLimiter, async (req, res) => {
+    try {
+        const { identifier, method, dob, phone } = req.body;
+        const loginId = (identifier || '').trim();
+        const verifyMethod = method || (phone ? 'phone' : 'dob');
+
+        if (!['dob', 'phone'].includes(verifyMethod)) {
+            return res.status(400).json({ success: false, message: 'Invalid verification method' });
+        }
+        if (!loginId || (verifyMethod === 'dob' ? !dob : !phone)) {
+            return res.status(400).json({
+                success: false,
+                message: `Employee ID / Email and ${verifyMethod === 'dob' ? 'Date of Birth' : 'Phone Number'} are required`,
+            });
+        }
+
+        const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginId);
+        const { data: user, error } = isEmail
+            ? await supabase.from('employees').select('id, email, dob, phone, is_active').eq('email', loginId.toLowerCase()).maybeSingle()
+            : await supabase.from('employees').select('id, email, dob, phone, is_active').eq('employee_id', loginId).maybeSingle();
+
+        if (error) throw error;
+
+        const genericFail = () => res.status(401).json({ success: false, message: "The details you entered don't match our records." });
+
+        // Don't distinguish "not found" from "deactivated" to an unauthenticated caller.
+        if (!user || user.is_active === false) return genericFail();
+
+        if (verifyMethod === 'dob') {
+            if (!user.dob) {
+                return res.status(400).json({ success: false, message: 'No date of birth is on file for this account. Try Phone Number instead, or contact HR/Admin.' });
+            }
+            if (normalizeDate(dob) !== normalizeDate(user.dob)) return genericFail();
+        } else {
+            if (!user.phone) {
+                return res.status(400).json({ success: false, message: 'No phone number is on file for this account. Try Date of Birth instead, or contact HR/Admin.' });
+            }
+            if (normalizePhone(phone).length < 10 || normalizePhone(phone) !== normalizePhone(user.phone)) return genericFail();
+        }
+
+        const resetToken = jwt.sign({ id: user.id, email: user.email, purpose: 'password_reset' }, JWT_SECRET, { expiresIn: '10m' });
+
+        res.json({ success: true, resetToken, message: 'Identity verified' });
+
+    } catch (error) {
+        console.error('❌ Verify reset identity error:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+});
+
 // Forgot password
 router.post('/forgot-password', passwordLimiter, async (req, res) => {
     try {

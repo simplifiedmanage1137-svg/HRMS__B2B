@@ -35,6 +35,7 @@ export const API_ENDPOINTS = {
   PASSWORD_CHANGE:        ep('/api/auth/change-password'),
   PASSWORD_FORGOT:        ep('/api/auth/forgot-password'),
   PASSWORD_RESET:         ep('/api/auth/reset-password'),
+  PASSWORD_VERIFY_RESET_IDENTITY: ep('/api/auth/verify-reset-identity'),
 
   // Health / test
   TEST:    ep('/api/test'),
