@@ -2143,11 +2143,11 @@ const AdminDashboard = () => {
           {todayEvents && todayEvents.total > 0 && (
             <Card className="mb-4 border-0 shadow-sm">
               <Card.Header className="bg-gradient text-white py-2" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-                <h6 className="mb-0 d-flex align-items-center">
-                  <FaBirthdayCake className="me-2" size={14} />
-                  <FaTrophy className="me-2" size={14} />
-                  Today's Celebrations 🎉
-                </h6>
+               <h6 className="mb-0 d-flex align-items-center text-black font-semibold">
+  <FaBirthdayCake className="me-2 text-black" size={14} />
+  <FaTrophy className="me-2 text-black" size={14} />
+  Today's Celebrations 🎉
+</h6>
               </Card.Header>
               <Card.Body className="p-3">
                 <div className="d-flex flex-column flex-sm-row flex-wrap gap-2">
