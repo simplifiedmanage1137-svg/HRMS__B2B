@@ -234,6 +234,7 @@ export const API_ENDPOINTS = {
 
   // Tickets
   TICKETS:                ep('/api/tickets'),
+  TICKET_COUNT:           ep('/api/tickets/count'),
   TICKET_BY_ID:           (id) => ep(`/api/tickets/${id}`),
   TICKET_COMMENT:         (id) => ep(`/api/tickets/${id}/comment`),
   TICKET_IN_PROGRESS:     (id) => ep(`/api/tickets/${id}/in-progress`),

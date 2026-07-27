@@ -6,6 +6,7 @@ const path = require('path');
 const { verifyToken, isAdmin, isAdminOrManager, isAdminOrDesktopSupport } = require('../middleware/auth');
 const { uploadFile, deleteFile, folderForField } = require('../lib/supabaseStorage');
 const { sendShiftChangeEmail } = require('../services/emailService');
+const { createOnboardingTickets } = require('../utils/onboardingTickets');
 
 // Memory storage — files are uploaded to Supabase Storage (no local disk in serverless)
 const upload = multer({
@@ -415,6 +416,7 @@ router.post('/', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
                     address: employeeData.address || null,
                     blood_group: employeeData.blood_group || null,
                     emergency_contact: employeeData.emergency_contact || null,
+                    linkedin_url: employeeData.linkedin_url || null,
                     contract_policy: employeeData.contract_policy || null,
                     is_active: true,
                     role: employeeData.role || 'employee',
@@ -441,6 +443,8 @@ router.post('/', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
                 }
 
                 console.log('✅ Employee created successfully:', data[0]);
+
+                await createOnboardingTickets(supabase, { employee: data[0], actor: req.user });
 
                 return res.status(201).json({
                     success: true,

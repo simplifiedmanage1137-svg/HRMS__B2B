@@ -1,12 +1,27 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Modal, Badge, Spinner, Form, InputGroup, Button } from 'react-bootstrap';
+import { Modal, Spinner } from 'react-bootstrap';
+import {
+  FaPlus, FaSearch, FaFileAlt, FaClock, FaHourglassHalf, FaSyncAlt, FaCheckCircle,
+  FaCalendarAlt, FaEllipsisV, FaCopy, FaCheck, FaChevronLeft, FaChevronRight, FaTicketAlt,
+} from 'react-icons/fa';
 import { useAuth } from '../../context/AuthContext';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 
+// ─── Page design tokens ───────────────────────────────────────────────────────
+const TK = {
+  primary: '#4F46E5', primaryLight: '#EEF2FF',
+  success: '#10B981', successLight: '#ECFDF5',
+  warning: '#F59E0B', warningLight: '#FFFBEB',
+  purple:  '#8B5CF6', purpleLight:  '#F5F3FF',
+  danger:  '#EF4444', dangerLight:  '#FEF2F2',
+  blue:    '#3B82F6', blueLight:    '#EFF6FF',
+  textDark: '#111827', textMuted: '#6B7280', border: '#E5E7EB',
+};
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const DEPARTMENTS = ['HR', 'IT'];
+const DEPARTMENTS = ['HR', 'IT', 'Marketing'];
 
 const ISSUE_TYPES = {
   IT: [
@@ -16,6 +31,7 @@ const ISSUE_TYPES = {
     'Software / Application Error',
     'Email & Account Access Problem',
     'Printer / Scanner Issue',
+    'New Employee – Assign System Access',
     'Other',
   ],
   HR: [
@@ -25,6 +41,13 @@ const ISSUE_TYPES = {
     'Policy Clarification',
     'Attendance Correction',
     'Onboarding / Offboarding',
+    'Other',
+  ],
+  Marketing: [
+    'New Employee – Issue ID Card',
+    'ID Card Request',
+    'Marketing Material Request',
+    'Event / Campaign Support',
     'Other',
   ],
 };
@@ -49,6 +72,7 @@ const PRIORITY_META = {
 const DEPT_META = {
   HR: { color: '#6366f1', icon: '👥' },
   IT: { color: '#0ea5e9', icon: '💻' },
+  Marketing: { color: '#f59e0b', icon: '📢' },
 };
 
 const ROLES_SEE_ALL = ['admin', 'sub_admin', 'hr'];
@@ -543,6 +567,78 @@ const labelStyle = { display: 'block', fontSize: 12, fontWeight: 600, color: '#3
 const submitBtnStyle = { padding: '9px 20px', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' };
 const cancelBtnStyle = { padding: '9px 20px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: 'pointer' };
 
+// ─── List-page helpers ────────────────────────────────────────────────────────
+
+const AVATAR_COLORS = ['#6366f1', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#0ea5e9', '#ec4899'];
+const avatarColor = (str) => AVATAR_COLORS[((str || '').charCodeAt(0) || 0) % AVATAR_COLORS.length];
+const initialsOf  = (name) => (name || '').trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() || '').join('');
+
+function Sparkline({ data, color, height = 26 }) {
+  if (!data || data.length < 2) return <div style={{ height }} />;
+  const max = Math.max(...data, 1);
+  const min = Math.min(...data, 0);
+  const range = max - min || 1;
+  const w = 100;
+  const step = w / (data.length - 1);
+  const points = data.map((v, i) => `${i * step},${height - ((v - min) / range) * (height - 4) - 2}`).join(' ');
+  return (
+    <svg viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height, display: 'block' }}>
+      <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+const StatusDot = ({ status }) => {
+  const m = STATUS_META[status] || { label: status, color: '#6b7280' };
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: m.color }}>
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: m.color, display: 'inline-block', flexShrink: 0 }} />
+      {m.label}
+    </span>
+  );
+};
+
+function CopyButton({ text }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard?.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+      title={copied ? 'Copied!' : 'Copy ticket ID'}
+      style={{ background: 'none', border: 'none', cursor: 'pointer', color: copied ? TK.success : '#9ca3af', padding: 2, display: 'inline-flex', alignItems: 'center' }}
+    >
+      {copied ? <FaCheck size={11} /> : <FaCopy size={11} />}
+    </button>
+  );
+}
+
+// Builds a page-number list with ellipses, e.g. [1, 2, '...', 9, 10]
+function pageNumberList(current, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const keep = new Set([1, 2, total - 1, total, current - 1, current, current + 1]);
+  const sorted = [...keep].filter(p => p >= 1 && p <= total).sort((a, b) => a - b);
+  const result = [];
+  let prev = 0;
+  for (const p of sorted) {
+    if (prev && p - prev > 1) result.push('…');
+    result.push(p);
+    prev = p;
+  }
+  return result;
+}
+
+const TABLE_COLS = '130px minmax(180px,1fr) 120px 130px 180px 120px 50px';
+
+const pagerBtnStyle = {
+  minWidth: 26, height: 26, borderRadius: 6, border: `1px solid ${TK.border}`,
+  background: '#fff', color: TK.textDark, fontSize: 12, cursor: 'pointer',
+  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+};
+
 // ─── TicketList (main page) ───────────────────────────────────────────────────
 
 export default function TicketList() {
@@ -554,6 +650,9 @@ export default function TicketList() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterDept,   setFilterDept]   = useState('all');
   const [search,       setSearch]       = useState('');
+  const [sortOrder,    setSortOrder]    = useState('latest');
+  const [page,         setPage]         = useState(1);
+  const [rowsPerPage,  setRowsPerPage]  = useState(5);
 
   const userEmail = user?.email || '';
   const userName  = user?.name  || user?.employeeId || '';
@@ -566,21 +665,29 @@ export default function TicketList() {
   }, []);
 
   useEffect(() => { fetchTickets(); }, [fetchTickets]);
+  useEffect(() => { setPage(1); }, [filterStatus, filterDept, search, sortOrder, rowsPerPage]);
 
   const canSeeAll    = ROLES_SEE_ALL.includes(user?.role);
   const canResolve   = ROLES_CAN_RESOLVE.includes(user?.role);
 
-  const filtered = tickets.filter(t => {
-    if (filterStatus !== 'all' && t.status !== filterStatus) return false;
-    if (filterDept   !== 'all' && t.department !== filterDept) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      return t.ticket_number?.toLowerCase().includes(q) ||
-             t.subject?.toLowerCase().includes(q)       ||
-             t.raised_by_name?.toLowerCase().includes(q);
-    }
-    return true;
-  });
+  const filtered = tickets
+    .filter(t => {
+      if (filterStatus !== 'all' && t.status !== filterStatus) return false;
+      if (filterDept   !== 'all' && t.department !== filterDept) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        return t.ticket_number?.toLowerCase().includes(q) ||
+               t.subject?.toLowerCase().includes(q)       ||
+               t.description?.toLowerCase().includes(q)   ||
+               t.raised_by_name?.toLowerCase().includes(q);
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const da = new Date(a.created_at).getTime();
+      const db = new Date(b.created_at).getTime();
+      return sortOrder === 'latest' ? db - da : da - db;
+    });
 
   // Stats
   const stats = {
@@ -592,62 +699,102 @@ export default function TicketList() {
     reopened:  tickets.filter(t => t.status === 'reopened').length,
   };
 
+  // 7-day trend (real data, bucketed by created_at) for each stat card's sparkline
+  const trendFor = (predicate) => {
+    const days = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (6 - i)); return d;
+    });
+    return days.map(day => {
+      const next = new Date(day); next.setDate(day.getDate() + 1);
+      return tickets.filter(t => {
+        const c = new Date(t.created_at);
+        return predicate(t) && c >= day && c < next;
+      }).length;
+    });
+  };
+
+  const statCards = [
+    { key: 'all',              label: 'Total Tickets', value: stats.total,   icon: FaFileAlt,      color: TK.blue,    bg: '#fff',           data: trendFor(() => true) },
+    { key: 'open',             label: 'Open',          value: stats.open,    icon: FaFileAlt,      color: TK.blue,    bg: TK.blueLight,     data: trendFor(t => t.status === 'open') },
+    { key: 'in_progress',      label: 'In Progress',   value: stats.inProg,  icon: FaClock,        color: TK.warning, bg: TK.warningLight,  data: trendFor(t => t.status === 'in_progress') },
+    { key: 'resolved_pending', label: 'Pending',       value: stats.pending, icon: FaHourglassHalf,color: TK.purple,  bg: TK.purpleLight,   data: trendFor(t => t.status === 'resolved_pending') },
+    { key: 'reopened',         label: 'Reopened',      value: stats.reopened,icon: FaSyncAlt,      color: TK.danger,  bg: TK.dangerLight,   data: trendFor(t => t.status === 'reopened') },
+    { key: 'closed',           label: 'Closed',        value: stats.closed,  icon: FaCheckCircle,  color: TK.success, bg: TK.successLight,  data: trendFor(t => t.status === 'closed') },
+  ];
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
+  const pageSafe   = Math.min(page, totalPages);
+  const pageItems  = filtered.slice((pageSafe - 1) * rowsPerPage, pageSafe * rowsPerPage);
+
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+    <div style={{ width: '100%' }}>
       {/* ── Header ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <h4 style={{ fontWeight: 800, color: '#111827', margin: 0, fontSize: 22 }}>🎫 Support Tickets</h4>
-          <p style={{ color: '#6b7280', margin: '4px 0 0', fontSize: 13 }}>
-            {canSeeAll ? 'All team tickets' : canResolve ? 'Tickets assigned to you' : 'Your raised tickets'}
-          </p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ width: 48, height: 48, borderRadius: 14, background: TK.primaryLight, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <FaTicketAlt size={19} color={TK.primary} />
+          </div>
+          <div>
+            <h4 style={{ fontWeight: 800, color: TK.textDark, margin: 0, fontSize: 22 }}>Support Tickets</h4>
+            <p style={{ color: TK.textMuted, margin: '3px 0 0', fontSize: 13 }}>
+              {canSeeAll ? 'Track, manage and resolve all team support requests' : canResolve ? 'Track and resolve tickets assigned to you' : 'Track, manage and resolve your support requests'}
+            </p>
+          </div>
         </div>
-        <button onClick={() => setShowForm(true)} style={{ ...submitBtnStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
-          + Raise a Ticket
+        <button onClick={() => setShowForm(true)} style={{ ...submitBtnStyle, background: TK.primary, display: 'flex', alignItems: 'center', gap: 7 }}>
+          <FaPlus size={11} /> Raise a Ticket
         </button>
       </div>
 
       {/* ── Stat cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12, marginBottom: 24 }}>
-        {[
-          { label: 'Total',      count: stats.total,    color: '#374151', bg: '#f9fafb' },
-          { label: 'Open',       count: stats.open,     color: '#3b82f6', bg: '#dbeafe' },
-          { label: 'In Progress',count: stats.inProg,   color: '#f59e0b', bg: '#fef3c7' },
-          { label: 'Pending',    count: stats.pending,  color: '#8b5cf6', bg: '#ede9fe' },
-          { label: 'Reopened',   count: stats.reopened, color: '#ef4444', bg: '#fee2e2' },
-          { label: 'Closed',     count: stats.closed,   color: '#10b981', bg: '#d1fae5' },
-        ].map(s => (
-          <div key={s.label} onClick={() => setFilterStatus(s.label === 'Total' ? 'all' : s.label.toLowerCase().replace(' ', '_'))}
-            style={{ background: s.bg, borderRadius: 12, padding: '14px 16px', cursor: 'pointer', textAlign: 'center', transition: 'transform 0.12s' }}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14, marginBottom: 20 }}>
+        {statCards.map(s => (
+          <div key={s.key} onClick={() => setFilterStatus(s.key)}
+            style={{ background: s.bg, border: `1px solid ${TK.border}`, borderRadius: 14, padding: '16px 18px', cursor: 'pointer', transition: 'transform 0.12s' }}
             onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
             onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
-            <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.count}</div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: s.color, marginTop: 2 }}>{s.label}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <div style={{ width: 30, height: 30, borderRadius: 9, background: s.color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <s.icon size={13} color={s.color} />
+              </div>
+              <span style={{ fontSize: 12, fontWeight: 600, color: TK.textMuted }}>{s.label}</span>
+            </div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: TK.textDark, marginBottom: 8 }}>{s.value}</div>
+            <Sparkline data={s.data} color={s.color} />
           </div>
         ))}
       </div>
 
       {/* ── Filters ── */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍  Search tickets…" style={{ ...inputStyle, maxWidth: 260 }} />
-        <select value={filterDept} onChange={e => setFilterDept(e.target.value)} style={{ ...inputStyle, maxWidth: 140 }}>
-          <option value="all">All Depts</option>
-          {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', flex: 1, minWidth: 260 }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: 220, maxWidth: 340 }}>
+            <FaSearch size={12} color="#9ca3af" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search tickets by ID, subject or description…" style={{ ...inputStyle, paddingLeft: 32 }} />
+          </div>
+          <select value={filterDept} onChange={e => setFilterDept(e.target.value)} style={{ ...inputStyle, width: 'auto', maxWidth: 170 }}>
+            <option value="all">All Departments</option>
+            {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...inputStyle, width: 'auto', maxWidth: 170 }}>
+            <option value="all">All Statuses</option>
+            {Object.entries(STATUS_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+          {(filterStatus !== 'all' || filterDept !== 'all' || search) && (
+            <button onClick={() => { setFilterStatus('all'); setFilterDept('all'); setSearch(''); }} style={cancelBtnStyle}>Clear</button>
+          )}
+        </div>
+        <select value={sortOrder} onChange={e => setSortOrder(e.target.value)} style={{ ...inputStyle, width: 'auto' }}>
+          <option value="latest">Sort by: Latest</option>
+          <option value="oldest">Sort by: Oldest</option>
         </select>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...inputStyle, maxWidth: 180 }}>
-          <option value="all">All Statuses</option>
-          {Object.entries(STATUS_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-        </select>
-        {(filterStatus !== 'all' || filterDept !== 'all' || search) && (
-          <button onClick={() => { setFilterStatus('all'); setFilterDept('all'); setSearch(''); }} style={cancelBtnStyle}>Clear</button>
-        )}
       </div>
 
       {/* ── Ticket list ── */}
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}><Spinner animation="border" /></div>
       ) : filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 0', color: '#9ca3af' }}>
+        <div style={{ textAlign: 'center', padding: '60px 0', color: '#9ca3af', background: '#fff', borderRadius: 14, border: `1px solid ${TK.border}` }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>🎫</div>
           <div style={{ fontSize: 16, fontWeight: 600, color: '#374151', marginBottom: 6 }}>No tickets found</div>
           <div style={{ fontSize: 13 }}>
@@ -655,50 +802,105 @@ export default function TicketList() {
           </div>
         </div>
       ) : (
-        <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 2px 10px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+        <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${TK.border}`, boxShadow: '0 2px 10px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
           {/* Header row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr 80px 110px 130px 80px', gap: 12, padding: '10px 18px', background: '#f9fafb', borderBottom: '1px solid #f3f4f6', fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>
-            <span>Ticket #</span>
+          <div style={{ display: 'grid', gridTemplateColumns: TABLE_COLS, gap: 12, padding: '12px 18px', background: '#f9fafb', borderBottom: `1px solid ${TK.border}`, fontSize: 11, fontWeight: 700, color: TK.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+            <span>Ticket ID</span>
             <span>Subject</span>
-            <span>Dept</span>
+            <span>Department</span>
             <span>Status</span>
             <span>Raised By</span>
             <span>Date</span>
+            <span>Action</span>
           </div>
-          {filtered.map(t => {
-            const deptM  = DEPT_META[t.department] || { color: '#6b7280', icon: '•' };
-            const priM   = PRIORITY_META[t.priority] || PRIORITY_META.medium;
-            const isPending = t.status === 'resolved_pending' && t.raised_by === user?.employeeId;
-            return (
-              <div key={t.id}
-                onClick={() => setDetailId(t.id)}
-                style={{
-                  display: 'grid', gridTemplateColumns: '140px 1fr 80px 110px 130px 80px', gap: 12,
-                  padding: '14px 18px', cursor: 'pointer', borderBottom: '1px solid #f9fafb',
-                  background: isPending ? '#faf5ff' : '#fff', transition: 'background 0.12s',
-                  alignItems: 'center',
-                }}
-                onMouseEnter={e => !isPending && (e.currentTarget.style.background = '#f9fafb')}
-                onMouseLeave={e => !isPending && (e.currentTarget.style.background = '#fff')}
-              >
-                <span style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: '#4f46e5' }}>{t.ticket_number}</span>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 2 }}>{t.subject}</div>
-                  <div style={{ fontSize: 11, color: '#9ca3af' }}>{t.issue_type}</div>
-                  {isPending && <span style={{ fontSize: 10, fontWeight: 700, color: '#7c3aed', background: '#ede9fe', borderRadius: 99, padding: '1px 7px' }}>⚠ Your confirmation needed</span>}
+          <div style={{ overflowX: 'auto' }}>
+            {pageItems.map(t => {
+              const deptM  = DEPT_META[t.department] || { color: '#6b7280', icon: '•' };
+              const statusColor = STATUS_META[t.status]?.color || TK.border;
+              const isPending = t.status === 'resolved_pending' && t.raised_by === user?.employeeId;
+              const created = new Date(t.created_at);
+              return (
+                <div key={t.id}
+                  onClick={() => setDetailId(t.id)}
+                  style={{
+                    display: 'grid', gridTemplateColumns: TABLE_COLS, gap: 12, minWidth: 900,
+                    padding: '14px 18px', cursor: 'pointer', borderBottom: '1px solid #f3f4f6',
+                    borderLeft: `4px solid ${statusColor}`,
+                    background: isPending ? '#faf5ff' : '#fff', transition: 'background 0.12s',
+                    alignItems: 'center',
+                  }}
+                  onMouseEnter={e => !isPending && (e.currentTarget.style.background = '#f9fafb')}
+                  onMouseLeave={e => !isPending && (e.currentTarget.style.background = '#fff')}
+                >
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: TK.primary }}>
+                    {t.ticket_number}
+                    <CopyButton text={t.ticket_number} />
+                  </span>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 2 }}>{t.subject}</div>
+                    <div style={{ fontSize: 11, color: '#9ca3af' }}>{t.issue_type}</div>
+                    {isPending && <span style={{ fontSize: 10, fontWeight: 700, color: '#7c3aed', background: '#ede9fe', borderRadius: 99, padding: '1px 7px' }}>⚠ Your confirmation needed</span>}
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: deptM.color }}>{deptM.icon} {t.department}</span>
+                  <StatusDot status={t.status} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 30, height: 30, borderRadius: '50%', background: avatarColor(t.raised_by_name), color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {initialsOf(t.raised_by_name) || '?'}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.raised_by_name}</div>
+                      <div style={{ fontSize: 10, color: '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.assigned_to_name ? `→ ${t.assigned_to_name}` : 'Unassigned'}</div>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <FaCalendarAlt size={10} color="#9ca3af" />
+                      {created.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </div>
+                    <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>
+                      {created.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                    </div>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setDetailId(t.id); }}
+                    title="View ticket"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <FaEllipsisV size={13} />
+                  </button>
                 </div>
-                <span style={{ fontSize: 11, fontWeight: 700, color: deptM.color }}>{deptM.icon} {t.department}</span>
-                <StatusBadge status={t.status} />
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>{t.raised_by_name}</div>
-                  <div style={{ fontSize: 10, color: '#9ca3af' }}>{t.assigned_to_name ? `→ ${t.assigned_to_name}` : 'Unassigned'}</div>
-                </div>
-                <span style={{ fontSize: 11, color: '#9ca3af' }}>
-                  {new Date(t.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                </span>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+
+          {/* ── Pagination ── */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 18px', borderTop: `1px solid ${TK.border}`, flexWrap: 'wrap', gap: 12 }}>
+            <span style={{ fontSize: 12, color: TK.textMuted }}>
+              Showing {filtered.length === 0 ? 0 : (pageSafe - 1) * rowsPerPage + 1} to {Math.min(pageSafe * rowsPerPage, filtered.length)} of {filtered.length} tickets
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button disabled={pageSafe === 1} onClick={() => setPage(p => Math.max(1, p - 1))} style={{ ...pagerBtnStyle, opacity: pageSafe === 1 ? 0.4 : 1 }}>
+                <FaChevronLeft size={10} />
+              </button>
+              {pageNumberList(pageSafe, totalPages).map((p, i) => p === '…' ? (
+                <span key={`e${i}`} style={{ padding: '0 4px', color: TK.textMuted, fontSize: 12 }}>…</span>
+              ) : (
+                <button key={p} onClick={() => setPage(p)}
+                  style={{ ...pagerBtnStyle, background: p === pageSafe ? TK.primary : '#fff', color: p === pageSafe ? '#fff' : TK.textDark, borderColor: p === pageSafe ? TK.primary : TK.border, fontWeight: p === pageSafe ? 700 : 400 }}>
+                  {p}
+                </button>
+              ))}
+              <button disabled={pageSafe === totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))} style={{ ...pagerBtnStyle, opacity: pageSafe === totalPages ? 0.4 : 1 }}>
+                <FaChevronRight size={10} />
+              </button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: TK.textMuted }}>
+              Rows per page:
+              <select value={rowsPerPage} onChange={e => setRowsPerPage(Number(e.target.value))} style={{ ...inputStyle, width: 'auto', padding: '4px 8px', fontSize: 12 }}>
+                {[5, 10, 20, 50].map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+          </div>
         </div>
       )}
 

@@ -16,6 +16,7 @@ import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import BreakWidget from '../Common/BreakWidget';
 import TeamBreakDashboard from '../Common/TeamBreakDashboard';
+import TicketBadge from '../Common/TicketBadge';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement);
 
@@ -412,6 +413,7 @@ const ManagerDashboard = () => {
             const hasOpen = !!activeSession || (!!attendance?.clock_in && !attendance?.clock_out);
             return (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                <TicketBadge variant="dark" />
                 <BreakWidget
                   mode="inline-button"
                   isClockedIn={!!(attendance?.clock_in || activeSession)}

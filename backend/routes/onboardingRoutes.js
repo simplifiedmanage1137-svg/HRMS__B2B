@@ -7,6 +7,7 @@ const multer  = require('multer');
 const supabase = require('../config/supabase');
 const { verifyToken, isAdmin, isAdminOrDesktopSupport } = require('../middleware/auth');
 const { uploadFile } = require('../lib/supabaseStorage');
+const { createOnboardingTickets } = require('../utils/onboardingTickets');
 
 const BUCKET = 'hrms-documents';
 
@@ -172,6 +173,7 @@ router.patch('/links/:id/approve', verifyToken, isAdmin, async (req, res) => {
             dob:            sub.dob || null,
             gender:         sub.gender || null,
             blood_group:    sub.blood_group || null,
+            linkedin_url:   sub.linkedin_url || null,
             address:        sub.address || null,
             city:           sub.city || null,
             state:          sub.state || null,
@@ -201,6 +203,8 @@ router.patch('/links/:id/approve', verifyToken, isAdmin, async (req, res) => {
         }]).select().single();
 
         if (empErr) throw empErr;
+
+        await createOnboardingTickets(supabase, { employee: emp, actor: req.user });
 
         await supabase.from('employee_offer_links').update({
             status:      'approved',
@@ -398,6 +402,7 @@ router.post('/:token/submit', async (req, res) => {
 
         const {
             first_name, middle_name, last_name, email, phone, dob, gender, blood_group,
+            linkedin_url,
             address, city, state, pincode,
             bank_account_name, account_number, ifsc_code, branch_name,
             pan_number, aadhar_number, uan,
@@ -425,6 +430,7 @@ router.post('/:token/submit', async (req, res) => {
             email:         email.trim().toLowerCase(),
             phone:         phone || null, dob: dob || null, gender: gender || null,
             blood_group:   blood_group || null,
+            linkedin_url:  linkedin_url?.trim() || null,
             address:       address || null, city: city || null, state: state || null, pincode: pincode || null,
             designation:   offer.designation, department: offer.department,
             employment_type: offer.employment_type,

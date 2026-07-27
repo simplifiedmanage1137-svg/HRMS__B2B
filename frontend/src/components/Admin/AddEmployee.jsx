@@ -98,6 +98,7 @@ const AddEmployee = () => {
     address: '',
     blood_group: '',
     emergency_contact: '',
+    linkedin_url: '',
     employment_type: 'Full Time',
     shift_timing: '9:00 AM - 6:00 PM'
   });
@@ -573,6 +574,7 @@ const AddEmployee = () => {
         ...(tempPersonalData.address?.trim() && { address: tempPersonalData.address.trim() }),
         ...(tempPersonalData.blood_group && { blood_group: tempPersonalData.blood_group }),
         ...(tempPersonalData.emergency_contact?.trim() && { emergency_contact: tempPersonalData.emergency_contact.trim() }),
+        ...(tempPersonalData.linkedin_url?.trim() && { linkedin_url: tempPersonalData.linkedin_url.trim() }),
         contract_policy: tempPolicyData.contract_policy || null
       };
 
@@ -1080,6 +1082,21 @@ const AddEmployee = () => {
                         size="sm"
                         maxLength="10"
                         placeholder="10 digit mobile number (Optional)"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col xs={12} md={4}>
+                    <Form.Group>
+                      <Form.Label className="small fw-semibold text-muted">
+                        LinkedIn Profile URL
+                      </Form.Label>
+                      <Form.Control
+                        type="url"
+                        name="linkedin_url"
+                        value={tempPersonalData.linkedin_url}
+                        onChange={handlePersonalChange}
+                        size="sm"
+                        placeholder="https://linkedin.com/in/… (Optional)"
                       />
                     </Form.Group>
                   </Col>

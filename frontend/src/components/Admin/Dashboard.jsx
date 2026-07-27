@@ -70,6 +70,7 @@ import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../context/AuthContext';
 import AdminRatings from './AdminRatings';
 import BreakWidget from '../Common/BreakWidget';
+import TicketBadge from '../Common/TicketBadge';
 import TeamBreakDashboard from '../Common/TeamBreakDashboard';
 import * as XLSX from 'xlsx';
 // import HistoricalLateMarksUpdater from './HistoricalLateMarksUpdater';
@@ -1633,6 +1634,7 @@ const AdminDashboard = () => {
               const hasOpen = !!subAdminSession || (!!subAdminAttendance?.clock_in && !subAdminAttendance?.clock_out);
               return (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                  <TicketBadge variant="dark" />
                   <BreakWidget
                     mode="inline-button"
                     isClockedIn={!!(subAdminAttendance?.clock_in || subAdminSession)}
@@ -1768,7 +1770,8 @@ const AdminDashboard = () => {
               <span>Last updated: {lastUpdated.toLocaleTimeString()}</span>
             </p>
           </div>
-          <div className="d-flex gap-2">
+          <div className="d-flex gap-2 align-items-center">
+            <TicketBadge variant="light" />
             <Button variant="outline-primary" size="sm" onClick={() => { fetchDashboardData(); setLeaveBalancesLoaded(false); setEmployeeLeaveBalances([]); }}>
               <FaSyncAlt className="me-1" size={12} /> Refresh
             </Button>

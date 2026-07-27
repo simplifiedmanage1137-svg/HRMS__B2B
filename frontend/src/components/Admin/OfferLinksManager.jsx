@@ -450,6 +450,16 @@ export default function OfferLinksManager() {
                                         <InfoRow label="Gender"       value={subData.gender} />
                                         <InfoRow label="Blood Group"  value={subData.blood_group} />
                                         <InfoRow label="Joining Date" value={fmtDate(subData.joining_date)} />
+                                        <div>
+                                            <span style={{ fontSize: 11, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600, display: 'block' }}>LinkedIn Profile</span>
+                                            {subData.linkedin_url ? (
+                                                <a href={subData.linkedin_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: '#2563eb', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                                    <ExternalLink size={13} /> View Profile
+                                                </a>
+                                            ) : (
+                                                <span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>—</span>
+                                            )}
+                                        </div>
                                         <div style={{ gridColumn: '1 / -1' }}>
                                             <InfoRow label="Address" value={[subData.address, subData.city, subData.state, subData.pincode].filter(Boolean).join(', ')} />
                                         </div>

@@ -107,32 +107,53 @@ module.exports = (supabase, authenticateToken) => {
         }
     });
 
+    const visibleTicketsQuery = async (user) => {
+        const { employeeId, role } = user;
+
+        if (ROLES_SEE_ALL.includes(role)) {
+            // admin / sub_admin / hr — see everything
+            return supabase.from('support_tickets')
+                .select('*')
+                .order('created_at', { ascending: false });
+        }
+
+        // Everyone else: own raised tickets + any ticket tagged to their own
+        // department (so e.g. any IT employee can see IT tickets, not just
+        // the IT manager) + tickets assigned to them by name (managers).
+        const emp = await getEmployeeDetails(employeeId);
+        const myName = emp ? `${emp.first_name} ${emp.last_name}`.trim() : '';
+        const myDept = emp?.department || '';
+
+        const orParts = [`raised_by.eq.${employeeId}`];
+        if (myDept) orParts.push(`department.eq.${myDept}`);
+        if (role === 'manager' && myName) orParts.push(`assigned_to_name.eq.${myName}`);
+
+        return supabase.from('support_tickets')
+            .select('*')
+            .or(orParts.join(','))
+            .order('created_at', { ascending: false });
+    };
+
     // ── GET /api/tickets ──────────────────────────────────────────────────
     router.get('/', authenticateToken, async (req, res) => {
         try {
-            const { employeeId, role } = req.user;
-            let query = supabase.from('support_tickets')
-                .select('*')
-                .order('created_at', { ascending: false });
-
-            if (ROLES_SEE_ALL.includes(role)) {
-                // admin / sub_admin — see everything
-            } else if (role === 'manager') {
-                // TL — see tickets assigned to them OR raised by them
-                const emp = await getEmployeeDetails(employeeId);
-                const myName = emp ? `${emp.first_name} ${emp.last_name}`.trim() : '';
-                query = supabase.from('support_tickets')
-                    .select('*')
-                    .or(`raised_by.eq.${employeeId},assigned_to_name.eq.${myName}`)
-                    .order('created_at', { ascending: false });
-            } else {
-                // employee — see own tickets only
-                query = query.eq('raised_by', employeeId);
-            }
-
-            const { data, error } = await query;
+            const { data, error } = await visibleTicketsQuery(req.user);
             if (error) throw error;
             return res.json({ success: true, tickets: data || [] });
+        } catch (err) {
+            return res.status(500).json({ success: false, message: err.message });
+        }
+    });
+
+    // ── GET /api/tickets/count — lightweight counts for dashboard badges ──
+    router.get('/count', authenticateToken, async (req, res) => {
+        try {
+            const { data, error } = await visibleTicketsQuery(req.user);
+            if (error) throw error;
+            const tickets = data || [];
+            const open = tickets.filter(t => t.status === 'open').length;
+            const in_progress = tickets.filter(t => t.status === 'in_progress').length;
+            return res.json({ success: true, open, in_progress, total: open + in_progress });
         } catch (err) {
             return res.status(500).json({ success: false, message: err.message });
         }

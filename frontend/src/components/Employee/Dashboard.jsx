@@ -46,6 +46,7 @@ import EmployeeNotices from './EmployeeNotices';
 import AnnouncementBanner from './AnnouncementBanner';
 import ProfileCompletion from './ProfileCompletion';
 import BreakWidget from '../Common/BreakWidget';
+import TicketBadge from '../Common/TicketBadge';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -1010,6 +1011,7 @@ const EmployeeDashboard = () => {
               {/* Action Button + Break Button */}
               <Col xs={12} md={4}>
                 <div className="d-flex justify-content-center justify-content-md-end align-items-center gap-2 flex-wrap">
+                  <TicketBadge variant="dark" />
                   {renderClockButton()}
                   <BreakWidget
                     mode="inline-button"

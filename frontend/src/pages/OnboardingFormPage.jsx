@@ -161,7 +161,7 @@ export default function OnboardingFormPage() {
 
     const [form, setForm] = useState({
         first_name: '', middle_name: '', last_name: '', email: '',
-        phone: '', dob: '', gender: '', blood_group: '',
+        phone: '', dob: '', gender: '', blood_group: '', linkedin_url: '',
         address: '', city: '', state: '', pincode: '',
         joining_date: '',
         bank_account_name: '', account_number: '', ifsc_code: '', branch_name: '',
@@ -420,6 +420,7 @@ export default function OnboardingFormPage() {
                                 </Form.Select>
                             </FieldGroup>
                             <FieldGroup label="Expected Joining Date"><Form.Control size="sm" type="date" value={form.joining_date} onChange={e => set('joining_date', e.target.value)} style={inputStyle} /></FieldGroup>
+                            <FieldGroup label="LinkedIn Profile URL"><Form.Control size="sm" type="url" placeholder="https://linkedin.com/in/…" value={form.linkedin_url} onChange={e => set('linkedin_url', e.target.value)} style={inputStyle} /></FieldGroup>
                             <div style={{ gridColumn: '1 / -1' }}>
                                 <FieldGroup label="Residential Address">
                                     <Form.Control as="textarea" rows={2} size="sm" value={form.address} onChange={e => set('address', e.target.value)} style={{ ...inputStyle, resize: 'none' }} />
