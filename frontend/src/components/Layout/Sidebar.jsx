@@ -220,6 +220,8 @@ const Sidebar = () => {
             <>
               <Section label="Overview" />
               <NavItem to="/admin/dashboard" icon={<FaTachometerAlt />} label="Dashboard" />
+              <Section label="My Space" />
+              <NavItem to="/profile" icon={<FaUserCircle />} label="My Profile" />
               <Section label="Management" />
               <NavItem to="/admin/employees"          icon={<FaUsers />}       label="Employees" />
               <NavItem to="/admin/leave-requests"     icon={<FaCalendarAlt />} label="Leave Requests" />
@@ -245,6 +247,8 @@ const Sidebar = () => {
             <>
               <Section label="Overview" />
               <NavItem to="/subadmin/dashboard" icon={<FaTachometerAlt />} label="Dashboard" />
+              <Section label="My Space" />
+              <NavItem to="/profile" icon={<FaUserCircle />} label="My Profile" />
               <Section label="Management" />
               <NavItem to="/admin/employees"          icon={<FaUsers />}       label="Employees" />
               <NavItem to="/admin/leave-requests"     icon={<FaCalendarAlt />} label="Leave Requests" />
