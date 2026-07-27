@@ -2148,6 +2148,7 @@ const AdminDashboard = () => {
   <FaTrophy className="me-2 text-black" size={14} />
   Today's Celebrations 🎉
 </h6>
+
               </Card.Header>
               <Card.Body className="p-3">
                 <div className="d-flex flex-column flex-sm-row flex-wrap gap-2">
