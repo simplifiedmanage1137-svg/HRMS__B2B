@@ -227,8 +227,16 @@ function SimpleBreakControl({ activeBreak, canInteract, acting, error, totalSeco
                     Start Break
                 </button>
             )}
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#f4f5f7' }}>
-                Today's Total Break: <span style={{ color: '#f2f3f6', fontWeight: 700 }}>{fmtHMS(totalSeconds)}</span>
+            <div style={{
+                marginTop: 4, background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.25)',
+                borderRadius: 10, padding: '2px 4px', textAlign: 'center', minWidth: 180,
+            }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Today's Break
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: '#fff', marginTop: 1 }}>
+                    Total Break Time: {fmtHMS(totalSeconds)}
+                </div>
             </div>
             {error && <div style={{ fontSize: 10, color: '#ef4444' }}>{error}</div>}
         </div>
@@ -352,7 +360,7 @@ export default function BreakWidget({ isClockedIn = false, isClockedOut = false,
     const [usedTypes,     setUsedTypes]     = useState([]);
     const [sessionBreaks, setSessionBreaks] = useState([]); // own breaks this session
     const [todayBreaks,   setTodayBreaks]   = useState([]); // team breaks today
-    const [totalBreakMinutesToday, setTotalBreakMinutesToday] = useState(0);
+    const [totalBreakSecondsToday, setTotalBreakSecondsToday] = useState(0);
     const [loading,       setLoading]       = useState(true);
     const [acting,        setActing]        = useState(false);
     const [error,         setError]         = useState('');
@@ -368,7 +376,7 @@ export default function BreakWidget({ isClockedIn = false, isClockedOut = false,
                 setActiveBreak(res.data.active_break || null);
                 setUsedTypes(res.data.used_break_types || []);
                 setSessionBreaks(res.data.session_breaks || []);
-                setTotalBreakMinutesToday(res.data.total_break_minutes_today || 0);
+                setTotalBreakSecondsToday(res.data.total_break_seconds_today || 0);
             } else if (mode === 'team-panel') {
                 if (!isManager) return;
                 const res = await axios.get(API_ENDPOINTS.BREAK_TEAM_TODAY);
@@ -383,7 +391,7 @@ export default function BreakWidget({ isClockedIn = false, isClockedOut = false,
                     setActiveBreak(myRes.value.data.active_break || null);
                     setUsedTypes(myRes.value.data.used_break_types || []);
                     setSessionBreaks(myRes.value.data.session_breaks || []);
-                    setTotalBreakMinutesToday(myRes.value.data.total_break_minutes_today || 0);
+                    setTotalBreakSecondsToday(myRes.value.data.total_break_seconds_today || 0);
                 }
                 if (teamRes.status === 'fulfilled') setTodayBreaks(teamRes.value.data.breaks || []);
             }
@@ -447,7 +455,7 @@ export default function BreakWidget({ isClockedIn = false, isClockedOut = false,
                         canInteract={canInteract}
                         acting={acting}
                         error={error}
-                        totalSeconds={totalBreakMinutesToday * 60 + liveElapsedSeconds}
+                        totalSeconds={totalBreakSecondsToday + liveElapsedSeconds}
                         onStart={() => handleStart()}
                         onEnd={handleEnd}
                     />
@@ -462,7 +470,7 @@ export default function BreakWidget({ isClockedIn = false, isClockedOut = false,
                         onEnd={handleEnd}
                     />
                 )}
-                <MyBreakHistory breaks={sessionBreaks} />
+                {!unlimitedBreaks && <MyBreakHistory breaks={sessionBreaks} />}
             </div>
         );
     }

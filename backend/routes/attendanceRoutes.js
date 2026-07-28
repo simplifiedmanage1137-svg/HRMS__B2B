@@ -270,20 +270,26 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
 
             // Running total for the current session — lets the frontend refresh
             // "Today's Total Break" immediately (used by the Sales unlimited-break UI).
+            // Summed from raw start/end timestamps (not the rounded-to-minutes column)
+            // so short breaks (under 30s) aren't lost to rounding.
+            let totalBreakSecondsToday = Math.round((breakEnd - new Date(active.break_start)) / 1000);
             let totalBreakMinutesToday = durationMinutes;
             if (att?.clock_in) {
                 const { data: sessionBreaks } = await supabase.from('employee_breaks')
-                    .select('break_duration_minutes')
+                    .select('break_start, break_end')
                     .eq('employee_id', employeeId)
                     .gte('break_start', att.clock_in)
                     .not('break_end', 'is', null);
-                totalBreakMinutesToday = (sessionBreaks || []).reduce((sum, b) => sum + (b.break_duration_minutes || 0), 0);
+                totalBreakSecondsToday = (sessionBreaks || []).reduce(
+                    (sum, b) => sum + Math.round((new Date(b.break_end) - new Date(b.break_start)) / 1000), 0);
+                totalBreakMinutesToday = Math.round(totalBreakSecondsToday / 60);
             }
 
             const label = BREAK_TYPES[active.break_type]?.label || 'Break';
             return res.json({
                 success: true, break: data, duration_minutes: durationMinutes,
                 total_break_minutes_today: totalBreakMinutesToday,
+                total_break_seconds_today: totalBreakSecondsToday,
                 message: `${label} ended. Duration: ${durationMinutes} min.`,
             });
         } catch (err) {
@@ -308,7 +314,7 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
                 .maybeSingle();
 
             if (!att?.clock_in) {
-                return res.json({ success: true, active_break: null, used_break_types: [], total_break_minutes_today: 0 });
+                return res.json({ success: true, active_break: null, used_break_types: [], total_break_minutes_today: 0, total_break_seconds_today: 0 });
             }
 
             // All breaks since this clock-in
@@ -321,11 +327,14 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
 
             const used_break_types = (sessionBreaks || []).filter(b => b.break_end).map(b => b.break_type);
             const active_break = (sessionBreaks || []).find(b => !b.break_end) || null;
-            const total_break_minutes_today = (sessionBreaks || [])
+            // Summed from raw start/end timestamps (not the rounded-to-minutes column)
+            // so short breaks (under 30s) aren't lost to rounding.
+            const total_break_seconds_today = (sessionBreaks || [])
                 .filter(b => b.break_end)
-                .reduce((sum, b) => sum + (b.break_duration_minutes || 0), 0);
+                .reduce((sum, b) => sum + Math.round((new Date(b.break_end) - new Date(b.break_start)) / 1000), 0);
+            const total_break_minutes_today = Math.round(total_break_seconds_today / 60);
 
-            return res.json({ success: true, active_break, used_break_types, session_breaks: sessionBreaks || [], total_break_minutes_today });
+            return res.json({ success: true, active_break, used_break_types, session_breaks: sessionBreaks || [], total_break_minutes_today, total_break_seconds_today });
         } catch (err) {
             return res.status(500).json({ success: false, message: err.message });
         }
