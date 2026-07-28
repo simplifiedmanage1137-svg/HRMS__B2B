@@ -254,6 +254,14 @@ export default function OnboardingFormPage() {
             return;
         }
 
+        // Validate required personal-info fields (needed by IT/Marketing onboarding tickets)
+        if (!form.phone?.trim())        { setSubmitErr('Phone Number is required.'); setTab('personal'); return; }
+        if (!form.dob)                  { setSubmitErr('Date of Birth is required.'); setTab('personal'); return; }
+        if (!form.blood_group)          { setSubmitErr('Blood Group is required.'); setTab('personal'); return; }
+        if (!form.joining_date)         { setSubmitErr('Expected Joining Date is required.'); setTab('personal'); return; }
+        if (!form.address?.trim())      { setSubmitErr('Residential Address is required.'); setTab('personal'); return; }
+        if (!form.emergency_contact?.trim()) { setSubmitErr('Emergency Contact Number is required.'); setTab('emergency'); return; }
+
         // Validate required documents
         if (!files.passport_photo)  { setSubmitErr('Passport size photo is required — go to Documents tab.'); setTab('documents'); return; }
         if (!files.aadhar_card_doc) { setSubmitErr('Aadhar card is required — go to Documents tab.'); setTab('documents'); return; }
@@ -405,25 +413,25 @@ export default function OnboardingFormPage() {
                             <FieldGroup label="Middle Name"><Form.Control size="sm" value={form.middle_name} onChange={e => set('middle_name', e.target.value)} style={inputStyle} /></FieldGroup>
                             <FieldGroup label="Last Name" required><Form.Control size="sm" value={form.last_name} onChange={e => set('last_name', e.target.value)} required style={inputStyle} /></FieldGroup>
                             <FieldGroup label="Email Address" required><Form.Control size="sm" type="email" value={form.email} onChange={e => set('email', e.target.value)} required style={inputStyle} /></FieldGroup>
-                            <FieldGroup label="Phone Number"><Form.Control size="sm" value={form.phone} onChange={e => set('phone', e.target.value)} style={inputStyle} /></FieldGroup>
-                            <FieldGroup label="Date of Birth"><Form.Control size="sm" type="date" value={form.dob} onChange={e => set('dob', e.target.value)} style={inputStyle} /></FieldGroup>
+                            <FieldGroup label="Phone Number" required><Form.Control size="sm" value={form.phone} onChange={e => set('phone', e.target.value)} required style={inputStyle} /></FieldGroup>
+                            <FieldGroup label="Date of Birth" required><Form.Control size="sm" type="date" value={form.dob} onChange={e => set('dob', e.target.value)} required style={inputStyle} /></FieldGroup>
                             <FieldGroup label="Gender">
                                 <Form.Select size="sm" value={form.gender} onChange={e => set('gender', e.target.value)} style={inputStyle}>
                                     <option value="">Select gender</option>
                                     {GENDERS.map(g => <option key={g}>{g}</option>)}
                                 </Form.Select>
                             </FieldGroup>
-                            <FieldGroup label="Blood Group">
-                                <Form.Select size="sm" value={form.blood_group} onChange={e => set('blood_group', e.target.value)} style={inputStyle}>
+                            <FieldGroup label="Blood Group" required>
+                                <Form.Select size="sm" value={form.blood_group} onChange={e => set('blood_group', e.target.value)} required style={inputStyle}>
                                     <option value="">Select blood group</option>
                                     {BLOOD_GROUPS.map(b => <option key={b}>{b}</option>)}
                                 </Form.Select>
                             </FieldGroup>
-                            <FieldGroup label="Expected Joining Date"><Form.Control size="sm" type="date" value={form.joining_date} onChange={e => set('joining_date', e.target.value)} style={inputStyle} /></FieldGroup>
+                            <FieldGroup label="Expected Joining Date" required><Form.Control size="sm" type="date" value={form.joining_date} onChange={e => set('joining_date', e.target.value)} required style={inputStyle} /></FieldGroup>
                             <FieldGroup label="LinkedIn Profile URL"><Form.Control size="sm" type="url" placeholder="https://linkedin.com/in/…" value={form.linkedin_url} onChange={e => set('linkedin_url', e.target.value)} style={inputStyle} /></FieldGroup>
                             <div style={{ gridColumn: '1 / -1' }}>
-                                <FieldGroup label="Residential Address">
-                                    <Form.Control as="textarea" rows={2} size="sm" value={form.address} onChange={e => set('address', e.target.value)} style={{ ...inputStyle, resize: 'none' }} />
+                                <FieldGroup label="Residential Address" required>
+                                    <Form.Control as="textarea" rows={2} size="sm" value={form.address} onChange={e => set('address', e.target.value)} required style={{ ...inputStyle, resize: 'none' }} />
                                 </FieldGroup>
                             </div>
                             <FieldGroup label="City"><Form.Control size="sm" value={form.city} onChange={e => set('city', e.target.value)} style={inputStyle} /></FieldGroup>
@@ -464,7 +472,7 @@ export default function OnboardingFormPage() {
                                     {RELATIONS.map(r => <option key={r}>{r}</option>)}
                                 </Form.Select>
                             </FieldGroup>
-                            <FieldGroup label="Contact Number"><Form.Control size="sm" value={form.emergency_contact} onChange={e => set('emergency_contact', e.target.value)} style={inputStyle} /></FieldGroup>
+                            <FieldGroup label="Contact Number" required><Form.Control size="sm" value={form.emergency_contact} onChange={e => set('emergency_contact', e.target.value)} required style={inputStyle} /></FieldGroup>
                         </div>
                     )}
 

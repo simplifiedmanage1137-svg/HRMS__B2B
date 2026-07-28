@@ -452,6 +452,20 @@ router.get('/today-events/upcoming', async (req, res) => {
 router.post('/', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
     try {
         const employeeData = req.body;
+
+        // Required so onboarding tickets (IT/Marketing) always carry full employee info.
+        const REQUIRED_FIELDS = {
+            first_name: 'First name', last_name: 'Last name', email: 'Email',
+            joining_date: 'Joining date', designation: 'Designation', department: 'Department',
+            reporting_manager: 'Reporting manager', phone: 'Contact number', dob: 'Date of birth',
+            blood_group: 'Blood group', emergency_contact: 'Emergency contact number', address: 'Address',
+        };
+        for (const [field, label] of Object.entries(REQUIRED_FIELDS)) {
+            if (!employeeData[field] || !String(employeeData[field]).trim()) {
+                return res.status(400).json({ success: false, message: `${label} is required`, field });
+            }
+        }
+
         let retryCount = 0;
         const maxRetries = 5;
 
@@ -510,6 +524,7 @@ router.post('/', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
                     designation: employeeData.designation,
                     department: employeeData.department,
                     reporting_manager: employeeData.reporting_manager || null,
+                    phone: employeeData.phone || null,
                     employment_type: employeeData.employment_type || 'Full Time',
                     shift_timing: employeeData.shift_timing || '9:00 AM - 6:00 PM',
                     in_hand_salary: employeeData.in_hand_salary || 0,

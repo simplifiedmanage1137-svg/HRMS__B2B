@@ -92,6 +92,7 @@ const AddEmployee = () => {
     designation: '',
     department: '',
     reporting_manager: '',
+    phone: '',
     pan_number: '',
     aadhar_number: '',
     dob: '',
@@ -210,6 +211,14 @@ const AddEmployee = () => {
     if (!tempPersonalData.joining_date) return "Joining date is required";
     if (!tempPersonalData.designation) return "Designation is required";
     if (!tempPersonalData.department) return "Department is required";
+    if (!tempPersonalData.reporting_manager) return "Reporting manager is required";
+    if (!tempPersonalData.phone) return "Contact number is required";
+    if (!/^\d{10}$/.test(tempPersonalData.phone)) return "Contact number must be 10 digits";
+    if (!tempPersonalData.dob) return "Date of birth is required";
+    if (!tempPersonalData.blood_group) return "Blood group is required";
+    if (!tempPersonalData.emergency_contact) return "Emergency contact number is required";
+    if (!/^\d{10}$/.test(tempPersonalData.emergency_contact)) return "Emergency contact must be 10 digits";
+    if (!tempPersonalData.address?.trim()) return "Address is required";
 
     // Optional validations - only check format if provided
     if (tempPersonalData.pan_number && tempPersonalData.pan_number.length !== 10) {
@@ -217,9 +226,6 @@ const AddEmployee = () => {
     }
     if (tempPersonalData.aadhar_number && !/^\d{12}$/.test(tempPersonalData.aadhar_number)) {
       return "Aadhar number must be 12 digits";
-    }
-    if (tempPersonalData.emergency_contact && !/^\d{10}$/.test(tempPersonalData.emergency_contact)) {
-      return "Emergency contact must be 10 digits";
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -556,6 +562,7 @@ const AddEmployee = () => {
         designation: tempPersonalData.designation?.trim(),
         department: tempPersonalData.department,
         reporting_manager: tempPersonalData.reporting_manager?.trim() || null,
+        phone: tempPersonalData.phone?.trim(),
         employment_type: tempPersonalData.employment_type || 'Full Time',
         shift_timing: tempPersonalData.shift_timing?.trim() || '9:00 AM - 6:00 PM',
         in_hand_salary: parseFloat(tempSalaryData.in_hand_salary) || 0,
@@ -941,7 +948,7 @@ const AddEmployee = () => {
                   <Col xs={12} md={4}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
-                        Reporting Manager
+                        Reporting Manager <span className="text-danger">*</span>
                       </Form.Label>
                       <Form.Select
                         name="reporting_manager"
@@ -949,7 +956,7 @@ const AddEmployee = () => {
                         onChange={handlePersonalChange}
                         size="sm"
                       >
-                        <option value="">-- No TL --</option>
+                        <option value="">-- Select Reporting Manager --</option>
                         {managers.map(m => {
                           const fullName = `${m.first_name} ${m.last_name}`.trim();
                           return (
@@ -990,6 +997,92 @@ const AddEmployee = () => {
                         onChange={handlePersonalChange}
                         placeholder="e.g., 9:00 AM - 6:00 PM"
                         size="sm"
+                      />
+                    </Form.Group>
+                  </Col>
+                </Row>
+
+                <Row className="mb-3 g-2">
+                  <Col xs={12} md={4}>
+                    <Form.Group>
+                      <Form.Label className="small fw-semibold text-muted">
+                        Contact Number <span className="text-danger">*</span>
+                      </Form.Label>
+                      <Form.Control
+                        type="tel"
+                        name="phone"
+                        value={tempPersonalData.phone}
+                        onChange={handlePersonalChange}
+                        size="sm"
+                        maxLength="10"
+                        placeholder="10 digit mobile number"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col xs={12} md={4}>
+                    <Form.Group>
+                      <Form.Label className="small fw-semibold text-muted">
+                        Date of Birth <span className="text-danger">*</span>
+                      </Form.Label>
+                      <Form.Control
+                        type="date"
+                        name="dob"
+                        value={tempPersonalData.dob}
+                        onChange={handlePersonalChange}
+                        size="sm"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col xs={12} md={4}>
+                    <Form.Group>
+                      <Form.Label className="small fw-semibold text-muted">
+                        Blood Group <span className="text-danger">*</span>
+                      </Form.Label>
+                      <Form.Select
+                        name="blood_group"
+                        value={tempPersonalData.blood_group}
+                        onChange={handlePersonalChange}
+                        size="sm"
+                      >
+                        <option value="">Select Blood Group</option>
+                        {bloodGroups.map(bg => (
+                          <option key={bg} value={bg}>{bg}</option>
+                        ))}
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
+                </Row>
+
+                <Row className="mb-3 g-2">
+                  <Col xs={12} md={4}>
+                    <Form.Group>
+                      <Form.Label className="small fw-semibold text-muted">
+                        Emergency Contact Number <span className="text-danger">*</span>
+                      </Form.Label>
+                      <Form.Control
+                        type="tel"
+                        name="emergency_contact"
+                        value={tempPersonalData.emergency_contact}
+                        onChange={handlePersonalChange}
+                        size="sm"
+                        maxLength="10"
+                        placeholder="10 digit mobile number"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col xs={12} md={8}>
+                    <Form.Group>
+                      <Form.Label className="small fw-semibold text-muted">
+                        Address <span className="text-danger">*</span>
+                      </Form.Label>
+                      <Form.Control
+                        as="textarea"
+                        rows={1}
+                        name="address"
+                        value={tempPersonalData.address}
+                        onChange={handlePersonalChange}
+                        size="sm"
+                        placeholder="Full address"
                       />
                     </Form.Group>
                   </Col>
@@ -1037,57 +1130,6 @@ const AddEmployee = () => {
                   <Col xs={12} md={4}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
-                        Date of Birth
-                      </Form.Label>
-                      <Form.Control
-                        type="date"
-                        name="dob"
-                        value={tempPersonalData.dob}
-                        onChange={handlePersonalChange}
-                        size="sm"
-                      />
-                    </Form.Group>
-                  </Col>
-                </Row>
-
-                <Row className="mb-3 g-2">
-                  <Col xs={12} md={4}>
-                    <Form.Group>
-                      <Form.Label className="small fw-semibold text-muted">
-                        Blood Group
-                      </Form.Label>
-                      <Form.Select
-                        name="blood_group"
-                        value={tempPersonalData.blood_group}
-                        onChange={handlePersonalChange}
-                        size="sm"
-                      >
-                        <option value="">Select Blood Group (Optional)</option>
-                        {bloodGroups.map(bg => (
-                          <option key={bg} value={bg}>{bg}</option>
-                        ))}
-                      </Form.Select>
-                    </Form.Group>
-                  </Col>
-                  <Col xs={12} md={4}>
-                    <Form.Group>
-                      <Form.Label className="small fw-semibold text-muted">
-                        Emergency Contact
-                      </Form.Label>
-                      <Form.Control
-                        type="tel"
-                        name="emergency_contact"
-                        value={tempPersonalData.emergency_contact}
-                        onChange={handlePersonalChange}
-                        size="sm"
-                        maxLength="10"
-                        placeholder="10 digit mobile number (Optional)"
-                      />
-                    </Form.Group>
-                  </Col>
-                  <Col xs={12} md={4}>
-                    <Form.Group>
-                      <Form.Label className="small fw-semibold text-muted">
                         LinkedIn Profile URL
                       </Form.Label>
                       <Form.Control
@@ -1101,21 +1143,6 @@ const AddEmployee = () => {
                     </Form.Group>
                   </Col>
                 </Row>
-
-                <Form.Group className="mb-3">
-                  <Form.Label className="small fw-semibold text-muted">
-                    Address
-                  </Form.Label>
-                  <Form.Control
-                    as="textarea"
-                    rows={2}
-                    name="address"
-                    value={tempPersonalData.address}
-                    onChange={handlePersonalChange}
-                    size="sm"
-                    placeholder="Full address (Optional)"
-                  />
-                </Form.Group>
               </>
             )}
 

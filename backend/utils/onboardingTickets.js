@@ -21,6 +21,26 @@ const findDeptManager = async (supabase, department) => {
     return (data && data[0]) || null;
 };
 
+const fmtDate = (d) => {
+    if (!d) return 'N/A';
+    try { return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); }
+    catch { return 'N/A'; }
+};
+
+// Full onboarding detail block the Marketing team needs to prepare the ID card.
+const employeeDetailsBlock = (employee, name) => [
+    `Employee Name: ${name}`,
+    `Employee Number: ${employee.employee_id}`,
+    `Date of Joining: ${fmtDate(employee.joining_date)}`,
+    `Date of Birth: ${fmtDate(employee.dob)}`,
+    `Designation: ${employee.designation || 'N/A'}`,
+    `Blood Group: ${employee.blood_group || 'N/A'}`,
+    `Reporting Manager: ${employee.reporting_manager || 'N/A'}`,
+    `Contact Number: ${employee.phone || 'N/A'}`,
+    `Emergency Contact Number: ${employee.emergency_contact || 'N/A'}`,
+    `Employee Address: ${employee.address || 'N/A'}`,
+].join('\n');
+
 const TICKET_SPECS = [
     {
         department: 'IT',
@@ -33,8 +53,8 @@ const TICKET_SPECS = [
         department: 'Marketing',
         issue_type: 'New Employee – Issue ID Card',
         subject: (name) => `New Employee Onboarded – Please Issue ID Card for ${name}`,
-        description: (name, designation, employeeId) =>
-            `${name} (${employeeId})${designation ? `, ${designation},` : ''} has been onboarded. Please prepare and issue a new employee ID card.`,
+        description: (name, designation, employeeId, employee) =>
+            `Please prepare and issue a new employee ID card. Employee details:\n\n${employeeDetailsBlock(employee, name)}`,
     },
 ];
 
@@ -58,7 +78,7 @@ async function createOnboardingTickets(supabase, { employee, actor }) {
             const { data: ticket, error } = await supabase.from('support_tickets').insert({
                 ticket_number:    ticketNumber,
                 subject:          spec.subject(empName),
-                description:      spec.description(empName, employee.designation, employee.employee_id),
+                description:      spec.description(empName, employee.designation, employee.employee_id, employee),
                 department:       spec.department,
                 issue_type:       spec.issue_type,
                 priority:         'high',

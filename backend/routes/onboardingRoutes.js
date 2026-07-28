@@ -415,6 +415,12 @@ router.post('/:token/submit', async (req, res) => {
         if (!first_name?.trim())        return res.status(400).json({ success: false, message: 'First name is required' });
         if (!last_name?.trim())         return res.status(400).json({ success: false, message: 'Last name is required' });
         if (!email?.trim())             return res.status(400).json({ success: false, message: 'Email is required' });
+        if (!phone?.trim())             return res.status(400).json({ success: false, message: 'Phone number is required' });
+        if (!dob)                       return res.status(400).json({ success: false, message: 'Date of birth is required' });
+        if (!blood_group)               return res.status(400).json({ success: false, message: 'Blood group is required' });
+        if (!joining_date)              return res.status(400).json({ success: false, message: 'Joining date is required' });
+        if (!address?.trim())           return res.status(400).json({ success: false, message: 'Residential address is required' });
+        if (!emergency_contact?.trim()) return res.status(400).json({ success: false, message: 'Emergency contact number is required' });
         if (!bank_account_name?.trim()) return res.status(400).json({ success: false, message: 'Account holder name is required' });
         if (!account_number?.trim())    return res.status(400).json({ success: false, message: 'Account number is required' });
         if (!ifsc_code?.trim())         return res.status(400).json({ success: false, message: 'IFSC code is required' });
