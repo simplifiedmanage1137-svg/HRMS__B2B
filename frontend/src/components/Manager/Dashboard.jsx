@@ -392,6 +392,7 @@ const ManagerDashboard = () => {
         onClockIn={handleClockIn}
         onRequestClockOut={() => setShowClockOutConfirm(true)}
         clockLoading={clockLoading}
+        unlimitedBreaks={(user?.department || '').trim().toLowerCase() === 'sales'}
         footerExtra={
           <div style={{ display: 'flex', gap: 2 }}>
             {renderStars(myRatingAvg ? parseFloat(myRatingAvg) : 0)}

@@ -43,6 +43,14 @@ const fmtMins = (mins) => {
     return `${mins} min`;
 };
 
+const fmtHMS = (totalSeconds) => {
+    const s = Math.max(0, Math.floor(totalSeconds));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    return [h, m, sec].map(v => String(v).padStart(2, '0')).join(':');
+};
+
 // ── Break dropdown (fixed-position, escapes overflow:hidden parents) ──────────
 function BreakDropdown({ activeBreak, usedTypes, canInteract, acting, error, onStart, onEnd }) {
     const [open, setOpen]           = useState(false);
@@ -184,6 +192,49 @@ function BreakDropdown({ activeBreak, usedTypes, canInteract, acting, error, onS
     );
 }
 
+// ── Simple unlimited Start/End break control (Sales department) ───────────────
+function SimpleBreakControl({ activeBreak, canInteract, acting, error, totalSeconds, onStart, onEnd }) {
+    const btnBase = {
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '8px 16px', borderRadius: 10, border: 'none',
+        fontSize: 13, fontWeight: 800,
+        whiteSpace: 'nowrap',
+    };
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+            {activeBreak ? (
+                <button onClick={onEnd} disabled={acting} style={{
+                    ...btnBase, background: '#f97316', color: '#fff', gap: 8,
+                    cursor: acting ? 'not-allowed' : 'pointer', opacity: acting ? 0.7 : 1,
+                }}>
+                    {acting ? <Spinner size="sm" animation="border" /> : <Square size={14} />}
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Clock size={13} />
+                        {fmtDuration(activeBreak.break_start)}
+                    </span>
+                    <span style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.5)' }} />
+                    <span style={{ fontWeight: 700 }}>End Break</span>
+                </button>
+            ) : (
+                <button onClick={onStart} disabled={acting || !canInteract} style={{
+                    ...btnBase,
+                    background: '#f4a46b', color: '#fff',
+                    cursor: (acting || !canInteract) ? 'not-allowed' : 'pointer',
+                    opacity: (acting || !canInteract) ? 0.55 : 1,
+                }}>
+                    {acting ? <Spinner size="sm" animation="border" /> : <Coffee size={15} />}
+                    Start Break
+                </button>
+            )}
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#f4f5f7' }}>
+                Today's Total Break: <span style={{ color: '#f2f3f6', fontWeight: 700 }}>{fmtHMS(totalSeconds)}</span>
+            </div>
+            {error && <div style={{ fontSize: 10, color: '#ef4444' }}>{error}</div>}
+        </div>
+    );
+}
+
 // ── Individual break history (compact, shown under the button in inline-button mode) ──
 function MyBreakHistory({ breaks }) {
     const done = (breaks || []).filter(b => b.break_end);
@@ -295,12 +346,13 @@ function TeamPanel({ todayBreaks, loading }) {
 // mode="inline-button" — compact button, sits next to clock button
 // mode="team-panel"    — full team break activity card (managers / admin)
 // mode="full"          — legacy combined card
-export default function BreakWidget({ isClockedIn = false, isClockedOut = false, mode = 'full' }) {
+export default function BreakWidget({ isClockedIn = false, isClockedOut = false, mode = 'full', unlimitedBreaks = false }) {
     const { user } = useAuth();
     const [activeBreak,   setActiveBreak]   = useState(null);
     const [usedTypes,     setUsedTypes]     = useState([]);
     const [sessionBreaks, setSessionBreaks] = useState([]); // own breaks this session
     const [todayBreaks,   setTodayBreaks]   = useState([]); // team breaks today
+    const [totalBreakMinutesToday, setTotalBreakMinutesToday] = useState(0);
     const [loading,       setLoading]       = useState(true);
     const [acting,        setActing]        = useState(false);
     const [error,         setError]         = useState('');
@@ -316,6 +368,7 @@ export default function BreakWidget({ isClockedIn = false, isClockedOut = false,
                 setActiveBreak(res.data.active_break || null);
                 setUsedTypes(res.data.used_break_types || []);
                 setSessionBreaks(res.data.session_breaks || []);
+                setTotalBreakMinutesToday(res.data.total_break_minutes_today || 0);
             } else if (mode === 'team-panel') {
                 if (!isManager) return;
                 const res = await axios.get(API_ENDPOINTS.BREAK_TEAM_TODAY);
@@ -330,6 +383,7 @@ export default function BreakWidget({ isClockedIn = false, isClockedOut = false,
                     setActiveBreak(myRes.value.data.active_break || null);
                     setUsedTypes(myRes.value.data.used_break_types || []);
                     setSessionBreaks(myRes.value.data.session_breaks || []);
+                    setTotalBreakMinutesToday(myRes.value.data.total_break_minutes_today || 0);
                 }
                 if (teamRes.status === 'fulfilled') setTodayBreaks(teamRes.value.data.breaks || []);
             }
@@ -381,20 +435,37 @@ export default function BreakWidget({ isClockedIn = false, isClockedOut = false,
     const canInteract = isClockedIn && !isClockedOut;
 
     // ── inline-button mode ────────────────────────────────────────────────────
-    if (mode === 'inline-button') return (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <BreakDropdown
-                activeBreak={activeBreak}
-                usedTypes={usedTypes}
-                canInteract={canInteract}
-                acting={acting}
-                error={error}
-                onStart={handleStart}
-                onEnd={handleEnd}
-            />
-            <MyBreakHistory breaks={sessionBreaks} />
-        </div>
-    );
+    if (mode === 'inline-button') {
+        const liveElapsedSeconds = activeBreak
+            ? Math.floor((Date.now() - new Date(activeBreak.break_start).getTime()) / 1000)
+            : 0;
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                {unlimitedBreaks ? (
+                    <SimpleBreakControl
+                        activeBreak={activeBreak}
+                        canInteract={canInteract}
+                        acting={acting}
+                        error={error}
+                        totalSeconds={totalBreakMinutesToday * 60 + liveElapsedSeconds}
+                        onStart={() => handleStart()}
+                        onEnd={handleEnd}
+                    />
+                ) : (
+                    <BreakDropdown
+                        activeBreak={activeBreak}
+                        usedTypes={usedTypes}
+                        canInteract={canInteract}
+                        acting={acting}
+                        error={error}
+                        onStart={handleStart}
+                        onEnd={handleEnd}
+                    />
+                )}
+                <MyBreakHistory breaks={sessionBreaks} />
+            </div>
+        );
+    }
 
     // ── team-panel mode ───────────────────────────────────────────────────────
     if (mode === 'team-panel') {

@@ -46,6 +46,7 @@ export default function DashboardQuickAccess({
   canClockOut = true,
   shiftTiming,
   footerExtra,
+  unlimitedBreaks = false,
 }) {
   return (
     <div className="dash-quick-access">
@@ -62,6 +63,7 @@ export default function DashboardQuickAccess({
           canClockOut={canClockOut}
           shiftTiming={shiftTiming}
           footerExtra={footerExtra}
+          unlimitedBreaks={unlimitedBreaks}
         />
         <HolidayCountdownCard />
         <LeaveBalanceRingsCard employeeId={employeeId} />

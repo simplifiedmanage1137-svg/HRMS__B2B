@@ -1608,6 +1608,7 @@ const AdminDashboard = () => {
         onRequestClockOut={() => setShowClockOutConfirm(true)}
         clockLoading={subAdminClockLoading}
         readOnly={!['sub_admin', 'hr'].includes(user?.role)}
+        unlimitedBreaks={(user?.department || '').trim().toLowerCase() === 'sales'}
       />
 
       {/* Tab Navigation */}

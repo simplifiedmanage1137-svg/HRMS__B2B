@@ -171,13 +171,10 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
     };
 
     // POST /api/attendance/break/start
+    // Sales department: unlimited, typeless breaks. Everyone else: existing fixed
+    // 3-break system (each type usable once per clock-in session), unchanged.
     router.post('/break/start', authenticateToken, async (req, res) => {
         const employeeId = req.user.employeeId;
-        const { break_type = 'tea_break_1' } = req.body;
-
-        if (!BREAK_TYPES[break_type]) {
-            return res.status(400).json({ success: false, message: 'Invalid break type.' });
-        }
         try {
             // Must have an open clock-in session
             const { data: att } = await supabase.from('attendance')
@@ -190,6 +187,18 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
                 .maybeSingle();
             if (!att) return res.status(400).json({ success: false, message: 'You must be clocked in before starting a break.' });
 
+            const { data: me } = await supabase.from('employees')
+                .select('department').eq('employee_id', employeeId).maybeSingle();
+            const isSales = (me?.department || '').trim().toLowerCase() === 'sales';
+
+            let break_type = 'general';
+            if (!isSales) {
+                break_type = req.body.break_type || 'tea_break_1';
+                if (!BREAK_TYPES[break_type]) {
+                    return res.status(400).json({ success: false, message: 'Invalid break type.' });
+                }
+            }
+
             // No active break already running THIS session — scoped to the current clock-in
             // (a stale unclosed break from a past session must never block new ones).
             const { data: active } = await supabase.from('employee_breaks')
@@ -198,15 +207,17 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
                 .maybeSingle();
             if (active) return res.status(400).json({ success: false, message: 'You already have an active break. End it first.' });
 
-            // This break_type must not have been used this session
-            const { data: alreadyUsed } = await supabase.from('employee_breaks')
-                .select('id')
-                .eq('employee_id', employeeId)
-                .eq('break_type', break_type)
-                .gte('break_start', att.clock_in)
-                .maybeSingle();
-            if (alreadyUsed) {
-                return res.status(400).json({ success: false, message: `${BREAK_TYPES[break_type].label} has already been used today.` });
+            if (!isSales) {
+                // This break_type must not have been used this session
+                const { data: alreadyUsed } = await supabase.from('employee_breaks')
+                    .select('id')
+                    .eq('employee_id', employeeId)
+                    .eq('break_type', break_type)
+                    .gte('break_start', att.clock_in)
+                    .maybeSingle();
+                if (alreadyUsed) {
+                    return res.status(400).json({ success: false, message: `${BREAK_TYPES[break_type].label} has already been used today.` });
+                }
             }
 
             const { data, error } = await supabase.from('employee_breaks').insert([{
@@ -217,7 +228,8 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
             }]).select().single();
             if (error) throw error;
 
-            return res.json({ success: true, break: data, message: `${BREAK_TYPES[break_type].label} started.` });
+            const label = isSales ? 'Break' : BREAK_TYPES[break_type].label;
+            return res.json({ success: true, break: data, message: `${label} started.` });
         } catch (err) {
             console.error('[break] start error:', err);
             return res.status(500).json({ success: false, message: err.message });
@@ -256,8 +268,24 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
             }).eq('id', active.id).select().single();
             if (error) throw error;
 
+            // Running total for the current session — lets the frontend refresh
+            // "Today's Total Break" immediately (used by the Sales unlimited-break UI).
+            let totalBreakMinutesToday = durationMinutes;
+            if (att?.clock_in) {
+                const { data: sessionBreaks } = await supabase.from('employee_breaks')
+                    .select('break_duration_minutes')
+                    .eq('employee_id', employeeId)
+                    .gte('break_start', att.clock_in)
+                    .not('break_end', 'is', null);
+                totalBreakMinutesToday = (sessionBreaks || []).reduce((sum, b) => sum + (b.break_duration_minutes || 0), 0);
+            }
+
             const label = BREAK_TYPES[active.break_type]?.label || 'Break';
-            return res.json({ success: true, break: data, duration_minutes: durationMinutes, message: `${label} ended. Duration: ${durationMinutes} min.` });
+            return res.json({
+                success: true, break: data, duration_minutes: durationMinutes,
+                total_break_minutes_today: totalBreakMinutesToday,
+                message: `${label} ended. Duration: ${durationMinutes} min.`,
+            });
         } catch (err) {
             console.error('[break] end error:', err);
             return res.status(500).json({ success: false, message: err.message });
@@ -280,7 +308,7 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
                 .maybeSingle();
 
             if (!att?.clock_in) {
-                return res.json({ success: true, active_break: null, used_break_types: [] });
+                return res.json({ success: true, active_break: null, used_break_types: [], total_break_minutes_today: 0 });
             }
 
             // All breaks since this clock-in
@@ -293,8 +321,11 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
 
             const used_break_types = (sessionBreaks || []).filter(b => b.break_end).map(b => b.break_type);
             const active_break = (sessionBreaks || []).find(b => !b.break_end) || null;
+            const total_break_minutes_today = (sessionBreaks || [])
+                .filter(b => b.break_end)
+                .reduce((sum, b) => sum + (b.break_duration_minutes || 0), 0);
 
-            return res.json({ success: true, active_break, used_break_types, session_breaks: sessionBreaks || [] });
+            return res.json({ success: true, active_break, used_break_types, session_breaks: sessionBreaks || [], total_break_minutes_today });
         } catch (err) {
             return res.status(500).json({ success: false, message: err.message });
         }
@@ -426,12 +457,20 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
                 (emps || []).forEach(e => { empMap[e.employee_id] = e; });
             }
 
+            // Per-employee total break minutes today (covers Sales' unlimited/typeless
+            // breaks the same as the fixed 3-break system — a plain sum either way).
+            const totalsByEmployee = {};
+            (breaks || []).filter(b => b.break_end).forEach(b => {
+                totalsByEmployee[b.employee_id] = (totalsByEmployee[b.employee_id] || 0) + (b.break_duration_minutes || 0);
+            });
+
             return res.json({
                 success: true,
                 breaks: (breaks || []).map(b => ({
                     ...b,
                     employee: empMap[b.employee_id] || { first_name: b.employee_id, last_name: '' },
                 })),
+                totals_by_employee: totalsByEmployee,
             });
         } catch (err) {
             console.error('[break] team-today error:', err);
@@ -513,11 +552,19 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
                 };
             });
 
+            // Per-employee total break minutes today — includes Sales' unlimited/typeless
+            // breaks (not covered by the type-keyed break_stats above) alongside everyone else's.
+            const totalsByEmployee = {};
+            (breaks || []).filter(b => b.break_end).forEach(b => {
+                totalsByEmployee[b.employee_id] = (totalsByEmployee[b.employee_id] || 0) + (b.break_duration_minutes || 0);
+            });
+
             return res.json({
                 success: true,
                 team_size: teamEmployees.length,
                 today_breaks: (breaks || []).map(b => ({ ...b, employee: empMap[b.employee_id] || {} })),
                 break_stats: breakStats,
+                totals_by_employee: totalsByEmployee,
             });
         } catch (err) {
             console.error('[break] team-stats error:', err);

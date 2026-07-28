@@ -1662,6 +1662,24 @@ exports.getAttendanceReport = async (req, res) => {
             }
         });
 
+        // Bulk-fetch break minutes for every employee/date in this report (one query,
+        // avoids an N+1 lookup inside the per-record map below). Covers Sales'
+        // unlimited/typeless breaks the same as the fixed 3-break system.
+        const reportEmployeeIds = [...new Set(Object.values(dedupedAttendanceMap).map(r => r.employee_id))];
+        const breakMinutesMap = {};
+        if (reportEmployeeIds.length > 0) {
+            const { data: breakRows } = await supabase.from('employee_breaks')
+                .select('employee_id, attendance_date, break_duration_minutes')
+                .in('employee_id', reportEmployeeIds)
+                .gte('attendance_date', start)
+                .lte('attendance_date', end)
+                .not('break_duration_minutes', 'is', null);
+            (breakRows || []).forEach(b => {
+                const key = `${b.employee_id}-${b.attendance_date}`;
+                breakMinutesMap[key] = (breakMinutesMap[key] || 0) + (b.break_duration_minutes || 0);
+            });
+        }
+
         const formattedAttendance = await Promise.all((Object.values(dedupedAttendanceMap) || []).map(async record => {
             const employee = record.employees || {};
             let totalHoursDisplay = '0h 0m';
@@ -1671,6 +1689,9 @@ exports.getAttendanceReport = async (req, res) => {
                 const totalMinutes = record.total_hours * 60;
                 totalHoursDisplay = `${Math.floor(totalMinutes / 60)}h ${Math.round(totalMinutes % 60)}m`;
             }
+
+            const recordDateKey = record.attendance_date ? record.attendance_date.split('T')[0] : record.attendance_date;
+            const totalBreakMinutes = breakMinutesMap[`${record.employee_id}-${recordDateKey}`] || 0;
 
             // Use shift history - new shift wont affect old records
             const shiftTiming = await getEffectiveShiftTiming(record.employee_id, record.attendance_date, record.shift_time_used || employee.shift_timing);
@@ -1715,6 +1736,7 @@ exports.getAttendanceReport = async (req, res) => {
                 comp_off_awarded: record.comp_off_awarded,
                 comp_off_days: record.comp_off_days,
                 is_regularized: record.is_regularized || false,
+                total_break_minutes: totalBreakMinutes,
                 first_name: employee.first_name || '',
                 last_name: employee.last_name || '',
                 department: employee.department || '',
@@ -2515,6 +2537,17 @@ exports.getEmployeeAttendanceReport = async (req, res) => {
         const dedupedAttendance = Object.values(dedupedByDate)
             .sort((a, b) => b.attendance_date.localeCompare(a.attendance_date));
 
+        const { data: empBreakRows } = await supabase.from('employee_breaks')
+            .select('attendance_date, break_duration_minutes')
+            .eq('employee_id', employee_id)
+            .gte('attendance_date', start)
+            .lte('attendance_date', end)
+            .not('break_duration_minutes', 'is', null);
+        const empBreakMinutesMap = {};
+        (empBreakRows || []).forEach(b => {
+            empBreakMinutesMap[b.attendance_date] = (empBreakMinutesMap[b.attendance_date] || 0) + (b.break_duration_minutes || 0);
+        });
+
         const formattedAttendance = await Promise.all(dedupedAttendance.map(async record => {
             const employee = record.employees || {};
             let totalHoursDisplay = '0h 0m';
@@ -2567,6 +2600,7 @@ exports.getEmployeeAttendanceReport = async (req, res) => {
                 attendance_type: record.attendance_type || null,
                 comp_off_awarded: record.comp_off_awarded,
                 is_regularized: record.is_regularized || false,
+                total_break_minutes: empBreakMinutesMap[record.attendance_date] || 0,
                 first_name: employee.first_name || '',
                 last_name: employee.last_name || '',
                 department: employee.department || '',
@@ -3129,6 +3163,7 @@ exports.getTeamAttendanceReport = async (req, res) => {
                 total_late_minutes: 0,
                 total_overtime_hours: 0,
                 total_working_hours: 0,
+                total_break_minutes: 0,
                 working_days_count: 0,
                 attendance_rate: 0
             };
@@ -3152,6 +3187,19 @@ exports.getTeamAttendanceReport = async (req, res) => {
         (attendanceData || []).forEach(record => {
             const key = `${record.employee_id}-${record.attendance_date}`;
             attendanceMap[key] = record;
+        });
+
+        // Bulk-fetch break minutes for every team member/date in this report
+        const { data: teamBreakRows } = await supabase.from('employee_breaks')
+            .select('employee_id, attendance_date, break_duration_minutes')
+            .in('employee_id', targetEmployees.map(emp => emp.employee_id))
+            .gte('attendance_date', startDate)
+            .lte('attendance_date', endDate)
+            .not('break_duration_minutes', 'is', null);
+        const teamBreakMinutesMap = {};
+        (teamBreakRows || []).forEach(b => {
+            const key = `${b.employee_id}-${b.attendance_date}`;
+            teamBreakMinutesMap[key] = (teamBreakMinutesMap[key] || 0) + (b.break_duration_minutes || 0);
         });
 
         // In getTeamAttendanceReport function - Update the status determination section
@@ -3242,6 +3290,8 @@ exports.getTeamAttendanceReport = async (req, res) => {
                     employeeStats[emp.employee_id].total_absent++;
                 }
 
+                employeeStats[emp.employee_id].total_break_minutes += teamBreakMinutesMap[attendanceKey] || 0;
+
                 // Daily stats for selected date (daily view) or today (monthly view)
                 const statsDate = view_type === 'daily' ? startDate : todayStr;
                 if (date === statsDate) {
@@ -3287,7 +3337,8 @@ exports.getTeamAttendanceReport = async (req, res) => {
                     late_display: lateMinutes > 0 ? formatLateTime(lateMinutes) : null,
                     overtime_hours: overtimeHours,
                     is_weekend: isWeekend,
-                    leave_type: leave?.type || null
+                    leave_type: leave?.type || null,
+                    total_break_minutes: teamBreakMinutesMap[attendanceKey] || 0
                 });
             }
         }

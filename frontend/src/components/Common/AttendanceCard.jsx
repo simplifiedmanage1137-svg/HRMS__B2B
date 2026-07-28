@@ -21,6 +21,7 @@ export default function AttendanceCard({
   canClockOut = true,
   shiftTiming,
   footerExtra,
+  unlimitedBreaks = false,
 }) {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
@@ -80,7 +81,7 @@ export default function AttendanceCard({
       ) : hasOpen && !canClockOut ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap' }}>
           <span style={{ fontSize: 12, fontWeight: 600, background: 'rgba(255,255,255,0.18)', padding: '8px 16px', borderRadius: 10, whiteSpace: 'nowrap' }}>Clocked in ✓</span>
-          <BreakWidget mode="inline-button" isClockedIn={!!(attendance?.clock_in || activeSession)} isClockedOut={isClockedOutToday} />
+          <BreakWidget mode="inline-button" isClockedIn={!!(attendance?.clock_in || activeSession)} isClockedOut={isClockedOutToday} unlimitedBreaks={unlimitedBreaks} />
         </div>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap' }}>
@@ -97,7 +98,7 @@ export default function AttendanceCard({
               ? <><FaSyncAlt size={12} style={{ animation: 'attcardspin 0.8s linear infinite' }} /> Processing…</>
               : hasOpen ? <><FaSignOutAlt size={13} /> Clock Out</> : <><FaSignInAlt size={13} /> Clock In</>}
           </button>
-          <BreakWidget mode="inline-button" isClockedIn={!!(attendance?.clock_in || activeSession)} isClockedOut={isClockedOutToday} />
+          <BreakWidget mode="inline-button" isClockedIn={!!(attendance?.clock_in || activeSession)} isClockedOut={isClockedOutToday} unlimitedBreaks={unlimitedBreaks} />
         </div>
       )}
 

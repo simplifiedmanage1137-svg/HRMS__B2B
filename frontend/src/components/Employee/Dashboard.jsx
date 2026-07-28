@@ -915,6 +915,7 @@ const EmployeeDashboard = () => {
         disabledMobile={isMobileDevice}
         canClockOut={canClockOut}
         shiftTiming={employee?.shift_timing}
+        unlimitedBreaks={(employee?.department || '').trim().toLowerCase() === 'sales'}
         footerExtra={
           <div style={{ display: 'flex', gap: 2 }}>
             {renderStars(allRatings.length > 0 ? allRatings.reduce((s, r) => s + r.rating, 0) / allRatings.length : 0)}
@@ -1470,7 +1471,7 @@ const EmployeeDashboard = () => {
         </Col>
 
         {/* Upcoming Holidays & Quick Actions */}
-        <Col lg={5}>
+        {/* <Col lg={5}>
           <Card className="border-0 shadow-sm mb-3">
             <Card.Header className="bg-white py-2 py-md-3 d-flex justify-content-between align-items-center">
               <h6 className="mb-0 small">
@@ -1525,9 +1526,9 @@ const EmployeeDashboard = () => {
                 </div>
               </Card.Body>
             </Card>
-          )}
+          )} */}
 
-          <Card className="border-0 shadow-sm">
+          {/* <Card className="border-0 shadow-sm">
             <Card.Header className="bg-white py-2 py-md-3">
               <h6 className="mb-0 small">
                 <FaBell className="me-2 text-primary" />
@@ -1550,8 +1551,8 @@ const EmployeeDashboard = () => {
                 </Button>
               </div>
             </Card.Body>
-          </Card>
-        </Col>
+          </Card> */}
+        {/* </Col> */}
       </Row>
 
       {/* Clock-out confirmation overlay */}
