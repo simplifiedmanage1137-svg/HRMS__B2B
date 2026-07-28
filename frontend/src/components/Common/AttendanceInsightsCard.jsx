@@ -7,12 +7,12 @@ import { QA, QA_CARD_STYLE, QA_CARD_TITLE_STYLE } from './quickAccessTheme';
 function Bar({ label, value, total, color }) {
   const pct = total > 0 ? Math.round((value / total) * 100) : 0;
   return (
-    <div style={{ marginBottom: 10 }}>
+    <div style={{ marginBottom: 10,marginRight:10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
         <span style={{ color: QA.textMuted, fontWeight: 600 }}>{label}</span>
         <span style={{ color: QA.textDark, fontWeight: 700 }}>{value}</span>
       </div>
-      <div style={{ height: 6, borderRadius: 4, background: '#f3f4f6', overflow: 'hidden' }}>
+      <div style={{ marginRight:1, height: 6, borderRadius: 4, background: '#f3f4f6', overflow: 'hidden' }}>
         <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 4, transition: 'width 0.4s ease' }} />
       </div>
     </div>
