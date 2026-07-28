@@ -251,10 +251,15 @@ export const API_ENDPOINTS = {
   WISH_LIKE:       (id) => ep(`/api/wishes/${id}/like`),
   WISH_COMMENTS:   (id) => ep(`/api/wishes/${id}/comments`),
 
-  // Dashboard Post / Poll / Praise composer
+  // Dashboard Post / Poll / Praise / Appreciation social feed
   POSTS:           ep('/api/posts'),
   POST_LIKE:       (id) => ep(`/api/posts/${id}/like`),
+  POST_REACT:      (id) => ep(`/api/posts/${id}/react`),
+  POST_DELETE:     (id) => ep(`/api/posts/${id}`),
   POST_COMMENTS:   (id) => ep(`/api/posts/${id}/comments`),
+  POST_UPLOAD_IMAGE: ep('/api/posts/upload-image'),
+  POST_FOLLOW:     (employeeId) => ep(`/api/posts/follow/${employeeId}`),
+  POST_FOLLOWING:  ep('/api/posts/following'),
 
   // Deductions
   DEDUCTIONS:                ep('/api/deductions'),

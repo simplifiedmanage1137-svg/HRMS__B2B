@@ -7,6 +7,7 @@ const { verifyToken, isAdmin, isAdminOrManager, isAdminOrDesktopSupport } = requ
 const { uploadFile, deleteFile, folderForField } = require('../lib/supabaseStorage');
 const { sendShiftChangeEmail } = require('../services/emailService');
 const { createOnboardingTickets } = require('../utils/onboardingTickets');
+const { createProfilePhotoPost } = require('../utils/profilePhotoPost');
 
 // Memory storage — files are uploaded to Supabase Storage (no local disk in serverless)
 const upload = multer({
@@ -993,6 +994,11 @@ router.post('/:employeeId/documents', verifyToken, upload.any(), async (req, res
         if (error) throw error;
 
         console.log('✅ DB updated with document URLs');
+
+        if (documentUpdates.profile_image) {
+            await createProfilePhotoPost(supabase, data[0]);
+        }
+
         res.json({
             success: true,
             message: 'Documents uploaded successfully',

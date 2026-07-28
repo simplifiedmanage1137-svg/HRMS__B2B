@@ -78,19 +78,19 @@ export default function AttendanceCard({
           <div style={{ fontSize: 11, marginTop: 6, opacity: 0.85 }}>Not available on mobile/tablet — use a desktop to mark attendance.</div>
         </div>
       ) : hasOpen && !canClockOut ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, fontWeight: 600, background: 'rgba(255,255,255,0.18)', padding: '9px 16px', borderRadius: 10 }}>Clocked in ✓</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap' }}>
+          <span style={{ fontSize: 12, fontWeight: 600, background: 'rgba(255,255,255,0.18)', padding: '8px 16px', borderRadius: 10, whiteSpace: 'nowrap' }}>Clocked in ✓</span>
           <BreakWidget mode="inline-button" isClockedIn={!!(attendance?.clock_in || activeSession)} isClockedOut={isClockedOutToday} />
         </div>
       ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap' }}>
           <button
             onClick={hasOpen ? onRequestClockOut : onClockIn}
             disabled={clockLoading}
             style={{
               background: '#fff', color: hasOpen ? '#b45309' : '#065f46', border: 'none', borderRadius: 10,
-              padding: '9px 20px', fontWeight: 800, fontSize: 13, cursor: clockLoading ? 'not-allowed' : 'pointer',
-              display: 'flex', alignItems: 'center', gap: 7, opacity: clockLoading ? 0.7 : 1,
+              padding: '8px 16px', fontWeight: 800, fontSize: 13, cursor: clockLoading ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', gap: 6, opacity: clockLoading ? 0.7 : 1, whiteSpace: 'nowrap',
             }}
           >
             {clockLoading

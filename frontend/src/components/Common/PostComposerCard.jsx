@@ -3,6 +3,7 @@ import { FaEdit, FaChartBar, FaAward, FaBullhorn, FaHeart, FaRegHeart, FaComment
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import Avatar from './Avatar';
+import PostsDrawer from './PostsDrawer';
 import { QA, QA_CARD_STYLE } from './quickAccessTheme';
 
 const TABS = [
@@ -135,6 +136,9 @@ function PostCard({ post, onLikeToggle }) {
   );
 }
 
+const POSTS_LAST_SEEN_KEY = 'hrms_posts_last_seen';
+const getPostsLastSeen = () => localStorage.getItem(POSTS_LAST_SEEN_KEY) || '1970-01-01T00:00:00.000Z';
+
 export default function PostComposerCard() {
   const [tab, setTab] = useState('post');
   const [content, setContent] = useState('');
@@ -144,6 +148,17 @@ export default function PostComposerCard() {
   const [error, setError] = useState('');
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showDrawer, setShowDrawer] = useState(false);
+  const [postsLastSeen, setPostsLastSeen] = useState(getPostsLastSeen());
+
+  const newPostCount = posts.filter(p => new Date(p.created_at) > new Date(postsLastSeen)).length;
+
+  const openDrawer = () => {
+    setShowDrawer(true);
+    const now = new Date().toISOString();
+    try { localStorage.setItem(POSTS_LAST_SEEN_KEY, now); } catch { /* ignore */ }
+    setPostsLastSeen(now);
+  };
 
   const fetchPosts = () => {
     axios.get(API_ENDPOINTS.POSTS)
@@ -192,6 +207,18 @@ export default function PostComposerCard() {
 
   return (
     <div style={QA_CARD_STYLE}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
+        <button onClick={openDrawer}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1px solid ${QA.border}`, borderRadius: 20, padding: '6px 14px', fontSize: 12, fontWeight: 700, color: QA.primary, cursor: 'pointer' }}>
+          View All Posts
+          {newPostCount > 0 && (
+            <span style={{ background: QA.danger, color: '#fff', borderRadius: 10, fontSize: 10, fontWeight: 800, padding: '1px 6px', minWidth: 16, textAlign: 'center' }}>
+              {newPostCount > 99 ? '99+' : newPostCount}
+            </span>
+          )}
+        </button>
+      </div>
+
       <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
         {TABS.map(t => (
           <button key={t.key} onClick={() => { setTab(t.key); setError(''); }}
@@ -274,6 +301,8 @@ export default function PostComposerCard() {
       )}
         </>
       )}
+
+      <PostsDrawer show={showDrawer} onClose={() => setShowDrawer(false)} />
     </div>
   );
 }

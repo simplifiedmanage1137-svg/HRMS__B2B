@@ -66,10 +66,15 @@ router.get('/weekly-cleanup', cronAuth, async (req, res) => {
     try {
         const thirtyAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
         const ninetyAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+        const fortyFiveAgo = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
 
         await Promise.all([
             supabase.from('attendance_sessions').delete().eq('is_active', false).lt('clock_out_time', thirtyAgo),
             supabase.from('regularization_requests').delete().in('status', ['approved', 'rejected']).lt('created_at', ninetyAgo),
+            // Social feed posts + birthday/anniversary wishes older than 45 days — comments
+            // cascade-delete automatically via their FK's ON DELETE CASCADE.
+            supabase.from('dashboard_posts').delete().lt('created_at', fortyFiveAgo),
+            supabase.from('birthday_wishes').delete().lt('created_at', fortyFiveAgo),
         ]);
 
         res.json({ success: true, ms: Date.now() - t });

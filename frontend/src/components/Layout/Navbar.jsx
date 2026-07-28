@@ -339,7 +339,13 @@ const Navbar = () => {
         <div
           ref={bellRef}
           className={`hrms-icon-btn${showNotifications ? ' active' : ''}`}
-          onClick={() => setShowNotifications(s => !s)}
+          onClick={() => {
+            setShowNotifications(s => {
+              const opening = !s;
+              if (opening) markAllAsRead();
+              return opening;
+            });
+          }}
           title="Notifications"
         >
           <FaBell size={15} />

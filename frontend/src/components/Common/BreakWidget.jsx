@@ -76,9 +76,8 @@ function BreakDropdown({ activeBreak, usedTypes, canInteract, acting, error, onS
 
     const btnBase = {
         display: 'flex', alignItems: 'center', gap: 6,
-        padding: '6px 13px', borderRadius: 20, border: 'none',
-        fontSize: 13, fontWeight: 600,
-        boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+        padding: '8px 16px', borderRadius: 10, border: 'none',
+        fontSize: 13, fontWeight: 800,
         whiteSpace: 'nowrap',
     };
 

@@ -11,7 +11,7 @@ import { QA_ANIMATIONS_CSS } from './quickAccessTheme';
 const QUICK_ACCESS_CSS = `
   .dash-quick-access {
     display: grid;
-    grid-template-columns: 300px 1fr;
+    grid-template-columns: 330px 1fr;
     gap: 16px;
     margin-bottom: 20px;
     align-items: start;

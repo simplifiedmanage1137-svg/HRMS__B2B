@@ -93,6 +93,20 @@ module.exports = (supabase, authenticateToken) => {
                 throw error;
             }
 
+            // Notify the recipient — best-effort, never blocks the wish itself.
+            try {
+                const eventLabel = (event_type || 'birthday') === 'anniversary' ? 'work anniversary' : 'birthday';
+                await supabase.from('notifications').insert({
+                    employee_id: recipient_employee_id,
+                    type: 'wish_received',
+                    title: eventLabel === 'anniversary' ? '🏆 New Work Anniversary Wish' : '🎂 New Birthday Wish',
+                    message: `${senderName} wished you a happy ${eventLabel}: "${message.trim().slice(0, 80)}"`,
+                    is_read: false,
+                });
+            } catch (notifyErr) {
+                console.error('[wishes] recipient notification failed:', notifyErr);
+            }
+
             return res.json({ success: true, wish: decorateWish(data, employeeId, {}) });
         } catch (err) {
             return res.status(500).json({ success: false, message: err.message });
