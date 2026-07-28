@@ -65,12 +65,13 @@ export default function DashboardQuickAccess({
         />
         <HolidayCountdownCard />
         <LeaveBalanceRingsCard employeeId={employeeId} />
-        <AttendanceInsightsCard employeeId={employeeId} />
         <OnLeaveTodayCard scope={onLeaveScope} department={department} />
       </div>
       <div className="dash-quick-access__right">
         <PostComposerCard />
         <CelebrationsCard />
+        <AttendanceInsightsCard employeeId={employeeId} />
+
       </div>
     </div>
   );

@@ -296,7 +296,8 @@ export default function PostComposerCard() {
         <div style={{ fontSize: 12, color: QA.textMuted, marginTop: 10 }}>No posts yet — say hello to your team!</div>
       ) : (
         <div>
-          {posts.map(p => <PostCard key={p.id} post={p} onLikeToggle={toggleLike} />)}
+          {/* Compact card shows only the latest update — the rest live behind "View All Posts" */}
+          {posts.slice(0, 1).map(p => <PostCard key={p.id} post={p} onLikeToggle={toggleLike} />)}
         </div>
       )}
         </>

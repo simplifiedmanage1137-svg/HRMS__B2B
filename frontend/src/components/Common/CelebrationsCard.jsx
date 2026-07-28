@@ -7,8 +7,10 @@ import { useNotification } from '../../context/NotificationContext';
 import Avatar from './Avatar';
 import { QA, QA_ANIMATIONS_CSS } from './quickAccessTheme';
 
-const UPCOMING_WINDOW_DAYS = 14;
-const UPCOMING_LIMIT = 10;
+// Reference span for the mini progress bar's "how soon" fill — not a data filter
+// (the compact row now shows the next people regardless of how far out they are).
+const UPCOMING_WINDOW_DAYS = 90;
+const UPCOMING_LIMIT = 9;
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 const fmtToday = () => new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long' });
@@ -272,39 +274,54 @@ function EmptyToday({ theme }) {
   );
 }
 
-function UpcomingRow({ theme, people, extraLabel, onViewAll }) {
-  const shown = people.slice(0, UPCOMING_LIMIT);
-  const extra = people.length - shown.length;
+function UpcomingRow({ theme, people, showViewAllTile, onViewAll }) {
+  // The View All tile takes the last slot itself, so up to (LIMIT - 1) real
+  // people are shown alongside it — LIMIT divs total, always ending on View All.
+  const peopleSlots = showViewAllTile ? UPCOMING_LIMIT - 1 : UPCOMING_LIMIT;
+  const shown = people.slice(0, peopleSlots);
 
   return (
     <div className="qa-scroll-x">
       {shown.map(p => {
         const pct = Math.max(8, Math.round(((UPCOMING_WINDOW_DAYS - p.days_until) / UPCOMING_WINDOW_DAYS) * 100));
         return (
-          <div key={p.employee_id} style={{ minWidth: 110, flexShrink: 0, padding: '10px 10px', borderRadius: 12, background: '#f9fafb' }}>
+          <div key={p.employee_id} style={{ width: 142, flexShrink: 0, boxSizing: 'border-box', padding: '10px', borderRadius: 12, background: '#f9fafb' }}>
             <Avatar photo={p.profile_image} id={p.employee_id} firstName={p.first_name} lastName={p.last_name} size={34} />
-            <div style={{ fontSize: 11, fontWeight: 700, color: QA.textDark, marginTop: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {p.first_name}
+            <div style={{ fontSize: 11, fontWeight: 700, color: QA.textDark, marginTop: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+              title={`${p.first_name} ${p.last_name}`}>
+              {p.first_name} {p.last_name}
             </div>
-            <div style={{ fontSize: 10, color: QA.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.position || p.designation}</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: theme.accent, fontWeight: 700, marginTop: 4 }}>
-              <span>{p.date ? fmtShort(p.date) : ''}</span>
-              <span>{p.days_until === 1 ? 'Tomorrow' : `${p.days_until}d`}</span>
+            {/* <div style={{ fontSize: 10, color: QA.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+              title={p.position || p.designation}>
+              {p.position || p.designation}
+            </div> */}
+            <div style={{ marginTop: 6 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: theme.accent, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {p.date ? fmtShort(p.date) : ''}
+              </div>
+              <div style={{ fontSize: 9, color: QA.textMuted, marginTop: 1 }}>
+                {p.days_until === 1 ? 'Tomorrow' : `in ${p.days_until} days`}
+              </div>
             </div>
-            <div style={{ height: 4, borderRadius: 4, background: '#e5e7eb', marginTop: 4, overflow: 'hidden' }}>
+            <div style={{ height: 4, borderRadius: 4, background: '#e5e7eb', marginTop: 6, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${pct}%`, background: theme.accent, borderRadius: 4 }} />
             </div>
           </div>
         );
       })}
-      {extra > 0 && (
+      {showViewAllTile && (
         <button onClick={onViewAll}
-          style={{ minWidth: 110, flexShrink: 0, padding: '10px', borderRadius: 12, background: theme.light, border: 'none', cursor: onViewAll ? 'pointer' : 'default', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-          <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
-            <FaUserFriends size={13} color={theme.accent} />
+          style={{
+            width: 132, flexShrink: 0, boxSizing: 'border-box', padding: '10px', borderRadius: 12,
+            background: 'linear-gradient(135deg, #7C3AED 0%, #A855F7 100%)', border: 'none', cursor: 'pointer',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center',
+            boxShadow: '0 4px 14px rgba(124,58,237,0.35)',
+          }}>
+          <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+            <FaUserFriends size={14} color="#fff" />
           </div>
-          <div style={{ fontSize: 11, fontWeight: 800, color: theme.accent }}>+{extra} More</div>
-          <div style={{ fontSize: 9, color: QA.textMuted }}>{extraLabel}</div>
+          <div style={{ fontSize: 12, fontWeight: 800, color: '#fff' }}>View All</div>
+          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.85)', marginTop: 1 }}>See everyone →</div>
         </button>
       )}
     </div>
@@ -333,14 +350,14 @@ function AllUpcomingModal({ show, onClose, theme, eventType }) {
   }, [show, eventType]);
 
   return (
-    <Modal show={show} onHide={onClose} centered scrollable>
+    <Modal show={show} onHide={onClose} centered scrollable size="lg">
       <Modal.Header closeButton style={{ border: 'none', paddingBottom: 0 }}>
         <Modal.Title style={{ fontSize: 16, fontWeight: 800, color: QA.textDark, display: 'flex', alignItems: 'center', gap: 8 }}>
           <theme.icon size={16} color={theme.accent} />
           All {eventType === 'birthday' ? 'Birthdays' : 'Work Anniversaries'}
         </Modal.Title>
       </Modal.Header>
-      <Modal.Body style={{ maxHeight: '60vh' }}>
+      <Modal.Body style={{ maxHeight: '65vh' }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 20, fontSize: 13, color: QA.textMuted }}>Loading…</div>
         ) : list.length === 0 ? (
@@ -348,21 +365,21 @@ function AllUpcomingModal({ show, onClose, theme, eventType }) {
             No upcoming {eventType === 'birthday' ? 'birthdays' : 'work anniversaries'}
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
             {list.map(p => (
-              <div key={p.employee_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', borderBottom: '1px solid #f3f4f6' }}>
-                <Avatar photo={p.profile_image} id={p.employee_id} firstName={p.first_name} lastName={p.last_name} size={36} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: QA.textDark }}>{p.first_name} {p.last_name}</div>
-                  <div style={{ fontSize: 11, color: QA.textMuted }}>
-                    {p.position ? `${p.position} · ` : ''}{p.department}{eventType === 'anniversary' ? ` · ${p.years} yr${p.years === 1 ? '' : 's'}` : ''}
-                  </div>
+              <div key={p.employee_id} style={{ padding: 12, borderRadius: 14, background: '#f9fafb', border: '1px solid #f3f4f6', textAlign: 'center' }}>
+                <Avatar photo={p.profile_image} id={p.employee_id} firstName={p.first_name} lastName={p.last_name} size={44} />
+                <div style={{ fontSize: 12, fontWeight: 700, color: QA.textDark, marginTop: 8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                  title={`${p.first_name} ${p.last_name}`}>
+                  {p.first_name} {p.last_name}
                 </div>
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: theme.accent }}>{fmtFull(p.date)}</div>
-                  <div style={{ fontSize: 11, color: QA.textMuted }}>
-                    {p.days_until === 1 ? 'Tomorrow' : `in ${p.days_until} days`}
-                  </div>
+                <div style={{ fontSize: 10, color: QA.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                  title={p.position || p.department}>
+                  {p.position || p.department}{eventType === 'anniversary' ? ` · ${p.years} yr${p.years === 1 ? '' : 's'}` : ''}
+                </div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: theme.accent, marginTop: 6 }}>{fmtFull(p.date)}</div>
+                <div style={{ fontSize: 10, color: QA.textMuted }}>
+                  {p.days_until === 1 ? 'Tomorrow' : `in ${p.days_until} days`}
                 </div>
               </div>
             ))}
@@ -386,7 +403,10 @@ export default function CelebrationsCard() {
 
   useEffect(() => {
     let cancelled = false;
-    axios.get(API_ENDPOINTS.TODAY_EVENTS_UPCOMING)
+    // Pull the full-year list (not just the next 14 days) so the compact "Upcoming"
+    // row can always show up to UPCOMING_LIMIT people even if none fall in the next
+    // couple of weeks — "View All" already used this same all=true request.
+    axios.get(API_ENDPOINTS.TODAY_EVENTS_UPCOMING, { params: { all: 'true' } })
       .then(res => { if (!cancelled && res.data?.success) setUpcoming(res.data); })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -490,18 +510,16 @@ export default function CelebrationsCard() {
 
       {upcomingPeople.length > 0 && (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '16px 0 8px' }}>
+          <div style={{ margin: '16px 0 8px' }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: QA.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
               {activeTab === 'new_joiners' ? 'Joined This Week' : 'Upcoming'}
             </span>
-            {activeTab !== 'new_joiners' && (
-              <button onClick={() => setShowAllModal(true)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: theme.accent, fontSize: 11, fontWeight: 700, padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
-                View All →
-              </button>
-            )}
           </div>
-          <UpcomingRow theme={theme} people={upcomingPeople} extraLabel="View all upcoming" onViewAll={() => setShowAllModal(true)} />
+          <UpcomingRow
+            theme={theme} people={upcomingPeople}
+            showViewAllTile={activeTab !== 'new_joiners'}
+            onViewAll={() => setShowAllModal(true)}
+          />
         </>
       )}
 

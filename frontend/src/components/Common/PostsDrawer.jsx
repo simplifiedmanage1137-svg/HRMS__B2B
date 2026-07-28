@@ -557,7 +557,7 @@ export default function PostsDrawer({ show, onClose }) {
 
   const TABS = [
     { key: 'all', label: 'All Posts' },
-    { key: 'following', label: 'Following' },
+    // { key: 'following', label: 'Following' },
     { key: 'my', label: 'My Posts' },
     { key: 'mentions', label: 'Mentions' },
   ];

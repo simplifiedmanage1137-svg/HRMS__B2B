@@ -190,9 +190,12 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
                 .maybeSingle();
             if (!att) return res.status(400).json({ success: false, message: 'You must be clocked in before starting a break.' });
 
-            // No active break already running
+            // No active break already running THIS session — scoped to the current clock-in
+            // (a stale unclosed break from a past session must never block new ones).
             const { data: active } = await supabase.from('employee_breaks')
-                .select('id').eq('employee_id', employeeId).is('break_end', null).maybeSingle();
+                .select('id').eq('employee_id', employeeId).is('break_end', null)
+                .gte('break_start', att.clock_in)
+                .maybeSingle();
             if (active) return res.status(400).json({ success: false, message: 'You already have an active break. End it first.' });
 
             // This break_type must not have been used this session
@@ -225,8 +228,21 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
     router.post('/break/end', authenticateToken, async (req, res) => {
         const employeeId = req.user.employeeId;
         try {
-            const { data: active, error: findErr } = await supabase.from('employee_breaks')
-                .select('id, break_start, break_type').eq('employee_id', employeeId).is('break_end', null).maybeSingle();
+            // Scope to the current clock-in session so this can never touch a stale
+            // unclosed break left over from a past session.
+            const { data: att } = await supabase.from('attendance')
+                .select('clock_in')
+                .eq('employee_id', employeeId)
+                .not('clock_in', 'is', null)
+                .is('clock_out', null)
+                .order('clock_in', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            let activeQuery = supabase.from('employee_breaks')
+                .select('id, break_start, break_type').eq('employee_id', employeeId).is('break_end', null);
+            if (att?.clock_in) activeQuery = activeQuery.gte('break_start', att.clock_in);
+            const { data: active, error: findErr } = await activeQuery.maybeSingle();
             if (findErr) throw findErr;
             if (!active) return res.status(400).json({ success: false, message: 'No active break found.' });
 
@@ -317,11 +333,14 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
                 if (employeeIds.length === 0) return res.json({ success: true, breaks: [] });
             }
 
-            // Step 3: find active breaks — no date filter, just break_end IS NULL
+            // Step 3: find active breaks — scoped to today so a stale unclosed break from a
+            // past day (e.g. browser closed mid-break) never shows as "still on break" forever.
+            const todayStr = new Date().toISOString().split('T')[0];
             let query = supabase
                 .from('employee_breaks')
                 .select('id, employee_id, break_start, break_type, attendance_date')
                 .is('break_end', null)
+                .eq('attendance_date', todayStr)
                 .order('break_start', { ascending: true });
 
             if (employeeIds !== null) query = query.in('employee_id', employeeIds);
