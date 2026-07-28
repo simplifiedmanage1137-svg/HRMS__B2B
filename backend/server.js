@@ -42,6 +42,8 @@ const teamRoutes          = require('./routes/teamRoutes');
 const deductionRoutes     = require('./routes/deductionRoutes');
 const onboardingRoutes    = require('./routes/onboardingRoutes');
 const ticketRoutes        = require('./routes/ticketRoutes');
+const wishesRoutes        = require('./routes/wishesRoutes');
+const postsRoutes         = require('./routes/postsRoutes');
 
 const attendanceController = require('./controllers/attendanceController');
 const cronRoutes           = require('./routes/cronRoutes');
@@ -209,6 +211,8 @@ app.use('/api/performance',      performanceRoutes(authenticateToken));
 app.use('/api/teams',            authenticateToken, teamRoutes);
 app.use('/api/deductions',       authenticateToken, deductionRoutes);
 app.use('/api/tickets',          authenticateToken, ticketRoutes(supabase, authenticateToken));
+app.use('/api/wishes',           authenticateToken, wishesRoutes(supabase, authenticateToken));
+app.use('/api/posts',            authenticateToken, postsRoutes(supabase, authenticateToken));
 
 // ─── Utility endpoints ────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({

@@ -41,7 +41,7 @@ const AnnouncementBanner = () => {
 
   return (
     <>
-      <Card className="border-0 shadow-sm mb-4" style={{ borderLeft: '4px solid #0d6efd !important' }}>
+      {/* <Card className="border-0 shadow-sm mb-4" style={{ borderLeft: '4px solid #0d6efd !important' }}>
         <Card.Header
           className="py-2 d-flex justify-content-between align-items-center"
           style={{ background: '#e7f1ff', cursor: 'pointer', borderLeft: '4px solid #0d6efd' }}
@@ -109,7 +109,7 @@ const AnnouncementBanner = () => {
             </Card.Body>
           </div>
         </Collapse>
-      </Card>
+      </Card> */}
 
       {/* Full View Modal */}
       <Modal show={!!viewItem} onHide={() => setViewItem(null)} centered>

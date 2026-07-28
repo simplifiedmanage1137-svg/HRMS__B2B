@@ -12,6 +12,12 @@ router.get('/types', leaveController.getLeaveTypes);
 // Get leave balance for employee
 router.get('/balance/:employee_id', leaveController.getLeaveBalance);
 
+// Who's on leave today (dashboard widget)
+router.get('/on-leave-today', leaveController.getOnLeaveToday);
+
+// Leave usage by type this year (dashboard widget)
+router.get('/usage-by-type/:employee_id', leaveController.getLeaveUsageByType);
+
 // Get all leaves (admin gets all, employee gets their own)
 router.get('/', leaveController.getLeaves);
 

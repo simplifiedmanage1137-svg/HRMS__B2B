@@ -46,7 +46,8 @@ import EmployeeNotices from './EmployeeNotices';
 import AnnouncementBanner from './AnnouncementBanner';
 import ProfileCompletion from './ProfileCompletion';
 import BreakWidget from '../Common/BreakWidget';
-import TicketBadge from '../Common/TicketBadge';
+import DashboardQuickAccess from '../Common/DashboardQuickAccess';
+import WelcomeBanner from '../Common/WelcomeBanner';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -74,13 +75,12 @@ ChartJS.register(
 
 const EmployeeDashboard = () => {
   const { user } = useAuth();
-  const { showNotification, todayEvents, fetchTodayEvents } = useNotification();
+  const { showNotification, fetchTodayEvents } = useNotification();
   const isMobileDevice = useMobileDevice();
   const navigate = useNavigate();
   // Attendance card state
   const [attendance, setAttendance] = useState(null);
   const [activeSession, setActiveSession] = useState(null);
-  const [hasClockedOutToday, setHasClockedOutToday] = useState(false);
   const [clockLoading, setClockLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [canClockOut, setCanClockOut] = useState(false);
@@ -164,7 +164,6 @@ const EmployeeDashboard = () => {
       const session = { session_id: response.data.session_id, clock_in_time: clockInIST };
       setActiveSession(session);
       saveSession(session);
-      setHasClockedOutToday(false);
       setMessage({ type: 'success', text: response.data.message || 'Clocked in successfully!' });
     } catch (error) {
       setMessage({ type: 'danger', text: error.response?.data?.message || 'Failed to clock in' });
@@ -201,7 +200,6 @@ const EmployeeDashboard = () => {
       }));
       setActiveSession(null);
       clearSession();
-      setHasClockedOutToday(true);
       setMessage({ type: 'success', text: response.data.message || 'Clocked out successfully!' });
     } catch (error) {
       setMessage({ type: 'danger', text: error.response?.data?.message || 'Failed to clock out' });
@@ -210,68 +208,6 @@ const EmployeeDashboard = () => {
     }
   };
 
-  const renderClockButton = () => {
-    if (isMobileDevice) {
-      return (
-        <div style={{ textAlign: 'center' }}>
-          <button disabled style={{
-            display: 'flex', alignItems: 'center', gap: 8, margin: '0 auto',
-            padding: '8px 18px', borderRadius: 20, border: '1px solid #d1d5db',
-            background: '#f3f4f6', color: '#9ca3af', fontSize: 13, fontWeight: 600,
-            cursor: 'not-allowed',
-          }}>
-            <FaSignInAlt size={13} /> Clock In / Clock Out
-          </button>
-          <div style={{ marginTop: 6, fontSize: 11, color: '#ef4444', fontWeight: 500 }}>
-            Not available on mobile / tablet. Use a desktop to mark attendance.
-          </div>
-        </div>
-      );
-    }
-
-    const hasOpenSession = !!activeSession || (!!attendance?.clock_in && !attendance?.clock_out);
-
-    if (hasOpenSession) {
-      if (!canClockOut) {
-        return null;
-      }
-      return (
-        <Button
-          variant="warning"
-          size="sm"
-          className="d-flex align-items-center gap-2 px-3 py-2 rounded-pill fw-semibold shadow-sm"
-          onClick={() => setShowClockOutConfirm(true)}
-          disabled={clockLoading}
-        >
-          {clockLoading
-            ? <><Spinner size="sm" animation="border" /> Processing...</>
-            : <><FaSignOutAlt size={14} /> Clock Out</>}
-        </Button>
-      );
-    }
-    return (
-      <Button
-        variant="success"
-        size="sm"
-        className="d-flex align-items-center gap-2 px-3 py-2 rounded-pill fw-semibold shadow-sm"
-        onClick={handleClockIn}
-        disabled={clockLoading}
-      >
-        {clockLoading
-          ? <><Spinner size="sm" animation="border" /> Processing...</>
-          : <><FaSignInAlt size={14} /> Clock In</>}
-      </Button>
-    );
-  };
-
-  const getLocationBadge = () => {
-    return (
-      <Badge bg="info" className="px-3 py-2 rounded-pill">
-        <FaLocationArrow className="me-2" size={12} />
-        Location Tracking Disabled
-      </Badge>
-    );
-  };
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -287,8 +223,7 @@ const EmployeeDashboard = () => {
     is_eligible: false
   });
   const [compOffHistory, setCompOffHistory] = useState([]);
-    const [geofenceInfo, setGeofenceInfo] = useState(null);
-  
+
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [todayAttendance, setTodayAttendance] = useState(null);
   const [attendanceHistory, setAttendanceHistory] = useState([]);
@@ -701,14 +636,11 @@ const EmployeeDashboard = () => {
         if (serverSession) {
           setActiveSession(serverSession);
           saveSession(serverSession);
-          setHasClockedOutToday(false);
         } else if (attendanceData.clock_in && !attendanceData.clock_out) {
           setActiveSession({ session_id: attendanceData.session_id || 'inferred' });
-          setHasClockedOutToday(false);
         } else {
           setActiveSession(null);
           clearSession();
-          if (attendanceData.clock_out) setHasClockedOutToday(true);
         }
       } else {
         setAttendance(null);
@@ -951,145 +883,44 @@ const EmployeeDashboard = () => {
   return (
     <div className="p-2 p-md-3 p-lg-4" style={{ backgroundColor: '#f0f2f5', minHeight: '100vh' }}>
 
-      {/* Main Attendance Card - Attractive Gradient */}
-      <Card className="mb-4 border-0 shadow overflow-hidden" style={{ borderRadius: '16px' }}>
-        <div style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)', padding: '1px', borderRadius: '16px' }}>
-          <Card.Body className="p-3 p-md-4" style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)', borderRadius: '15px' }}>
-            <Row className="align-items-center g-3">
-              {/* Location */}
-              <Col xs={12} md={4}>
-                <div className="d-flex flex-column align-items-center align-items-md-start">
-                  <small className="text-white-50 mb-1" style={{ fontSize: '11px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Location Status</small>
-                  {getLocationBadge()}
-                  {geofenceInfo && (
-                    <small className="text-white-50 mt-1" style={{ fontSize: '10px' }}>
-                      <FaMapMarkerAlt className="me-1" size={9} />
-                      Accuracy: ±{Math.round(0)}m
-                    </small>
-                  )}
-                </div>
-              </Col>
+      <WelcomeBanner name={employee?.first_name} roleLabel="Employee Dashboard" onRefresh={refreshData} refreshing={refreshing} />
 
-              {/* Clock In / Out Times + Stars */}
-              <Col xs={12} md={4}>
-                <div className="d-flex flex-column align-items-center gap-2">
-                  <div className="d-flex gap-3 justify-content-center">
-                    <div className="text-center">
-                      <small className="text-white d-block mb-1" style={{ fontSize: '10px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>In</small>
-                      <div className={`text-white fw-bold ${attendance?.clock_in ? 'text-success' : 'text-white'}`} style={{ fontSize: '15px' }}>
-                        {attendance?.clock_in
-                          ? (attendance.clock_in_display || formatTimeIST(attendance.clock_in_ist || attendance.clock_in))
-                          : '--:--'}
-                      </div>
-                      {attendance?.late_display && attendance?.late_minutes > 0 && (
-                        <small className="text-danger d-block" style={{ fontSize: '9px' }}>
-                          <FaExclamationTriangle size={7} className="me-1" />
-                          Late {attendance.late_display}
-                        </small>
-                      )}
-                    </div>
-                    <div style={{ width: '1px', background: 'rgba(244, 244, 244, 0.15)', margin: '4px 0' }} />
-                    <div className="text-center">
-                      <small className="text-white d-block mb-1" style={{ fontSize: '10px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Out</small>
-                      <div className={`text-white fw-bold ${attendance?.clock_out ? 'text-warning' : 'text-white'}`} style={{ fontSize: '15px' }}>
-                        {attendance?.clock_out
-                          ? (attendance.clock_out_display || formatTimeIST(attendance.clock_out_ist || attendance.clock_out))
-                          : '--:--'}
-                      </div>
-                      {attendance?.total_hours_display && (
-                        <small className=" text-white text-success d-block" style={{ fontSize: '9px' }}>{attendance.total_hours_display}</small>
-                      )}
-                    </div>
-                  </div>
-                  {/* Performance Stars */}
-                  <div style={{ display: 'flex' }}>
-                    {renderStars(allRatings.length > 0 ? allRatings.reduce((s, r) => s + r.rating, 0) / allRatings.length : 0)}
-                  </div>
-                </div>
-              </Col>
+      <div className="d-flex flex-wrap gap-2 align-items-center mb-3">
+        <span className="text-muted small">{employee?.designation || 'Employee'} • {employee?.department || 'Department'}</span>
+        <Badge bg="dark" className="p-2">ID: {user?.employeeId}</Badge>
+        <Badge bg="info" className="p-2">{employee?.employment_type || 'Full Time'}</Badge>
+      </div>
 
-              {/* Action Button + Break Button */}
-              <Col xs={12} md={4}>
-                <div className="d-flex justify-content-center justify-content-md-end align-items-center gap-2 flex-wrap">
-                  <TicketBadge variant="dark" />
-                  {renderClockButton()}
-                  <BreakWidget
-                    mode="inline-button"
-                    isClockedIn={!!(attendance?.clock_in || activeSession)}
-                    isClockedOut={hasClockedOutToday}
-                  />
-                </div>
-              </Col>
-            </Row>
-
-            {geofenceInfo && !geofenceInfo.isInOffice && !activeSession && (
-              <div className="mt-3 text-warning small text-center" style={{ background: 'rgba(255,193,7,0.1)', borderRadius: '8px', padding: '8px' }}>
-                <FaExclamationTriangle className="me-1" />
-                You are {geofenceInfo.distance}m away. Need to be within {OFFICE_COORDS.radius}m to clock in.
-              </div>
-            )}
-            {message.text && (
-              <Alert variant={message.type} onClose={() => setMessage({ type: '', text: '' })} dismissible className="mt-3 mb-0 py-2 small">
-                {message.text}
-              </Alert>
-            )}
-          </Card.Body>
-        </div>
-      </Card>
+      {message.text && (
+        <Alert variant={message.type} onClose={() => setMessage({ type: '', text: '' })} dismissible className="py-2 small">
+          {message.text}
+        </Alert>
+      )}
 
       {/* Team-on-break panel — only visible to managers/admins */}
       <BreakWidget mode="team-panel" />
 
-      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
-        <div>
-          <h5 className="mb-1 d-flex align-items-center">
-            <FaUserCircle className="me-2 text-primary" />
-            Welcome back, {employee?.first_name || 'Employee'}!
-          </h5>
-          <p className="text-muted mb-0 small">
-            {employee?.designation || 'Employee'} • {employee?.department || 'Department'}
-          </p>
-        </div>
-        <div className="d-flex flex-wrap gap-2 ms-0 ms-md-auto align-items-center">
-          {todayEvents?.total > 0 && (
-            <div
-              style={{
-                background: 'linear-gradient(135deg,#667eea,#764ba2)',
-                borderRadius: 20,
-                padding: '4px 12px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                fontSize: 12,
-                color: '#fff',
-                flexWrap: 'wrap',
-                maxWidth: 420,
-              }}
-            >
-              <span>🎉</span>
-              {todayEvents.birthdays?.map(emp => (
-                <span key={`b-${emp.id}`} style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 12, padding: '1px 8px', fontSize: 11 }}>
-                  🎂 {emp.first_name} {emp.last_name}
-                </span>
-              ))}
-              {todayEvents.anniversaries?.map(emp => (
-                <span key={`a-${emp.id}`} style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 12, padding: '1px 8px', fontSize: 11 }}>
-                  🏆 {emp.first_name} {emp.last_name} · {emp.years}yr
-                </span>
-              ))}
-            </div>
-          )}
-          <Button variant="outline-primary" size="sm" onClick={refreshData} disabled={refreshing} className="d-inline-flex align-items-center">
-            <FaSyncAlt className={`me-2 ${refreshing ? 'fa-spin' : ''}`} size={12} />
-            Refresh
-          </Button>
-          <Badge bg="dark" className="p-2">ID: {user?.employeeId}</Badge>
-          <Badge bg="info" className="p-2">{employee?.employment_type || 'Full Time'}</Badge>
-        </div>
-      </div>
-
       <AnnouncementBanner />
       <EmployeeNotices />
+
+      <DashboardQuickAccess
+        employeeId={employee?.employee_id}
+        onLeaveScope="department"
+        department={employee?.department}
+        attendance={attendance}
+        activeSession={activeSession}
+        onClockIn={handleClockIn}
+        onRequestClockOut={() => setShowClockOutConfirm(true)}
+        clockLoading={clockLoading}
+        disabledMobile={isMobileDevice}
+        canClockOut={canClockOut}
+        shiftTiming={employee?.shift_timing}
+        footerExtra={
+          <div style={{ display: 'flex', gap: 2 }}>
+            {renderStars(allRatings.length > 0 ? allRatings.reduce((s, r) => s + r.rating, 0) / allRatings.length : 0)}
+          </div>
+        }
+      />
 
       {/* Salary deduction notice */}
       {myDeductions.length > 0 && (() => {

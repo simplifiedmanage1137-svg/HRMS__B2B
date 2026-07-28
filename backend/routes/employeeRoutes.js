@@ -339,6 +339,108 @@ router.get('/today-events', async (req, res) => {
     }
 });
 
+// ============== UPCOMING EVENTS (next 14 days) + NEW JOINERS THIS WEEK ==============
+router.get('/today-events/upcoming', async (req, res) => {
+    try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const WINDOW_DAYS = 14;
+
+        // Monday-Sunday of the current week, for "new joiners this week"
+        const dow = today.getDay();
+        const monday = new Date(today);
+        monday.setDate(today.getDate() - ((dow + 6) % 7));
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        sunday.setHours(23, 59, 59, 999);
+
+        const { data: employees, error } = await supabase
+            .from('employees')
+            .select('id, employee_id, first_name, last_name, dob, joining_date, department, designation, profile_image, is_active')
+            .eq('is_active', true);
+        if (error) throw error;
+
+        // Returns { daysUntil, occurrenceYear } for the next upcoming month/day, rolling into
+        // next year if this year's occurrence has already passed.
+        const nextOccurrence = (monthDayDate) => {
+            const thisYear = new Date(today.getFullYear(), monthDayDate.getMonth(), monthDayDate.getDate());
+            const occurrence = thisYear < today
+                ? new Date(today.getFullYear() + 1, monthDayDate.getMonth(), monthDayDate.getDate())
+                : thisYear;
+            return {
+                daysUntil: Math.round((occurrence - today) / (1000 * 60 * 60 * 24)),
+                occurrenceYear: occurrence.getFullYear(),
+            };
+        };
+
+        const birthdays = [];
+        const anniversaries = [];
+
+        (employees || []).forEach(emp => {
+            if (emp.dob) {
+                const dob = new Date(emp.dob);
+                const { daysUntil } = nextOccurrence(dob);
+                if (daysUntil >= 1 && daysUntil <= WINDOW_DAYS) {
+                    birthdays.push({
+                        id: emp.id,
+                        employee_id: emp.employee_id,
+                        first_name: emp.first_name,
+                        last_name: emp.last_name,
+                        department: emp.department,
+                        position: emp.designation,
+                        profile_image: emp.profile_image,
+                        days_until: daysUntil,
+                    });
+                }
+            }
+            if (emp.joining_date) {
+                const joiningDate = new Date(emp.joining_date);
+                const { daysUntil, occurrenceYear } = nextOccurrence(joiningDate);
+                const years = occurrenceYear - joiningDate.getFullYear();
+                if (years > 0 && daysUntil >= 1 && daysUntil <= WINDOW_DAYS) {
+                    anniversaries.push({
+                        id: emp.id,
+                        employee_id: emp.employee_id,
+                        first_name: emp.first_name,
+                        last_name: emp.last_name,
+                        department: emp.department,
+                        position: emp.designation,
+                        profile_image: emp.profile_image,
+                        joining_date: emp.joining_date,
+                        years,
+                        days_until: daysUntil,
+                    });
+                }
+            }
+        });
+
+        const newJoiners = (employees || [])
+            .filter(emp => {
+                if (!emp.joining_date) return false;
+                const j = new Date(emp.joining_date);
+                return j >= monday && j <= sunday;
+            })
+            .map(emp => ({
+                id: emp.id,
+                employee_id: emp.employee_id,
+                first_name: emp.first_name,
+                last_name: emp.last_name,
+                department: emp.department,
+                position: emp.designation,
+                profile_image: emp.profile_image,
+                joining_date: emp.joining_date,
+            }));
+
+        birthdays.sort((a, b) => a.days_until - b.days_until);
+        anniversaries.sort((a, b) => a.days_until - b.days_until);
+
+        res.json({ success: true, birthdays, anniversaries, new_joiners: newJoiners });
+    } catch (error) {
+        console.error('❌ Error fetching upcoming events:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch upcoming events', error: error.message });
+    }
+});
+
 // ============== EMPLOYEE CRUD OPERATIONS ==============
 
 router.post('/', verifyToken, isAdminOrDesktopSupport, async (req, res) => {

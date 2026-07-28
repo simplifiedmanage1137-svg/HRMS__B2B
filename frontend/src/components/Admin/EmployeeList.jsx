@@ -5,7 +5,7 @@ import {
   FaEdit, FaEye, FaPlus, FaDownload, FaFilePdf, FaFileImage, FaFileAlt,
   FaSearch, FaTimes, FaSyncAlt, FaArrowLeft, FaCheckCircle, FaUserSlash,
   FaUser, FaEnvelope, FaPhone, FaBuilding, FaBriefcase, FaCalendarAlt, FaUserTie,
-  FaClock, FaCreditCard, FaUsers,
+  FaClock, FaCreditCard, FaUsers, FaLink,
 } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';
@@ -447,6 +447,27 @@ const EmpListItem = ({ emp, selected, onClick }) => {
   );
 };
 
+// ── Responsive rules ──────────────────────────────────────────────────────────
+// Desktop: fixed 290px list + flexible detail pane, both visible side by side.
+// Tablet/mobile: list takes full width; once an employee is selected the list
+// hides and the detail pane (with its existing × close button) takes over —
+// a classic master/detail mobile pattern with no extra JS needed.
+const EMP_RESPONSIVE_CSS = `
+  @media (max-width: 900px) {
+    .emp-left-panel { width: 100% !important; border-right: none !important; }
+    .emp-right-panel { display: none !important; }
+    .emp-split-pane--detail-open .emp-left-panel { display: none !important; }
+    .emp-split-pane--detail-open .emp-right-panel { display: flex !important; width: 100%; }
+  }
+  @media (max-width: 640px) {
+    .emp-mgmt-header { padding: 12px 14px !important; }
+    .emp-mgmt-header h5 { font-size: 15px !important; }
+    .emp-mgmt-header p { display: none; }
+    .emp-mgmt-header-actions select,
+    .emp-mgmt-header-actions button { font-size: 11px !important; padding: 7px 11px !important; }
+  }
+`;
+
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════════
@@ -622,18 +643,27 @@ const EmployeeList = () => {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 60px)', overflow: 'hidden', background: '#f8fafc' }}>
+    <div className="emp-mgmt-page" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: '#f8fafc' }}>
+      <style>{EMP_RESPONSIVE_CSS}</style>
 
       {/* ── Page Header ── */}
-      <div style={{
-        padding: '10px 16px', borderBottom: '1px solid #e5e7eb', background: '#fff',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 8,
+      <div className="emp-mgmt-header" style={{
+        padding: '14px 20px', borderBottom: '1px solid #e5e7eb', background: '#fff',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 12, flexWrap: 'wrap',
       }}>
-        <h5 style={{ margin: 0, fontWeight: 700, fontSize: 16, color: '#111827' }}>Employee Management</h5>
-        <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <FaUsers size={18} color="#fff" />
+          </div>
+          <div>
+            <h5 style={{ margin: 0, fontWeight: 800, fontSize: 17, color: '#111827' }}>Employee Management</h5>
+            <p style={{ margin: '2px 0 0', fontSize: 12, color: '#6b7280' }}>Manage your organization and team</p>
+          </div>
+        </div>
+        <div className="emp-mgmt-header-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {error && <span style={{ fontSize: 11, color: '#ef4444' }}>{error}</span>}
           <select value={profileFilter} onChange={e => setProfileFilter(e.target.value)}
-            style={{ fontSize: 11, padding: '5px 8px', border: '1px solid #e5e7eb', borderRadius: 7, background: '#f8fafc', cursor: 'pointer' }}>
+            style={{ fontSize: 12, fontWeight: 500, padding: '8px 14px', border: '1px solid #e5e7eb', borderRadius: 20, background: '#fff', color: '#374151', cursor: 'pointer' }}>
             <option value="all">All Profiles</option>
             <option value="completed">✅ Completed</option>
             <option value="incomplete">⚠️ Incomplete</option>
@@ -641,25 +671,25 @@ const EmployeeList = () => {
           {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'desktop_support' || user?.role === 'hr') && (
             <>
               <button onClick={() => setShowGenLink(true)} style={{
-                background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', border: 'none', borderRadius: 7,
-                padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 5,
+                background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', border: 'none', borderRadius: 20,
+                padding: '8px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 6,
               }}>
-                <FaUsers size={10} /> Offer Link
+                <FaLink size={11} /> Offer Link
               </button>
               <button onClick={() => navigate('/admin/add-employee')} style={{
-                background: '#1e293b', color: '#fff', border: 'none', borderRadius: 7,
-                padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 5,
+                background: '#111827', color: '#fff', border: 'none', borderRadius: 20,
+                padding: '8px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 6,
               }}>
-                <FaPlus size={10} /> Add Employee
+                <FaPlus size={11} /> Add Employee
               </button>
             </>
           )}
-          <button onClick={fetchEmployees} title="Refresh" style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 7, padding: '6px 10px', cursor: 'pointer', color: '#6b7280' }}>
-            <FaSyncAlt size={12} />
+          <button onClick={fetchEmployees} title="Refresh" style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: '50%', width: 34, height: 34, cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <FaSyncAlt size={13} />
           </button>
-          <button onClick={() => navigate(-1)} style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 7, padding: '6px 10px', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+          <button onClick={() => navigate(-1)} style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 20, padding: '8px 16px', cursor: 'pointer', color: '#374151', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600 }}>
             <FaArrowLeft size={11} /> Back
           </button>
         </div>
@@ -683,10 +713,10 @@ const EmployeeList = () => {
       </div>
 
       {/* ── Split Pane ── */}
-      <div style={{ flex: 1, display: view === 'employees' ? 'flex' : 'none', overflow: 'hidden' }}>
+      <div className={`emp-split-pane${selectedEmpId ? ' emp-split-pane--detail-open' : ''}`} style={{ flex: 1, display: view === 'employees' ? 'flex' : 'none', overflow: 'hidden' }}>
 
         {/* ── Left Panel ── */}
-        <div style={{ width: 290, flexShrink: 0, borderRight: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', background: '#fff', overflow: 'hidden' }}>
+        <div className="emp-left-panel" style={{ width: 290, flexShrink: 0, borderRight: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', background: '#fff', overflow: 'hidden' }}>
 
           {/* Search */}
           <div style={{ padding: '10px 10px 8px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
@@ -694,7 +724,7 @@ const EmployeeList = () => {
               <FaSearch size={11} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#9ca3af', pointerEvents: 'none' }} />
               <input
                 type="text"
-                placeholder="Search by name, ID, dept..."
+                placeholder="Search by name, ID, department..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 style={{ width: '100%', padding: '7px 28px', border: '1px solid #e5e7eb', borderRadius: 7, fontSize: 12, outline: 'none', background: '#f8fafc', boxSizing: 'border-box' }}
@@ -749,10 +779,26 @@ const EmployeeList = () => {
               />
             ))}
           </div>
+
+          {/* Build your dream team promo */}
+          {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'desktop_support' || user?.role === 'hr') && (
+            <div style={{ margin: 10, padding: 16, borderRadius: 14, background: 'linear-gradient(135deg,#eef2ff,#f5f3ff)', border: '1px solid #e0e7ff', flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'relative', fontSize: 13, fontWeight: 800, color: '#111827', marginBottom: 4 }}>Build your dream team</div>
+              <div style={{ position: 'relative', fontSize: 11, color: '#6b7280', marginBottom: 16, maxWidth: 165 }}>Invite new members and grow your organization</div>
+              <button onClick={() => navigate('/admin/add-employee')} style={{ position: 'relative', background: '#fff', color: '#4f46e5', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+                <FaPlus size={10} /> Add Employee
+              </button>
+              <div style={{ position: 'absolute', right: -6, bottom: -10, display: 'flex', pointerEvents: 'none' }}>
+                <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#a5b4fc', opacity: 0.7 }} />
+                <div style={{ width: 46, height: 46, borderRadius: '50%', background: '#818cf8', marginLeft: -14, opacity: 0.85 }} />
+                <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#c4b5fd', marginLeft: -12, marginTop: 18, opacity: 0.7 }} />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Right Panel ── */}
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div className="emp-right-panel" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           {selectedEmp ? (
             <EmpQuickView
               key={selectedEmp.id}
@@ -765,23 +811,29 @@ const EmployeeList = () => {
               onViewDocs={fetchEmployeeDocuments}
             />
           ) : (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', color: '#9ca3af', padding: 24 }}>
-              <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-                <FaUser size={28} color="#c4c4c4" />
+            <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', color: '#9ca3af', padding: 24, overflow: 'hidden' }}>
+              {/* decorative dot grid */}
+              <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(#c7d2fe 1.5px, transparent 1.5px)', backgroundSize: '22px 22px', opacity: 0.35, pointerEvents: 'none' }} />
+              {/* decorative blobs */}
+              <div style={{ position: 'absolute', top: -60, right: -60, width: 260, height: 260, borderRadius: '50%', background: 'radial-gradient(circle,#c4b5fd,transparent 70%)', filter: 'blur(10px)', opacity: 0.5, pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', bottom: -80, left: -40, width: 220, height: 220, borderRadius: '50%', background: 'radial-gradient(circle,#a7f3d0,transparent 70%)', filter: 'blur(10px)', opacity: 0.4, pointerEvents: 'none' }} />
+
+              <div style={{ position: 'relative', width: 96, height: 96, borderRadius: '50%', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20, boxShadow: '0 8px 24px rgba(99,102,241,0.25)' }}>
+                <FaUser size={36} color="#fff" />
               </div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Select an Employee</div>
-              <div style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', maxWidth: 220, marginBottom: 24 }}>
-                Click any employee from the list on the left to view their profile details here.
+              <div style={{ position: 'relative', fontSize: 18, fontWeight: 800, color: '#111827', marginBottom: 8 }}>Select an Employee</div>
+              <div style={{ position: 'relative', fontSize: 13, color: '#6b7280', textAlign: 'center', maxWidth: 280, marginBottom: 28 }}>
+                Click on any employee from the list on the left to view their profile details here.
               </div>
-              <div style={{ display: 'flex', gap: 24 }}>
+              <div style={{ position: 'relative', display: 'flex', background: '#fff', borderRadius: 14, boxShadow: '0 4px 20px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
                 {[
-                  { label: 'Active', value: activeCount, color: '#22c55e' },
-                  { label: 'Inactive', value: inactiveCount, color: '#ef4444' },
-                  { label: 'Total', value: employees.length, color: '#6366f1' },
-                ].map(s => (
-                  <div key={s.label} style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 24, fontWeight: 800, color: s.color }}>{s.value}</div>
-                    <div style={{ fontSize: 11, color: '#9ca3af' }}>{s.label}</div>
+                  { label: 'Active', value: activeCount, color: '#16a34a' },
+                  { label: 'Inactive', value: inactiveCount, color: '#dc2626' },
+                  { label: 'Total', value: employees.length, color: '#4f46e5' },
+                ].map((s, i) => (
+                  <div key={s.label} style={{ textAlign: 'center', padding: '16px 28px', borderLeft: i > 0 ? '1px solid #f1f5f9' : 'none' }}>
+                    <div style={{ fontSize: 26, fontWeight: 800, color: s.color }}>{s.value}</div>
+                    <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>{s.label}</div>
                   </div>
                 ))}
               </div>

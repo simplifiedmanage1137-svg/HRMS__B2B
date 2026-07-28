@@ -60,6 +60,7 @@ export const API_ENDPOINTS = {
   EMPLOYEE_RESET_PASSWORD:   (id) => ep(`/api/employees/${id}/reset-password`),
   EMPLOYEE_TOGGLE_STATUS:    (id) => ep(`/api/employees/${id}/toggle-status`),
   TODAY_EVENTS:    ep('/api/employees/today-events'),
+  TODAY_EVENTS_UPCOMING: ep('/api/employees/today-events/upcoming'),
   EMPLOYEE_STATS:  ep('/api/employees/stats/summary'),
 
   // Leaves
@@ -73,6 +74,8 @@ export const API_ENDPOINTS = {
   LEAVE_TYPES:   ep('/api/leaves/types'),
   LEAVE_MANUAL_ACCRUAL: (employeeId) => ep(`/api/leaves/manual-accrual/${employeeId}`),
   LEAVE_YEARLY_RESET: ep('/api/leaves/yearly-reset'),
+  LEAVE_ON_LEAVE_TODAY: (scope, department) => ep(`/api/leaves/on-leave-today?scope=${scope}${department ? `&department=${encodeURIComponent(department)}` : ''}`),
+  LEAVE_USAGE_BY_TYPE: (employeeId) => ep(`/api/leaves/usage-by-type/${employeeId}`),
 
   // Attendance
   ATTENDANCE:        ep('/api/attendance'),
@@ -242,6 +245,16 @@ export const API_ENDPOINTS = {
   TICKET_ACCEPT:          (id) => ep(`/api/tickets/${id}/accept`),
   TICKET_DECLINE:         (id) => ep(`/api/tickets/${id}/decline`),
   TICKET_DEPT_EMPLOYEES:  (dept) => ep(`/api/tickets/dept-employees/${dept}`),
+
+  // Birthday / Anniversary Wishes
+  WISHES:          ep('/api/wishes'),
+  WISH_LIKE:       (id) => ep(`/api/wishes/${id}/like`),
+  WISH_COMMENTS:   (id) => ep(`/api/wishes/${id}/comments`),
+
+  // Dashboard Post / Poll / Praise composer
+  POSTS:           ep('/api/posts'),
+  POST_LIKE:       (id) => ep(`/api/posts/${id}/like`),
+  POST_COMMENTS:   (id) => ep(`/api/posts/${id}/comments`),
 
   // Deductions
   DEDUCTIONS:                ep('/api/deductions'),

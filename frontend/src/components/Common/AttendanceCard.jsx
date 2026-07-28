@@ -1,0 +1,118 @@
+import React, { useState, useEffect } from 'react';
+import { FaSignInAlt, FaSignOutAlt, FaSyncAlt, FaClock } from 'react-icons/fa';
+import BreakWidget from './BreakWidget';
+import TicketBadge from './TicketBadge';
+import { QA } from './quickAccessTheme';
+
+const fmtClock = (d) => d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+const fmtDate = (d) => d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+
+// Presentational-only card: all attendance state/handlers are owned by the parent
+// dashboard (existing, already-working clock-in/out logic) — this component just
+// renders them inside the new premium layout. No attendance logic lives here.
+export default function AttendanceCard({
+  attendance,
+  activeSession,
+  onClockIn,
+  onRequestClockOut,
+  clockLoading,
+  readOnly = false,
+  disabledMobile = false,
+  canClockOut = true,
+  shiftTiming,
+  footerExtra,
+}) {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const hasOpen = !!activeSession || (!!attendance?.clock_in && !attendance?.clock_out);
+  const isClockedOutToday = !!(attendance?.clock_out && !activeSession);
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, #F59E0B 0%, #F97316 100%)',
+      borderRadius: 18, padding: 18, color: '#fff', position: 'relative', overflow: 'hidden',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.85 }}>Time Today</div>
+          <div style={{ fontSize: 12, opacity: 0.85 }}>{fmtDate(now)}</div>
+        </div>
+        {!readOnly && <TicketBadge variant="dark" />}
+      </div>
+
+      <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: 0.5, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <FaClock size={22} style={{ opacity: 0.85 }} />
+        {fmtClock(now)}
+      </div>
+
+      <div style={{ display: 'flex', gap: 18, fontSize: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ opacity: 0.8, fontSize: 10, textTransform: 'uppercase' }}>In</div>
+          <div style={{ fontWeight: 700 }}>{attendance?.clock_in_display || (attendance?.clock_in ? new Date(attendance.clock_in).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--')}</div>
+        </div>
+        <div>
+          <div style={{ opacity: 0.8, fontSize: 10, textTransform: 'uppercase' }}>Out</div>
+          <div style={{ fontWeight: 700 }}>{attendance?.clock_out_display || (attendance?.clock_out ? new Date(attendance.clock_out).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--')}</div>
+        </div>
+        {attendance?.total_hours_display && (
+          <div>
+            <div style={{ opacity: 0.8, fontSize: 10, textTransform: 'uppercase' }}>Hours</div>
+            <div style={{ fontWeight: 700 }}>{attendance.total_hours_display}</div>
+          </div>
+        )}
+      </div>
+
+      {readOnly ? (
+        <div style={{ fontSize: 12, fontWeight: 600, background: 'rgba(255,255,255,0.18)', display: 'inline-block', padding: '6px 12px', borderRadius: 20 }}>
+          Admin accounts don't clock in
+        </div>
+      ) : disabledMobile ? (
+        <div>
+          <button disabled style={{ background: 'rgba(255,255,255,0.25)', color: 'rgba(255,255,255,0.7)', border: 'none', borderRadius: 10, padding: '9px 20px', fontWeight: 700, fontSize: 13, cursor: 'not-allowed', display: 'flex', alignItems: 'center', gap: 7 }}>
+            <FaSignInAlt size={13} /> Clock In / Clock Out
+          </button>
+          <div style={{ fontSize: 11, marginTop: 6, opacity: 0.85 }}>Not available on mobile/tablet — use a desktop to mark attendance.</div>
+        </div>
+      ) : hasOpen && !canClockOut ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, fontWeight: 600, background: 'rgba(255,255,255,0.18)', padding: '9px 16px', borderRadius: 10 }}>Clocked in ✓</span>
+          <BreakWidget mode="inline-button" isClockedIn={!!(attendance?.clock_in || activeSession)} isClockedOut={isClockedOutToday} />
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            onClick={hasOpen ? onRequestClockOut : onClockIn}
+            disabled={clockLoading}
+            style={{
+              background: '#fff', color: hasOpen ? '#b45309' : '#065f46', border: 'none', borderRadius: 10,
+              padding: '9px 20px', fontWeight: 800, fontSize: 13, cursor: clockLoading ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', gap: 7, opacity: clockLoading ? 0.7 : 1,
+            }}
+          >
+            {clockLoading
+              ? <><FaSyncAlt size={12} style={{ animation: 'attcardspin 0.8s linear infinite' }} /> Processing…</>
+              : hasOpen ? <><FaSignOutAlt size={13} /> Clock Out</> : <><FaSignInAlt size={13} /> Clock In</>}
+          </button>
+          <BreakWidget mode="inline-button" isClockedIn={!!(attendance?.clock_in || activeSession)} isClockedOut={isClockedOutToday} />
+        </div>
+      )}
+
+      {shiftTiming && (
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.25)', fontSize: 11 }}>
+          <span style={{ opacity: 0.8 }}>Today's Shift: </span>
+          <span style={{ fontWeight: 700 }}>{shiftTiming}</span>
+        </div>
+      )}
+
+      {footerExtra && (
+        <div style={{ marginTop: 10 }}>{footerExtra}</div>
+      )}
+
+      <style>{`@keyframes attcardspin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}

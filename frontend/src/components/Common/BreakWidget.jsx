@@ -106,13 +106,13 @@ function BreakDropdown({ activeBreak, usedTypes, canInteract, acting, error, onS
                 disabled={acting || !canInteract || allUsed}
                 style={{
                     ...btnBase,
-                    background: allUsed ? '#e5e7eb' : '#6366f1',
-                    color: allUsed ? '#9ca3af' : '#fff',
+                    background: allUsed ? '#e5e7eb' : '#f4a46b',
+                    color: allUsed ? '#fcfdff' : '#fff',
                     cursor: (acting || !canInteract || allUsed) ? 'not-allowed' : 'pointer',
                     opacity: (acting || !canInteract) ? 0.55 : 1,
                 }}
             >
-                {acting ? <Spinner size="sm" animation="border" /> : <Coffee size={13} />}
+                {acting ? <Spinner size="sm" animation="border" /> : <Coffee size={15} />}
                 {allUsed ? 'All Breaks Used' : 'Start Break'}
                 {!allUsed && <ChevronDown size={12} />}
             </button>

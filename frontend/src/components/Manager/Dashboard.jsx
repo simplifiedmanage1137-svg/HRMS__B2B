@@ -16,7 +16,8 @@ import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import BreakWidget from '../Common/BreakWidget';
 import TeamBreakDashboard from '../Common/TeamBreakDashboard';
-import TicketBadge from '../Common/TicketBadge';
+import DashboardQuickAccess from '../Common/DashboardQuickAccess';
+import WelcomeBanner from '../Common/WelcomeBanner';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement);
 
@@ -123,13 +124,11 @@ const ManagerDashboard = () => {
   const [team, setTeam] = useState([]);
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState(null);
   const [perfStats, setPerfStats] = useState(null);
   const [myRatingAvg, setMyRatingAvg] = useState(null);
   const [hoveredAction, setHoveredAction] = useState(null);
 
   // Clock in/out state
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [attendance, setAttendance] = useState(null);
   const [activeSession, setActiveSession] = useState(null);
   const [clockLoading, setClockLoading] = useState(false);
@@ -174,11 +173,6 @@ const ManagerDashboard = () => {
       return `${h12}:${minute} ${ampm}`;
     } catch { return '--:--'; }
   };
-
-  useEffect(() => {
-    const t = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
 
   const fetchTodayAttendance = async () => {
     if (!user?.employeeId) return;
@@ -263,7 +257,6 @@ const ManagerDashboard = () => {
       ]);
       if (teamRes.status === 'fulfilled')  setTeam(teamRes.value.data?.team || []);
       if (leavesRes.status === 'fulfilled') setLeaveRequests(leavesRes.value.data || []);
-      setLastUpdated(new Date());
     } catch { /* allSettled handles individual errors */ }
     finally { setLoading(false); }
   };
@@ -366,8 +359,6 @@ const ManagerDashboard = () => {
     },
   };
 
-  const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-
   const quickActions = [
     { label: 'My Team',         desc: 'View all team members',    icon: <FaUsers size={20} />,       pal: STAT_PALETTES.blue,  path: '/manager/panel' },
     { label: 'Leave Approvals', desc: 'Approve or reject leaves', icon: <FaCalendarAlt size={20} />, pal: STAT_PALETTES.green, path: '/manager/panel' },
@@ -377,172 +368,36 @@ const ManagerDashboard = () => {
   return (
     <div style={{ background: '#F8FAFC', minHeight: '100vh', padding: '24px 20px' }}>
 
-      {/* Header */}
-      <div style={{
-        background: '#1e2a3e',
-        borderRadius: 10,
-        padding: '24px 32px',
-        marginBottom: 28,
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 0,
-        position: 'relative',
-        overflow: 'hidden',
-      }}>
-        <div style={{ position: 'absolute', width: 200, height: 200, borderRadius: '50%', background: 'rgba(255,255,255,.06)', top: -80, right: 100 }} />
-        <div style={{ position: 'absolute', width: 130, height: 130, borderRadius: '50%', background: 'rgba(255,255,255,.08)', bottom: -50, right: -20 }} />
+      <WelcomeBanner name={user?.name || user?.employeeId} roleLabel="TL Dashboard" onRefresh={fetchData} refreshing={loading} />
 
-        {/* Row 1: title + welcome | clock button */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, position: 'relative' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(255,255,255,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <FaUserTie size={24} color="#fff" />
-            </div>
-            <div>
-              <h4 style={{ color: '#fff', margin: 0, fontWeight: 800, fontSize: 22 }}>TL Dashboard</h4>
-              <div style={{ color: 'rgba(255,255,255,.82)', fontSize: 13, marginTop: 3 }}>
-                Welcome by B2B, <strong style={{ color: '#fff' }}>{user?.name || user?.employeeId}</strong>
-                {lastUpdated && <span style={{ marginLeft: 8, opacity: 0.65 }}>· Updated {lastUpdated.toLocaleTimeString()}</span>}
-              </div>
-            </div>
-          </div>
-
-          {/* Break + Clock buttons */}
-          {(() => {
-            const hasOpen = !!activeSession || (!!attendance?.clock_in && !attendance?.clock_out);
-            return (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                <TicketBadge variant="dark" />
-                <BreakWidget
-                  mode="inline-button"
-                  isClockedIn={!!(attendance?.clock_in || activeSession)}
-                  isClockedOut={!!(attendance?.clock_out && !activeSession)}
-                />
-                <button
-                  onClick={hasOpen ? () => setShowClockOutConfirm(true) : handleClockIn}
-                  disabled={clockLoading}
-                  style={{
-                    background: hasOpen ? 'rgba(251,191,36,0.9)' : 'rgba(34,197,94,0.9)',
-                    border: 'none', borderRadius: 10, padding: '9px 20px',
-                    color: hasOpen ? '#78350f' : '#fff',
-                    cursor: clockLoading ? 'not-allowed' : 'pointer',
-                    display: 'flex', alignItems: 'center', gap: 7,
-                    fontSize: 13, fontWeight: 700,
-                    opacity: clockLoading ? 0.7 : 1,
-                  }}
-                >
-                  {clockLoading
-                    ? <><FaSyncAlt size={12} style={{ animation: 'mgrspin 0.8s linear infinite' }} /> Processing...</>
-                    : hasOpen
-                      ? <><FaSignOutAlt size={13} /> Clock Out</>
-                      : <><FaSignInAlt size={13} /> Clock In</>
-                  }
-                </button>
-              </div>
-            );
-          })()}
-        </div>
-
-        {/* Row 2: attendance info */}
+      {clockMessage.text && (
         <div style={{
-          display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 20,
-          margin: '16px 0', padding: '14px 16px',
-          background: 'rgba(255,255,255,.06)', borderRadius: 10,
-          position: 'relative',
+          fontSize: 12, fontWeight: 500, marginBottom: 16, padding: '8px 14px', borderRadius: 8,
+          color: clockMessage.type === 'success' ? '#065f46' : '#991b1b',
+          background: clockMessage.type === 'success' ? '#ecfdf5' : '#fef2f2',
+          border: `1px solid ${clockMessage.type === 'success' ? '#a7f3d0' : '#fecaca'}`,
         }}>
-          {/* Live clock */}
-          <div style={{ textAlign: 'center', minWidth: 72 }}>
-            <div style={{ fontSize: 9, color: 'rgba(255,255,255,.45)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 3 }}>Live Time</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
-              {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-            </div>
-          </div>
-
-          <div style={{ width: 1, height: 36, background: 'rgba(255,255,255,.15)', flexShrink: 0 }} />
-
-          {/* In time */}
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 9, color: 'rgba(255,255,255,.45)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 3 }}>In</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: attendance?.clock_in ? '#4ade80' : 'rgba(255,255,255,.4)' }}>
-              {attendance?.clock_in ? (attendance.clock_in_display || formatTimeIST(attendance.clock_in)) : '--:--'}
-            </div>
-            {attendance?.late_display && attendance?.late_minutes > 0 && (
-              <div style={{ fontSize: 9, color: '#f87171', display: 'flex', alignItems: 'center', gap: 2, justifyContent: 'center', marginTop: 1 }}>
-                <FaExclamationTriangle size={7} /> Late {attendance.late_display}
-              </div>
-            )}
-          </div>
-
-          <div style={{ width: 1, height: 36, background: 'rgba(255,255,255,.15)', flexShrink: 0 }} />
-
-          {/* Out time */}
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 9, color: 'rgba(255,255,255,.45)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 3 }}>Out</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: attendance?.clock_out ? '#fbbf24' : 'rgba(255,255,255,.4)' }}>
-              {attendance?.clock_out ? (attendance.clock_out_display || formatTimeIST(attendance.clock_out)) : '--:--'}
-            </div>
-            {attendance?.total_hours_display && (
-              <div style={{ fontSize: 9, color: 'rgba(255,255,255,.5)', marginTop: 1 }}>{attendance.total_hours_display}</div>
-            )}
-          </div>
-
-          <div style={{ width: 1, height: 36, background: 'rgba(255,255,255,.15)', flexShrink: 0 }} />
-
-          {/* Status */}
-          {attendance?.status ? (
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              background: attendance.status === 'working' ? 'rgba(74,222,128,.15)' : 'rgba(255,255,255,.08)',
-              border: `1px solid ${attendance.status === 'working' ? 'rgba(74,222,128,.35)' : 'rgba(255,255,255,.15)'}`,
-              borderRadius: 20, padding: '3px 10px',
-            }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: attendance.status === 'working' ? '#4ade80' : '#94a3b8', display: 'inline-block' }} />
-              <span style={{ fontSize: 11, fontWeight: 600, color: attendance.status === 'working' ? '#4ade80' : '#cbd5e1', textTransform: 'capitalize' }}>
-                {attendance.status === 'working' ? 'Working' : attendance.status}
-              </span>
-            </div>
-          ) : (
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,.35)' }}>Not clocked in today</span>
-          )}
-
-          {/* My Rating Stars */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginLeft: 'auto' }}>
-            {renderStars(myRatingAvg ? parseFloat(myRatingAvg) : 0)}
-          </div>
-
-          {/* Message feedback */}
-          {clockMessage.text && (
-            <div style={{
-              fontSize: 11, fontWeight: 500,
-              color: clockMessage.type === 'success' ? '#4ade80' : '#f87171',
-              background: clockMessage.type === 'success' ? 'rgba(74,222,128,.1)' : 'rgba(248,113,113,.1)',
-              border: `1px solid ${clockMessage.type === 'success' ? 'rgba(74,222,128,.25)' : 'rgba(248,113,113,.25)'}`,
-              borderRadius: 8, padding: '4px 10px',
-            }}>
-              {clockMessage.text}
-            </div>
-          )}
+          {clockMessage.text}
         </div>
-
-        {/* Row 3: date + refresh */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'relative', flexWrap: 'wrap' }}>
-          <div style={{ background: 'rgba(231, 225, 225, 0.15)', borderRadius: 10, padding: '8px 16px', color: 'rgba(255,255,255,.9)', fontSize: 13 }}>
-            {today}
-          </div>
-          <button
-            onClick={fetchData}
-            disabled={loading}
-            style={{ background: 'rgba(255, 255, 255, 0.2)', border: '1px solid rgba(255,255,255,.3)', borderRadius: 10, padding: '8px 18px', color: '#fff', cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, opacity: loading ? 0.7 : 1 }}
-          >
-            <FaSyncAlt size={12} style={{ animation: loading ? 'mgrspin 1s linear infinite' : 'none' }} />
-            Refresh
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* Team break dashboard */}
       <TeamBreakDashboard />
+
+      <DashboardQuickAccess
+        employeeId={user?.employeeId}
+        onLeaveScope="team"
+        attendance={attendance}
+        activeSession={activeSession}
+        onClockIn={handleClockIn}
+        onRequestClockOut={() => setShowClockOutConfirm(true)}
+        clockLoading={clockLoading}
+        footerExtra={
+          <div style={{ display: 'flex', gap: 2 }}>
+            {renderStars(myRatingAvg ? parseFloat(myRatingAvg) : 0)}
+          </div>
+        }
+      />
 
       {/* Stat Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16, marginBottom: 28 }}>

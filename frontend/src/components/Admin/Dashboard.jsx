@@ -71,6 +71,8 @@ import { useAuth } from '../../context/AuthContext';
 import AdminRatings from './AdminRatings';
 import BreakWidget from '../Common/BreakWidget';
 import TicketBadge from '../Common/TicketBadge';
+import DashboardQuickAccess from '../Common/DashboardQuickAccess';
+import WelcomeBanner from '../Common/WelcomeBanner';
 import TeamBreakDashboard from '../Common/TeamBreakDashboard';
 import * as XLSX from 'xlsx';
 // import HistoricalLateMarksUpdater from './HistoricalLateMarksUpdater';
@@ -777,7 +779,7 @@ const RegularizationRequests = ({ onRequestCountChange }) => {
 // ============== MAIN ADMIN DASHBOARD COMPONENT ==============
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const { todayEvents, fetchTodayEvents } = useNotification();
+  const { fetchTodayEvents } = useNotification();
   const { user } = useAuth();
 
   const [stats, setStats] = useState({
@@ -852,7 +854,6 @@ const AdminDashboard = () => {
   const [subAdminClockLoading, setSubAdminClockLoading] = useState(false);
   const [subAdminClockMessage, setSubAdminClockMessage] = useState({ type: '', text: '' });
   const [showClockOutConfirm, setShowClockOutConfirm] = useState(false);
-  const [subAdminCurrentTime, setSubAdminCurrentTime] = useState(new Date());
   const [perfAnalytics, setPerfAnalytics] = useState(null);
 
   useEffect(() => {
@@ -863,43 +864,12 @@ const AdminDashboard = () => {
       .catch(() => {});
   }, []);
 
-  // Sub-admin / HR: live clock ticker
-  useEffect(() => {
-    if (!['sub_admin', 'hr'].includes(user?.role)) return;
-    const t = setInterval(() => setSubAdminCurrentTime(new Date()), 1000);
-    return () => clearInterval(t);
-  }, [user]);
-
   // Sub-admin / HR: fetch own today's attendance on mount
   useEffect(() => {
     if (['sub_admin', 'hr'].includes(user?.role) && user?.employeeId) {
       fetchSubAdminAttendance();
     }
   }, [user]);
-
-  const subAdminFormatTime = (datetime) => {
-    if (!datetime) return '--:--';
-    try {
-      let hourNum, minute;
-      if (typeof datetime === 'string') {
-        if (datetime.includes(' ') && !datetime.includes('T')) {
-          const parts = datetime.split(' ')[1].split(':');
-          hourNum = parseInt(parts[0], 10);
-          minute = parts[1]?.padStart(2, '0') || '00';
-        } else if (datetime.includes('T')) {
-          const d = new Date(datetime);
-          if (isNaN(d.getTime())) return '--:--';
-          const ist = new Date(d.getTime() + 5.5 * 60 * 60 * 1000);
-          hourNum = ist.getUTCHours();
-          minute = String(ist.getUTCMinutes()).padStart(2, '0');
-        } else return '--:--';
-      } else return '--:--';
-      if (isNaN(hourNum)) return '--:--';
-      const ampm = hourNum >= 12 ? 'PM' : 'AM';
-      const h12 = hourNum % 12 === 0 ? 12 : hourNum % 12;
-      return `${h12}:${minute} ${ampm}`;
-    } catch { return '--:--'; }
-  };
 
   const fetchSubAdminAttendance = async () => {
     try {
@@ -1604,181 +1574,22 @@ const AdminDashboard = () => {
   return (
     <div className="p-2 p-md-3 p-lg-4">
       {/* Header */}
-      {['sub_admin', 'hr'].includes(user?.role) ? (
-        /* ── Sub Admin / HR: Manager-style dark header with clock-in/out ── */
+      <WelcomeBanner
+        name={user?.employeeId}
+        roleLabel={['sub_admin', 'hr'].includes(user?.role) ? (user?.role === 'hr' ? 'HR Dashboard' : 'Manager Dashboard') : 'Admin Dashboard'}
+        onRefresh={() => { fetchDashboardData(); setLeaveBalancesLoaded(false); setEmployeeLeaveBalances([]); }}
+        refreshing={loading}
+        onExport={() => setShowExportModal(true)}
+      />
+
+      {['sub_admin', 'hr'].includes(user?.role) && subAdminClockMessage.text && (
         <div style={{
-          background: '#1e2a3e', borderRadius: 10, padding: '24px 32px',
-          marginBottom: 28, boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
-          display: 'flex', flexDirection: 'column', gap: 0, position: 'relative', overflow: 'hidden',
+          fontSize: 12, fontWeight: 500, marginBottom: 16, padding: '8px 14px', borderRadius: 8,
+          color: subAdminClockMessage.type === 'success' ? '#065f46' : '#991b1b',
+          background: subAdminClockMessage.type === 'success' ? '#ecfdf5' : '#fef2f2',
+          border: `1px solid ${subAdminClockMessage.type === 'success' ? '#a7f3d0' : '#fecaca'}`,
         }}>
-          <div style={{ position: 'absolute', width: 200, height: 200, borderRadius: '50%', background: 'rgba(255,255,255,.06)', top: -80, right: 100 }} />
-          <div style={{ position: 'absolute', width: 130, height: 130, borderRadius: '50%', background: 'rgba(255,255,255,.08)', bottom: -50, right: -20 }} />
-
-          {/* Row 1: title + clock button */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, position: 'relative' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(255,255,255,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <FaUsers size={24} color="#fff" />
-              </div>
-              <div>
-                <h4 style={{ color: '#fff', margin: 0, fontWeight: 800, fontSize: 22 }}>{user?.role === 'hr' ? 'HR Dashboard' : 'Manager Dashboard'}</h4>
-                <div style={{ color: 'rgba(255,255,255,.82)', fontSize: 13, marginTop: 3 }}>
-                  Welcome by B2B, <strong style={{ color: '#fff' }}>{user?.employeeId}</strong>
-                  {lastUpdated && <span style={{ marginLeft: 8, opacity: 0.65 }}>· Updated {lastUpdated.toLocaleTimeString()}</span>}
-                </div>
-              </div>
-            </div>
-
-            {/* Break + Clock buttons */}
-            {(() => {
-              const hasOpen = !!subAdminSession || (!!subAdminAttendance?.clock_in && !subAdminAttendance?.clock_out);
-              return (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                  <TicketBadge variant="dark" />
-                  <BreakWidget
-                    mode="inline-button"
-                    isClockedIn={!!(subAdminAttendance?.clock_in || subAdminSession)}
-                    isClockedOut={!!(subAdminAttendance?.clock_out && !subAdminSession)}
-                  />
-                  <button
-                    onClick={hasOpen ? () => setShowClockOutConfirm(true) : handleSubAdminClockIn}
-                    disabled={subAdminClockLoading}
-                    style={{
-                      background: hasOpen ? 'rgba(251,191,36,0.9)' : 'rgba(34,197,94,0.9)',
-                      border: 'none', borderRadius: 10, padding: '9px 20px',
-                      color: hasOpen ? '#78350f' : '#fff',
-                      cursor: subAdminClockLoading ? 'not-allowed' : 'pointer',
-                      display: 'flex', alignItems: 'center', gap: 7,
-                      fontSize: 13, fontWeight: 700,
-                      opacity: subAdminClockLoading ? 0.7 : 1,
-                    }}
-                  >
-                    {subAdminClockLoading
-                      ? <><FaSyncAlt size={12} style={{ animation: 'dashspin 0.8s linear infinite' }} /> Processing...</>
-                      : hasOpen
-                        ? <><FaSignOutAlt size={13} /> Clock Out</>
-                        : <><FaSignInAlt size={13} /> Clock In</>
-                    }
-                  </button>
-                </div>
-              );
-            })()}
-          </div>
-
-          {/* Row 2: attendance info */}
-          <div style={{
-            display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 20,
-            margin: '16px 0', padding: '14px 16px',
-            background: 'rgba(255,255,255,.06)', borderRadius: 10, position: 'relative',
-          }}>
-            {/* Live clock */}
-            <div style={{ textAlign: 'center', minWidth: 72 }}>
-              <div style={{ fontSize: 9, color: 'rgba(255,255,255,.45)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 3 }}>Live Time</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
-                {subAdminCurrentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-              </div>
-            </div>
-            <div style={{ width: 1, height: 36, background: 'rgba(255,255,255,.15)', flexShrink: 0 }} />
-            {/* In time */}
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 9, color: 'rgba(255,255,255,.45)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 3 }}>In</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: subAdminAttendance?.clock_in ? '#4ade80' : 'rgba(255,255,255,.4)' }}>
-                {subAdminAttendance?.clock_in ? subAdminFormatTime(subAdminAttendance.clock_in) : '--:--'}
-              </div>
-              {subAdminAttendance?.late_minutes > 0 && (
-                <div style={{ fontSize: 9, color: '#f87171', display: 'flex', alignItems: 'center', gap: 2, justifyContent: 'center', marginTop: 1 }}>
-                  Late {subAdminAttendance.late_display || ''}
-                </div>
-              )}
-            </div>
-            <div style={{ width: 1, height: 36, background: 'rgba(255,255,255,.15)', flexShrink: 0 }} />
-            {/* Out time */}
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 9, color: 'rgba(255,255,255,.45)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 3 }}>Out</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: subAdminAttendance?.clock_out ? '#fbbf24' : 'rgba(255,255,255,.4)' }}>
-                {subAdminAttendance?.clock_out ? subAdminFormatTime(subAdminAttendance.clock_out) : '--:--'}
-              </div>
-              {subAdminAttendance?.total_hours_display && (
-                <div style={{ fontSize: 9, color: 'rgba(255,255,255,.5)', marginTop: 1 }}>{subAdminAttendance.total_hours_display}</div>
-              )}
-            </div>
-            <div style={{ width: 1, height: 36, background: 'rgba(255,255,255,.15)', flexShrink: 0 }} />
-            {/* Status */}
-            {subAdminAttendance?.status ? (
-              <div style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                background: subAdminAttendance.status === 'working' ? 'rgba(74,222,128,.15)' : 'rgba(255,255,255,.08)',
-                border: `1px solid ${subAdminAttendance.status === 'working' ? 'rgba(74,222,128,.35)' : 'rgba(255,255,255,.15)'}`,
-                borderRadius: 20, padding: '3px 10px',
-              }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: subAdminAttendance.status === 'working' ? '#4ade80' : '#94a3b8', display: 'inline-block' }} />
-                <span style={{ fontSize: 11, fontWeight: 600, color: subAdminAttendance.status === 'working' ? '#4ade80' : '#cbd5e1', textTransform: 'capitalize' }}>
-                  {subAdminAttendance.status === 'working' ? 'Working' : subAdminAttendance.status}
-                </span>
-              </div>
-            ) : (
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,.35)' }}>Not clocked in today</span>
-            )}
-            {/* Feedback message */}
-            {subAdminClockMessage.text && (
-              <div style={{
-                fontSize: 11, fontWeight: 500,
-                color: subAdminClockMessage.type === 'success' ? '#4ade80' : '#f87171',
-                background: subAdminClockMessage.type === 'success' ? 'rgba(74,222,128,.1)' : 'rgba(248,113,113,.1)',
-                border: `1px solid ${subAdminClockMessage.type === 'success' ? 'rgba(74,222,128,.25)' : 'rgba(248,113,113,.25)'}`,
-                borderRadius: 8, padding: '4px 10px',
-              }}>
-                {subAdminClockMessage.text}
-              </div>
-            )}
-          </div>
-
-          {/* Row 3: date + refresh + export */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'relative', flexWrap: 'wrap' }}>
-            <div style={{ background: 'rgba(231,225,225,0.15)', borderRadius: 10, padding: '8px 16px', color: 'rgba(255,255,255,.9)', fontSize: 13 }}>
-              {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-            </div>
-            <button
-              onClick={() => { fetchDashboardData(); setLeaveBalancesLoaded(false); setEmployeeLeaveBalances([]); }}
-              disabled={loading}
-              style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,.3)', borderRadius: 10, padding: '8px 18px', color: '#fff', cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, opacity: loading ? 0.7 : 1 }}
-            >
-              <FaSyncAlt size={12} style={{ animation: loading ? 'dashspin 1s linear infinite' : 'none' }} />
-              Refresh
-            </button>
-            <button
-              onClick={() => setShowExportModal(true)}
-              style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,.25)', borderRadius: 10, padding: '8px 18px', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600 }}
-            >
-              <FaDownload size={12} />
-              Export
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {!['sub_admin', 'hr'].includes(user?.role) && (
-        /* ── Admin: existing header ── */
-        <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
-          <div>
-            <h4 className="mb-1 d-flex align-items-center flex-wrap">
-              <FaUsers className="me-2 text-dark" />
-              <span>Admin Dashboard</span>
-            </h4>
-            <p className="text-muted mb-0 small d-flex align-items-center flex-wrap">
-              <FaClock className="me-1" size={12} />
-              <span>Last updated: {lastUpdated.toLocaleTimeString()}</span>
-            </p>
-          </div>
-          <div className="d-flex gap-2 align-items-center">
-            <TicketBadge variant="light" />
-            <Button variant="outline-primary" size="sm" onClick={() => { fetchDashboardData(); setLeaveBalancesLoaded(false); setEmployeeLeaveBalances([]); }}>
-              <FaSyncAlt className="me-1" size={12} /> Refresh
-            </Button>
-            <Button variant="outline-success" size="sm" onClick={() => setShowExportModal(true)}>
-              <FaDownload className="me-1" size={12} /> Export
-            </Button>
-          </div>
+          {subAdminClockMessage.text}
         </div>
       )}
 
@@ -1787,6 +1598,17 @@ const AdminDashboard = () => {
           {message.text}
         </Alert>
       )}
+
+      <DashboardQuickAccess
+        employeeId={user?.employeeId}
+        onLeaveScope="company"
+        attendance={subAdminAttendance}
+        activeSession={subAdminSession}
+        onClockIn={handleSubAdminClockIn}
+        onRequestClockOut={() => setShowClockOutConfirm(true)}
+        clockLoading={subAdminClockLoading}
+        readOnly={!['sub_admin', 'hr'].includes(user?.role)}
+      />
 
       {/* Tab Navigation */}
       <div className="mb-4">
@@ -2139,54 +1961,6 @@ const AdminDashboard = () => {
 
       {activeTab === 'overview' && (
         <>
-          {/* Today's Events Widget */}
-          {todayEvents && todayEvents.total > 0 && (
-            <Card className="mb-4 border-0 shadow-sm">
-              <Card.Header className="bg-gradient text-white py-2" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-               <h6 className="mb-0 d-flex align-items-center text-black font-semibold">
-  <FaBirthdayCake className="me-2 text-black" size={14} />
-  <FaTrophy className="me-2 text-black" size={14} />
-  Today's Celebrations 🎉
-</h6>
-
-              </Card.Header>
-              <Card.Body className="p-3">
-                <div className="d-flex flex-column flex-sm-row flex-wrap gap-2">
-                  {todayEvents.birthdays?.map(emp => (
-                    <Badge key={`birthday-${emp.id}`} bg="light" text="dark" className="p-2 d-flex align-items-center gap-2 shadow-sm w-100 w-sm-auto" style={{ borderLeft: '4px solid #ff6b6b', borderRadius: '8px' }}>
-                      <FaBirthdayCake color="#ff6b6b" size={24} />
-                      <div className="text-start">
-                        <span className="small fw-bold d-block">{emp.first_name} {emp.last_name}</span>
-                        <small className="text-muted">{emp.department}</small>
-                        <small className="text-danger d-block">🎂 Birthday Today!</small>
-                      </div>
-                    </Badge>
-                  ))}
-                  {todayEvents.anniversaries?.map(emp => (
-                    <Badge key={`anniversary-${emp.id}`} bg="light" text="dark" className="p-2 d-flex align-items-center gap-2 shadow-sm w-100 w-sm-auto" style={{ borderLeft: '4px solid #ffd700', borderRadius: '8px' }}>
-                      <FaTrophy color="#ffd700" size={24} />
-                      <div className="text-start">
-                        <span className="small fw-bold d-block">{emp.first_name} {emp.last_name}</span>
-                        <small className="text-muted">{emp.department}</small>
-                        <small className="text-warning d-block">🏆 {emp.years} Year{emp.years > 1 ? 's' : ''} Anniversary!</small>
-                      </div>
-                    </Badge>
-                  ))}
-                </div>
-                <div className="mt-3 pt-2 border-top small text-muted">
-                  <span className="fw-semibold">Total Celebrations Today:</span>
-                  <Badge bg="success" pill className="ms-1">{todayEvents.total}</Badge>
-                  <Button variant="link" size="sm" className="ms-3 p-0" onClick={() => setActiveTab('birthdays')}>
-                    View All Birthdays →
-                  </Button>
-                  <Button variant="link" size="sm" className="ms-2 p-0" onClick={() => setActiveTab('anniversaries')}>
-                    View All Anniversaries →
-                  </Button>
-                </div>
-              </Card.Body>
-            </Card>
-          )}
-
           {/* Quick Stats Cards */}
           <Row className="mb-4 g-2 g-md-3">
             <Col xs={12} sm={6} lg={3}>

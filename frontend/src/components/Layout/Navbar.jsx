@@ -327,13 +327,13 @@ const Navbar = () => {
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
 
         {/* DateTime pill */}
-        <div className="hrms-datetime d-none d-sm-flex">
+        {/* <div className="hrms-datetime d-none d-sm-flex">
           <FaClock size={11} style={{ color: 'var(--primary)', flexShrink: 0 }} />
           <span className="time">{timeStr}</span>
           <span className="sep">|</span>
           <FaCalendarAlt size={11} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
           <span>{dateStr}</span>
-        </div>
+        </div> */}
 
         {/* Bell */}
         <div

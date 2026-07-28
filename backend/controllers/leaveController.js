@@ -215,6 +215,36 @@ exports.getLeaveBalance = async (req, res) => {
     }
 };
 
+// ==================== LEAVE USAGE BY TYPE ====================
+// Days used this year, grouped by leave_type — real data (used, not "remaining per type",
+// since this app tracks one pooled balance across Annual/Sick/Personal/etc.).
+exports.getLeaveUsageByType = async (req, res) => {
+    try {
+        const { employee_id } = req.params;
+        const currentYear = new Date().getFullYear();
+
+        const { data: leaves, error } = await supabase
+            .from('leaves')
+            .select('days_count, leave_type')
+            .eq('employee_id', employee_id)
+            .eq('status', 'approved')
+            .gte('start_date', `${currentYear}-01-01`)
+            .lte('start_date', `${currentYear}-12-31`);
+        if (error) throw error;
+
+        const usage = (leaves || []).reduce((acc, l) => {
+            const type = l.leave_type || 'Other';
+            acc[type] = (acc[type] || 0) + (parseFloat(l.days_count) || 0);
+            return acc;
+        }, {});
+
+        res.json({ success: true, leave_year: currentYear, usage });
+    } catch (error) {
+        console.error('Error fetching leave usage by type:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch leave usage by type', error: error.message });
+    }
+};
+
 // ==================== APPLY LEAVE ====================
 exports.applyLeave = async (req, res) => {
     try {
@@ -670,6 +700,77 @@ exports.getLeaveTypes = async (req, res) => {
             message: 'Failed to fetch leave types',
             error: error.message
         });
+    }
+};
+
+// ==================== ON LEAVE TODAY ====================
+exports.getOnLeaveToday = async (req, res) => {
+    try {
+        const { employeeId, role } = req.user;
+        let { scope = 'department', department } = req.query;
+
+        const { data: caller, error: callerErr } = await supabase
+            .from('employees')
+            .select('first_name, last_name, department')
+            .eq('employee_id', employeeId)
+            .maybeSingle();
+        if (callerErr) throw callerErr;
+
+        if (scope === 'company' && !['admin', 'sub_admin', 'hr'].includes(role)) {
+            scope = 'department';
+        }
+
+        const today = new Date().toISOString().split('T')[0];
+
+        const { data: leaves, error: leavesErr } = await supabase
+            .from('leaves')
+            .select('employee_id, leave_type, start_date, end_date')
+            .eq('status', 'approved')
+            .lte('start_date', today)
+            .gte('end_date', today);
+        if (leavesErr) throw leavesErr;
+
+        if (!leaves || leaves.length === 0) {
+            return res.json({ success: true, scope, date: today, count: 0, employees: [] });
+        }
+
+        const empIds = [...new Set(leaves.map(l => l.employee_id))];
+        const { data: emps, error: empsErr } = await supabase
+            .from('employees')
+            .select('employee_id, first_name, last_name, department, designation, profile_image, reporting_manager')
+            .in('employee_id', empIds);
+        if (empsErr) throw empsErr;
+
+        const callerName = `${caller?.first_name || ''} ${caller?.last_name || ''}`.trim().toLowerCase();
+        const targetDept = (department || caller?.department || '').toLowerCase();
+
+        const scoped = (emps || []).filter(e => {
+            if (scope === 'team') {
+                return (e.reporting_manager || '').trim().toLowerCase() === callerName;
+            }
+            if (scope === 'company') return true;
+            return (e.department || '').toLowerCase() === targetDept;
+        });
+
+        const result = scoped.map(e => {
+            const leave = leaves.find(l => l.employee_id === e.employee_id);
+            return {
+                employee_id: e.employee_id,
+                first_name: e.first_name,
+                last_name: e.last_name,
+                department: e.department,
+                designation: e.designation,
+                profile_image: e.profile_image,
+                leave_type: leave?.leave_type,
+                start_date: leave?.start_date,
+                end_date: leave?.end_date,
+            };
+        });
+
+        res.json({ success: true, scope, date: today, count: result.length, employees: result });
+    } catch (error) {
+        console.error('Error fetching on-leave-today:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch on-leave-today', error: error.message });
     }
 };
 
