@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Modal } from 'react-bootstrap';
 import { FaGift, FaBirthdayCake, FaTrophy, FaUserFriends, FaHeart, FaRegHeart, FaCommentDots } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -7,7 +8,7 @@ import Avatar from './Avatar';
 import { QA, QA_ANIMATIONS_CSS } from './quickAccessTheme';
 
 const UPCOMING_WINDOW_DAYS = 14;
-const UPCOMING_LIMIT = 3;
+const UPCOMING_LIMIT = 10;
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 const fmtToday = () => new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long' });
@@ -271,7 +272,7 @@ function EmptyToday({ theme }) {
   );
 }
 
-function UpcomingRow({ theme, people, extraLabel }) {
+function UpcomingRow({ theme, people, extraLabel, onViewAll }) {
   const shown = people.slice(0, UPCOMING_LIMIT);
   const extra = people.length - shown.length;
 
@@ -287,7 +288,7 @@ function UpcomingRow({ theme, people, extraLabel }) {
             </div>
             <div style={{ fontSize: 10, color: QA.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.position || p.designation}</div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: theme.accent, fontWeight: 700, marginTop: 4 }}>
-              <span>{fmtShort(p.joining_date || p.dob)}</span>
+              <span>{p.date ? fmtShort(p.date) : ''}</span>
               <span>{p.days_until === 1 ? 'Tomorrow' : `${p.days_until}d`}</span>
             </div>
             <div style={{ height: 4, borderRadius: 4, background: '#e5e7eb', marginTop: 4, overflow: 'hidden' }}>
@@ -297,15 +298,78 @@ function UpcomingRow({ theme, people, extraLabel }) {
         );
       })}
       {extra > 0 && (
-        <div style={{ minWidth: 110, flexShrink: 0, padding: '10px', borderRadius: 12, background: theme.light, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+        <button onClick={onViewAll}
+          style={{ minWidth: 110, flexShrink: 0, padding: '10px', borderRadius: 12, background: theme.light, border: 'none', cursor: onViewAll ? 'pointer' : 'default', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
           <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
             <FaUserFriends size={13} color={theme.accent} />
           </div>
           <div style={{ fontSize: 11, fontWeight: 800, color: theme.accent }}>+{extra} More</div>
           <div style={{ fontSize: 9, color: QA.textMuted }}>{extraLabel}</div>
-        </div>
+        </button>
       )}
     </div>
+  );
+}
+
+const fmtFull = (dateStr) => new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+function AllUpcomingModal({ show, onClose, theme, eventType }) {
+  const [list, setList] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!show) return;
+    let cancelled = false;
+    axios.get(API_ENDPOINTS.TODAY_EVENTS_UPCOMING, { params: { all: 'true' } })
+      .then(res => {
+        if (cancelled) return;
+        if (res.data?.success) {
+          setList(res.data[eventType === 'birthday' ? 'birthdays' : 'anniversaries'] || []);
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [show, eventType]);
+
+  return (
+    <Modal show={show} onHide={onClose} centered scrollable>
+      <Modal.Header closeButton style={{ border: 'none', paddingBottom: 0 }}>
+        <Modal.Title style={{ fontSize: 16, fontWeight: 800, color: QA.textDark, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <theme.icon size={16} color={theme.accent} />
+          All {eventType === 'birthday' ? 'Birthdays' : 'Work Anniversaries'}
+        </Modal.Title>
+      </Modal.Header>
+      <Modal.Body style={{ maxHeight: '60vh' }}>
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 20, fontSize: 13, color: QA.textMuted }}>Loading…</div>
+        ) : list.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 20, fontSize: 13, color: QA.textMuted }}>
+            No upcoming {eventType === 'birthday' ? 'birthdays' : 'work anniversaries'}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {list.map(p => (
+              <div key={p.employee_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', borderBottom: '1px solid #f3f4f6' }}>
+                <Avatar photo={p.profile_image} id={p.employee_id} firstName={p.first_name} lastName={p.last_name} size={36} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: QA.textDark }}>{p.first_name} {p.last_name}</div>
+                  <div style={{ fontSize: 11, color: QA.textMuted }}>
+                    {p.position ? `${p.position} · ` : ''}{p.department}{eventType === 'anniversary' ? ` · ${p.years} yr${p.years === 1 ? '' : 's'}` : ''}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: theme.accent }}>{fmtFull(p.date)}</div>
+                  <div style={{ fontSize: 11, color: QA.textMuted }}>
+                    {p.days_until === 1 ? 'Tomorrow' : `in ${p.days_until} days`}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal.Body>
+    </Modal>
   );
 }
 
@@ -318,6 +382,7 @@ export default function CelebrationsCard() {
   // clicks a tab, it's pinned and no longer auto-switches.
   const [tab, setTab] = useState(null);
   const [upcoming, setUpcoming] = useState({ birthdays: [], anniversaries: [], new_joiners: [] });
+  const [showAllModal, setShowAllModal] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -386,38 +451,41 @@ export default function CelebrationsCard() {
         })}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-        <span style={{ width: 6, height: 6, borderRadius: '50%', background: theme.accent, display: 'inline-block' }} />
-        <span style={{ fontSize: 11, fontWeight: 700, color: QA.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Today</span>
-      </div>
-
-      {todayPeople.length === 0 ? (
-        <EmptyToday theme={theme} />
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <HeroCard
-            theme={theme} person={todayPeople[0]} eventType={eventType}
-            expanded={expandedId === todayPeople[0].employee_id}
-            confetti={confettiFor === todayPeople[0].employee_id}
-            onAction={() => handleAction(todayPeople[0].employee_id)}
-          />
-          {todayPeople.slice(1).map(p => (
-            <div key={p.employee_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px' }}>
-              <Avatar photo={p.profile_image} id={p.employee_id} firstName={p.first_name} lastName={p.last_name} size={30} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: QA.textDark }}>{p.first_name} {p.last_name}</div>
-                <div style={{ fontSize: 10, color: QA.textMuted }}>{p.department}</div>
+      {todayPeople.length > 0 && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: theme.accent, display: 'inline-block' }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: QA.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Today</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <HeroCard
+              theme={theme} person={todayPeople[0]} eventType={eventType}
+              expanded={expandedId === todayPeople[0].employee_id}
+              confetti={confettiFor === todayPeople[0].employee_id}
+              onAction={() => handleAction(todayPeople[0].employee_id)}
+            />
+            {todayPeople.slice(1).map(p => (
+              <div key={p.employee_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px' }}>
+                <Avatar photo={p.profile_image} id={p.employee_id} firstName={p.first_name} lastName={p.last_name} size={30} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: QA.textDark }}>{p.first_name} {p.last_name}</div>
+                  <div style={{ fontSize: 10, color: QA.textMuted }}>{p.department}</div>
+                </div>
+                <button onClick={() => handleAction(p.employee_id)}
+                  style={{ padding: '5px 12px', borderRadius: 20, border: 'none', background: theme.light, color: theme.accent, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                  {theme.actionLabel}
+                </button>
+                {expandedId === p.employee_id && (
+                  <WishThread recipientEmployeeId={p.employee_id} recipientName={`${p.first_name} ${p.last_name}`} eventType={eventType} accent={theme.accent} />
+                )}
               </div>
-              <button onClick={() => handleAction(p.employee_id)}
-                style={{ padding: '5px 12px', borderRadius: 20, border: 'none', background: theme.light, color: theme.accent, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
-                {theme.actionLabel}
-              </button>
-              {expandedId === p.employee_id && (
-                <WishThread recipientEmployeeId={p.employee_id} recipientName={`${p.first_name} ${p.last_name}`} eventType={eventType} accent={theme.accent} />
-              )}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {todayPeople.length === 0 && upcomingPeople.length === 0 && (
+        <EmptyToday theme={theme} />
       )}
 
       {upcomingPeople.length > 0 && (
@@ -426,14 +494,24 @@ export default function CelebrationsCard() {
             <span style={{ fontSize: 11, fontWeight: 700, color: QA.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
               {activeTab === 'new_joiners' ? 'Joined This Week' : 'Upcoming'}
             </span>
+            {activeTab !== 'new_joiners' && (
+              <button onClick={() => setShowAllModal(true)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: theme.accent, fontSize: 11, fontWeight: 700, padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                View All →
+              </button>
+            )}
           </div>
-          <UpcomingRow theme={theme} people={upcomingPeople} extraLabel="View all upcoming" />
+          <UpcomingRow theme={theme} people={upcomingPeople} extraLabel="View all upcoming" onViewAll={() => setShowAllModal(true)} />
         </>
       )}
 
       <div style={{ marginTop: 16, padding: '10px 14px', borderRadius: 14, background: theme.light, color: theme.accent, fontSize: 12, fontWeight: 600, textAlign: 'center' }}>
         {theme.footer}
       </div>
+
+      {activeTab !== 'new_joiners' && (
+        <AllUpcomingModal show={showAllModal} onClose={() => setShowAllModal(false)} theme={theme} eventType={eventType} />
+      )}
     </div>
   );
 }

@@ -345,7 +345,9 @@ router.get('/today-events/upcoming', async (req, res) => {
     try {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const WINDOW_DAYS = 14;
+        // ?all=true returns every active employee's next occurrence (full company
+        // calendar, for the "View All" list) instead of just the next 14 days.
+        const WINDOW_DAYS = req.query.all === 'true' ? 366 : 14;
 
         // Monday-Sunday of the current week, for "new joiners this week"
         const dow = today.getDay();
@@ -361,8 +363,8 @@ router.get('/today-events/upcoming', async (req, res) => {
             .eq('is_active', true);
         if (error) throw error;
 
-        // Returns { daysUntil, occurrenceYear } for the next upcoming month/day, rolling into
-        // next year if this year's occurrence has already passed.
+        // Returns { daysUntil, occurrenceYear, occurrenceDate } for the next upcoming
+        // month/day, rolling into next year if this year's occurrence has already passed.
         const nextOccurrence = (monthDayDate) => {
             const thisYear = new Date(today.getFullYear(), monthDayDate.getMonth(), monthDayDate.getDate());
             const occurrence = thisYear < today
@@ -371,6 +373,7 @@ router.get('/today-events/upcoming', async (req, res) => {
             return {
                 daysUntil: Math.round((occurrence - today) / (1000 * 60 * 60 * 24)),
                 occurrenceYear: occurrence.getFullYear(),
+                occurrenceDate: occurrence.toISOString().split('T')[0],
             };
         };
 
@@ -380,7 +383,7 @@ router.get('/today-events/upcoming', async (req, res) => {
         (employees || []).forEach(emp => {
             if (emp.dob) {
                 const dob = new Date(emp.dob);
-                const { daysUntil } = nextOccurrence(dob);
+                const { daysUntil, occurrenceDate } = nextOccurrence(dob);
                 if (daysUntil >= 1 && daysUntil <= WINDOW_DAYS) {
                     birthdays.push({
                         id: emp.id,
@@ -390,13 +393,14 @@ router.get('/today-events/upcoming', async (req, res) => {
                         department: emp.department,
                         position: emp.designation,
                         profile_image: emp.profile_image,
+                        date: occurrenceDate,
                         days_until: daysUntil,
                     });
                 }
             }
             if (emp.joining_date) {
                 const joiningDate = new Date(emp.joining_date);
-                const { daysUntil, occurrenceYear } = nextOccurrence(joiningDate);
+                const { daysUntil, occurrenceYear, occurrenceDate } = nextOccurrence(joiningDate);
                 const years = occurrenceYear - joiningDate.getFullYear();
                 if (years > 0 && daysUntil >= 1 && daysUntil <= WINDOW_DAYS) {
                     anniversaries.push({
@@ -408,6 +412,7 @@ router.get('/today-events/upcoming', async (req, res) => {
                         position: emp.designation,
                         profile_image: emp.profile_image,
                         joining_date: emp.joining_date,
+                        date: occurrenceDate,
                         years,
                         days_until: daysUntil,
                     });

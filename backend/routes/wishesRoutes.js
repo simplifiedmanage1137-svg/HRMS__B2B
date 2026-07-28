@@ -94,8 +94,8 @@ module.exports = (supabase, authenticateToken) => {
             }
 
             // Notify the recipient — best-effort, never blocks the wish itself.
+            const eventLabel = (event_type || 'birthday') === 'anniversary' ? 'work anniversary' : 'birthday';
             try {
-                const eventLabel = (event_type || 'birthday') === 'anniversary' ? 'work anniversary' : 'birthday';
                 await supabase.from('notifications').insert({
                     employee_id: recipient_employee_id,
                     type: 'wish_received',
@@ -105,6 +105,25 @@ module.exports = (supabase, authenticateToken) => {
                 });
             } catch (notifyErr) {
                 console.error('[wishes] recipient notification failed:', notifyErr);
+            }
+
+            // Mirror the wish into the main social feed so it's visible as a post —
+            // best-effort, never blocks the wish itself.
+            try {
+                await supabase.from('dashboard_posts').insert({
+                    employee_id: employeeId,
+                    author_name: senderName,
+                    post_type: 'wish',
+                    content: `Wished ${recipient_name} a happy ${eventLabel}: "${message.trim()}"`,
+                    praised_employee_id: recipient_employee_id,
+                    praised_employee_name: recipient_name,
+                    mentioned_employees: [],
+                    poll_options: [],
+                    media_urls: [],
+                    liked_by: [],
+                });
+            } catch (postErr) {
+                console.error('[wishes] feed post mirror failed:', postErr);
             }
 
             return res.json({ success: true, wish: decorateWish(data, employeeId, {}) });

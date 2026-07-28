@@ -417,6 +417,12 @@ function FeedPost({ post, viewer, following, onToggleFollow, onReact, onDelete }
         </div>
       )}
 
+      {post.post_type === 'wish' && (
+        <span style={{ display: 'inline-block', marginTop: 8, fontSize: 10, fontWeight: 700, color: '#B45309', background: '#FFFBEB', borderRadius: 20, padding: '2px 10px' }}>
+          🎉 Celebration Wish
+        </span>
+      )}
+
       {post.content && <div style={{ fontSize: 13, color: QA.textDark, marginTop: 8, lineHeight: 1.5 }}>{post.content}</div>}
 
       {post.post_type === 'poll' && (post.poll_options || []).length > 0 && (
