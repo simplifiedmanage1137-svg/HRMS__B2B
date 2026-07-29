@@ -1350,8 +1350,16 @@ const AttendanceReports = () => {
             size="sm"
             onClick={() => setActiveView('daily')}
             style={isDailyView
-              ? { background: DA.primaryGreen, borderColor: DA.primaryGreen }
-              : { background: '#fff', borderColor: DA.border, color: DA.secondary }}
+              ? {
+    background: DA.primaryBlue,
+    borderColor: DA.primaryBlue,
+    color: '#fff'
+  }
+: {
+    background: '#fff',
+    borderColor: DA.primaryBlue,
+    color: DA.primaryBlue
+  }}
           >
             <FaEye className="me-1" size={12} /> Daily View
           </Button>
@@ -1359,8 +1367,16 @@ const AttendanceReports = () => {
             size="sm"
             onClick={() => setActiveView('monthly')}
             style={activeView === 'monthly'
-             ? { background: DA.primaryGreen, borderColor: DA.primaryGreen }
-              : { background: '#fff', borderColor: DA.border, color: DA.secondary }}
+            ? {
+    background: DA.primaryBlue,
+    borderColor: DA.primaryBlue,
+    color: '#fff'
+  }
+: {
+    background: '#fff',
+    borderColor: DA.primaryBlue,
+    color: DA.primaryBlue
+  }}
           >
             <FaCalendarAlt className="me-1" size={12} /> Monthly Calendar
           </Button>
@@ -1368,8 +1384,16 @@ const AttendanceReports = () => {
             size="sm"
             onClick={() => setActiveView('import')}
             style={activeView === 'import'
-              ? { background: DA.primaryGreen, borderColor: DA.primaryGreen }
-              : { background: '#fff', borderColor: DA.border, color: DA.secondary }}
+              ? {
+    background: DA.primaryBlue,
+    borderColor: DA.primaryBlue,
+    color: '#fff'
+  }
+: {
+    background: '#fff',
+    borderColor: DA.primaryBlue,
+    color: DA.primaryBlue
+  }}
           >
             <FaFileExcel className="me-1" size={12} /> Import
           </Button>
@@ -1377,8 +1401,16 @@ const AttendanceReports = () => {
             size="sm"
             onClick={() => setActiveView('regularization')}
             style={activeView === 'regularization'
-              ? { background: DA.primaryGreen, borderColor: DA.primaryGreen }
-              : { background: '#fff', borderColor: DA.border, color: DA.secondary }}
+              ? {
+    background: DA.primaryBlue,
+    borderColor: DA.primaryBlue,
+    color: '#fff'
+  }
+: {
+    background: '#fff',
+    borderColor: DA.primaryBlue,
+    color: DA.primaryBlue
+  }}
           >
             <FaClock className="me-1" size={12} /> Regularization
           </Button>
