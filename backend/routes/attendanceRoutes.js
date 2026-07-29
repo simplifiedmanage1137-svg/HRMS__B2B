@@ -1,11 +1,24 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const path = require('path');
 const attendanceController = require('../controllers/attendanceController');
+const regularizationController = require('../controllers/regularizationController');
 const { isAdminOrDesktopSupport, isAdminOrFinance } = require('../middleware/auth');
+
+// Same 4MB cap + extension whitelist as the onboarding attachment upload.
+const regularizationUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 4 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+        const allowed = /\.(jpe?g|png|pdf|docx?)$/i.test(path.extname(file.originalname));
+        cb(null, allowed);
+    },
+});
 
 // Note: This module exports a function that takes supabase, authenticateToken, and requireAdmin
 module.exports = (supabase, authenticateToken, requireAdmin) => {
-    
+
     // Clock in/out endpoints
     router.post('/clock-in', attendanceController.clockIn);
     router.post('/clock-out', attendanceController.clockOut);
@@ -21,7 +34,8 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
 
     // Regularization endpoints (Employee)
     router.get('/missed-clockouts/:employee_id', attendanceController.getMissedClockOuts);
-    router.post('/regularization/:employee_id/request', attendanceController.requestRegularization);
+    router.post('/regularization/:employee_id/request', authenticateToken, regularizationUpload.single('attachment'), regularizationController.createRequest);
+    router.get('/regularization/mine/:employee_id', authenticateToken, regularizationController.listMyRequests);
 
     // Admin-only attendance report (also allowed for desktop_support and finance)
     router.get('/report', authenticateToken, isAdminOrFinance, attendanceController.getAttendanceReport);
@@ -30,10 +44,14 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
     router.get('/team-report', authenticateToken, attendanceController.getTeamAttendanceReport);
 
     // Regularization endpoints
-    // Managers and admins can view and act on regularization requests according to team-level approval rules.
-    router.get('/regularization/pending', authenticateToken, attendanceController.getPendingRegularizations);
-    router.put('/regularization/:request_id/approve', authenticateToken, attendanceController.approveRegularization);
-    router.put('/regularization/:request_id/reject', authenticateToken, attendanceController.rejectRegularization);
+    // Managers, HR, and admins can view and act on regularization requests according to
+    // role-scoped visibility rules (see regularizationService.buildScopedEmployeeIds).
+    router.get('/regularization/stats', authenticateToken, regularizationController.getStats);
+    router.get('/regularization/pending', authenticateToken, regularizationController.listRequests);
+    router.get('/regularization/:request_id', authenticateToken, regularizationController.getRequestDetail);
+    router.put('/regularization/:request_id/approve', authenticateToken, regularizationController.approveRequest);
+    router.put('/regularization/:request_id/reject', authenticateToken, regularizationController.rejectRequest);
+    router.put('/regularization/:request_id/cancel', authenticateToken, regularizationController.cancelRequest);
 
     // Overtime endpoints (Admin or own data)
     router.get('/overtime/:employee_id/:month/:year', authenticateToken, attendanceController.getOvertimeSummary);

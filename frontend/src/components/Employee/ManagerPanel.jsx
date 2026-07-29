@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { FaCalendarAlt, FaClock, FaExclamationTriangle, FaChartBar, FaStar, FaArrowLeft } from 'react-icons/fa';
 import ManagerLeaveRequests from './ManagerLeaveRequests';
 import ManagerShiftUpdate from './ManagerShiftUpdate';
-import ManagerRegularizationRequests from './ManagerRegularizationRequests';
+import RegularizationPanel from '../Common/RegularizationPanel';
 import SendNotice from '../Admin/SendNotice';
 import TeamAttendanceReport from './TeamAttendanceReport';
 import TeamRating from './TeamRating';
@@ -64,7 +64,7 @@ const ManagerPanel = () => {
         {activeTab === 'leaves' && <ManagerLeaveRequests embedded />}
         {activeTab === 'attendance' && <TeamAttendanceReport />}
         {activeTab === 'shifts' && <ManagerShiftUpdate embedded />}
-        {activeTab === 'regularization' && <ManagerRegularizationRequests embedded />}
+        {activeTab === 'regularization' && <RegularizationPanel embedded />}
         {activeTab === 'rating' && <TeamRating />}
         {activeTab === 'notice' && <SendNotice embedded />}
       </div>

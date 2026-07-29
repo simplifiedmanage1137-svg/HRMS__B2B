@@ -32,6 +32,7 @@ import API_ENDPOINTS from '../../config/api';
 import * as XLSX from 'xlsx';
 import { holidays as holidayData } from '../../data/holidays';
 import AttendanceImportPanel from './AttendanceImportPanel';
+import RegularizationPanel from '../Common/RegularizationPanel';
 import {
   DA, STATUS_PILL, LATE_PILL_ON_TIME, LATE_PILL_LATE, DA_TH_STYLE,
   DA_CARD_STYLE, DA_GRADIENT_BAR, ATTENDANCE_TABLE_CSS,
@@ -1372,6 +1373,15 @@ const AttendanceReports = () => {
           >
             <FaFileExcel className="me-1" size={12} /> Import
           </Button>
+          <Button
+            size="sm"
+            onClick={() => setActiveView('regularization')}
+            style={activeView === 'regularization'
+              ? { background: DA.primaryGreen, borderColor: DA.primaryGreen }
+              : { background: '#fff', borderColor: DA.border, color: DA.secondary }}
+          >
+            <FaClock className="me-1" size={12} /> Regularization
+          </Button>
         </div>
         <div className="d-flex align-items-center gap-2">
           <Button
@@ -1798,6 +1808,8 @@ const AttendanceReports = () => {
             </div>
           </div>
         </div>
+      ) : activeView === 'regularization' ? (
+        <RegularizationPanel embedded />
       ) : (
         <Card className="border-0 shadow-sm">
           <Card.Header className="bg-light py-2 d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">

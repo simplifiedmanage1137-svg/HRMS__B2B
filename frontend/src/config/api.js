@@ -95,10 +95,17 @@ export const API_ENDPOINTS = {
   ATTENDANCE_REGULARIZATION_REQUEST: (employeeId) =>
     ep(`/api/attendance/regularization/${employeeId}/request`),
   ATTENDANCE_PENDING_REGULARIZATIONS: ep('/api/attendance/regularization/pending'),
+  ATTENDANCE_MY_REGULARIZATIONS: (employeeId) =>
+    ep(`/api/attendance/regularization/mine/${employeeId}`),
+  ATTENDANCE_REGULARIZATION_DETAIL: (requestId) =>
+    ep(`/api/attendance/regularization/${requestId}`),
   ATTENDANCE_APPROVE_REGULARIZATION: (requestId) =>
     ep(`/api/attendance/regularization/${requestId}/approve`),
   ATTENDANCE_REJECT_REGULARIZATION: (requestId) =>
     ep(`/api/attendance/regularization/${requestId}/reject`),
+  ATTENDANCE_CANCEL_REGULARIZATION: (requestId) =>
+    ep(`/api/attendance/regularization/${requestId}/cancel`),
+  ATTENDANCE_REGULARIZATION_STATS: ep('/api/attendance/regularization/stats'),
   ATTENDANCE_AUTO_CLOSE_STALE: ep('/api/attendance/auto-close-stale'),
   ATTENDANCE_TRIGGER_MISSING_CHECK: ep('/api/attendance/admin/trigger-missing-check'),
   ATTENDANCE_UPDATE_HISTORICAL_LATE_MARKS: ep('/api/attendance/update-historical-late-marks'),

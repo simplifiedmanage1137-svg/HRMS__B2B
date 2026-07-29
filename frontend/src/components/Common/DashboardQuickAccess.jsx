@@ -3,6 +3,7 @@ import AttendanceCard from './AttendanceCard';
 import HolidayCountdownCard from './HolidayCountdownCard';
 import LeaveBalanceRingsCard from './LeaveBalanceRingsCard';
 import AttendanceInsightsCard from './AttendanceInsightsCard';
+import RegularizationStatsWidget from './RegularizationStatsWidget';
 import OnLeaveTodayCard from './OnLeaveTodayCard';
 import CelebrationsCard from './CelebrationsCard';
 import PostComposerCard from './PostComposerCard';
@@ -65,6 +66,7 @@ export default function DashboardQuickAccess({
           footerExtra={footerExtra}
           unlimitedBreaks={unlimitedBreaks}
         />
+        <RegularizationStatsWidget />
         <HolidayCountdownCard />
         <LeaveBalanceRingsCard employeeId={employeeId} />
         <OnLeaveTodayCard scope={onLeaveScope} department={department} />

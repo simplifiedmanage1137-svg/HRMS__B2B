@@ -157,6 +157,67 @@ class NotificationService {
             return [];
         }
     }
+
+    // Send regularization workflow notifications
+    // action: 'created' | 'approved' | 'rejected' | 'cancelled'
+    async sendRegularizationNotifications(request, action, { actorName = 'Someone', comments = null } = {}) {
+        try {
+            const notifications = [];
+            const typeLabel = (request.request_type || '').replace(/_/g, ' ');
+
+            if (action === 'created') {
+                // HR/Admin should always be notified, even when the request is routed
+                // directly to a manager (not just when they're the fallback approver).
+                const { data: hrAdmins } = await supabase
+                    .from('employees')
+                    .select('employee_id')
+                    .in('role', ['hr', 'admin', 'sub_admin']);
+                const targets = new Set((hrAdmins || []).map(e => e.employee_id));
+                if (request.pending_with_employee_id) targets.add(request.pending_with_employee_id);
+
+                targets.forEach(id => notifications.push({
+                    employee_id: id,
+                    title: 'New Regularization Request',
+                    message: `${actorName} submitted a ${typeLabel} request for ${request.attendance_date}.`,
+                    type: 'regularization_pending',
+                    reference_id: request.id,
+                    metadata: { request_id: request.id, employee_id: request.employee_id, request_type: request.request_type },
+                }));
+            } else if (action === 'approved') {
+                notifications.push({
+                    employee_id: request.employee_id,
+                    title: 'Regularization Approved',
+                    message: `Your ${typeLabel} request for ${request.attendance_date} was approved by ${actorName}.`,
+                    type: 'regularization_approved',
+                    reference_id: request.id,
+                    metadata: { request_id: request.id },
+                });
+            } else if (action === 'rejected') {
+                notifications.push({
+                    employee_id: request.employee_id,
+                    title: 'Regularization Rejected',
+                    message: `Your attendance regularization request has been rejected.${comments ? ' Reason: ' + comments : ''}`,
+                    type: 'regularization_rejected',
+                    reference_id: request.id,
+                    metadata: { request_id: request.id, comments },
+                });
+            } else if (action === 'cancelled' && request.pending_with_employee_id) {
+                notifications.push({
+                    employee_id: request.pending_with_employee_id,
+                    title: 'Regularization Withdrawn',
+                    message: `${actorName} withdrew their pending request for ${request.attendance_date}.`,
+                    type: 'regularization_cancelled',
+                    reference_id: request.id,
+                    metadata: { request_id: request.id },
+                });
+            }
+
+            return await this.createBulkNotifications(notifications);
+        } catch (error) {
+            console.error('❌ Error sending regularization notifications:', error);
+            return [];
+        }
+    }
 }
 
 module.exports = new NotificationService();

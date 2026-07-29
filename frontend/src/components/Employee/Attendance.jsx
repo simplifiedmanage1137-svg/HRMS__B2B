@@ -143,6 +143,13 @@ const Attendance = () => {
   const [regularizationMinTime, setRegularizationMinTime] = useState('');
   const [regularizationReason, setRegularizationReason] = useState('');
   const [submittingRequest, setSubmittingRequest] = useState(false);
+  // Generalized regularization fields (all 11 request types)
+  const [regularizationType, setRegularizationType] = useState('missing_clock_out');
+  const [regularizationClockIn, setRegularizationClockIn] = useState('');
+  const [regularizationBreakDuration, setRegularizationBreakDuration] = useState('');
+  const [regularizationAttachment, setRegularizationAttachment] = useState(null);
+  const [attachmentError, setAttachmentError] = useState('');
+  const [myRegularizations, setMyRegularizations] = useState([]);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [canClockOut, setCanClockOut] = useState(false);
@@ -755,51 +762,102 @@ const Attendance = () => {
     }
   };
 
-  const handleRegularizationRequest = async () => {
-    if (!regularizationTime) {
-      setMessage({ type: 'danger', text: 'Please select clock-out time' });
-      return;
+  // Own regularization requests (any status) — used to hide/disable the per-row
+  // "Regularize" button for dates that already have a pending request.
+  const fetchMyRegularizations = async () => {
+    try {
+      const response = await axios.get(API_ENDPOINTS.ATTENDANCE_MY_REGULARIZATIONS(user.employeeId));
+      setMyRegularizations(response.data.requests || []);
+    } catch (error) {
+      console.error('Error fetching my regularization requests:', error);
     }
+  };
 
+  // "YYYY-MM-DDTHH:MM" (datetime-local value) → "YYYY-MM-DD HH:MM:SS" (backend format)
+  const toBackendDateTime = (dtLocal) => {
+    if (!dtLocal) return null;
+    const [datePart, timePart] = dtLocal.split('T');
+    const [hour, minute] = timePart.split(':');
+    return `${datePart} ${hour}:${minute}:00`;
+  };
+
+  const REQUEST_TYPES_NEEDING_CLOCK_OUT = ['missing_clock_out', 'attendance_correction', 'wrong_working_hours'];
+  const REQUEST_TYPES_NEEDING_CLOCK_IN = ['missing_clock_in', 'attendance_correction', 'wrong_working_hours'];
+
+  const handleRegularizationRequest = async () => {
     if (!selectedMissedRecord) {
       setMessage({ type: 'danger', text: 'No record selected' });
       return;
     }
-
-    if (regularizationMinTime && regularizationTime < regularizationMinTime) {
+    if (!regularizationReason || regularizationReason.trim().length < 20) {
+      setMessage({ type: 'danger', text: 'Please enter a reason of at least 20 characters' });
+      return;
+    }
+    if (regularizationType === 'missing_clock_in' && !regularizationClockIn) {
+      setMessage({ type: 'danger', text: 'Please select the correct clock-in time' });
+      return;
+    }
+    if (regularizationType === 'missing_clock_out' && !regularizationTime) {
+      setMessage({ type: 'danger', text: 'Please select the correct clock-out time' });
+      return;
+    }
+    if (['attendance_correction', 'wrong_working_hours'].includes(regularizationType) && !regularizationClockIn && !regularizationTime) {
+      setMessage({ type: 'danger', text: 'Please provide at least a corrected clock-in or clock-out time' });
+      return;
+    }
+    if (regularizationType === 'break_correction' && !(parseFloat(regularizationBreakDuration) > 0)) {
+      setMessage({ type: 'danger', text: 'Please enter a valid break duration in minutes' });
+      return;
+    }
+    if (regularizationClockIn && regularizationTime && regularizationTime <= regularizationClockIn) {
+      setMessage({ type: 'danger', text: 'Clock-out time cannot be before or equal to clock-in time.' });
+      return;
+    }
+    if (regularizationMinTime && regularizationType === 'missing_clock_out' && regularizationTime < regularizationMinTime) {
       setMessage({ type: 'danger', text: 'Clock-out time cannot be before clock-in time.' });
+      return;
+    }
+    if (attachmentError) {
+      setMessage({ type: 'danger', text: attachmentError });
       return;
     }
 
     setSubmittingRequest(true);
 
     try {
-      const selectedDateTime = regularizationTime;
-      const [datePart, timePart] = selectedDateTime.split('T');
-      const [year, month, day] = datePart.split('-');
-      const [hour, minute] = timePart.split(':');
-
-      const localDateTimeStr = `${year}-${month}-${day} ${hour}:${minute}:00`;
-
-      const requestData = {
-        attendance_id: String(selectedMissedRecord.id),
-        requested_clock_out_time: localDateTimeStr,
-        attendance_date: selectedMissedRecord.attendance_date,
-        reason: regularizationReason || 'Missed clock-out'
-      };
+      const formData = new FormData();
+      formData.append('request_type', regularizationType);
+      formData.append('attendance_date', selectedMissedRecord.attendance_date);
+      if (selectedMissedRecord.id) formData.append('attendance_id', String(selectedMissedRecord.id));
+      if (REQUEST_TYPES_NEEDING_CLOCK_IN.includes(regularizationType) && regularizationClockIn) {
+        formData.append('requested_clock_in', toBackendDateTime(regularizationClockIn));
+      }
+      if (REQUEST_TYPES_NEEDING_CLOCK_OUT.includes(regularizationType) && regularizationTime) {
+        formData.append('requested_clock_out_time', toBackendDateTime(regularizationTime));
+      }
+      if (regularizationType === 'break_correction') {
+        formData.append('requested_break_duration', regularizationBreakDuration);
+      }
+      formData.append('reason', regularizationReason.trim());
+      if (regularizationAttachment) formData.append('attachment', regularizationAttachment);
 
       const url = API_ENDPOINTS.ATTENDANCE_REGULARIZATION_REQUEST(user.employeeId);
-      await axios.post(url, requestData);
+      await axios.post(url, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
 
-      setSuccessMessage(`Regularization request for ${selectedMissedRecord.attendance_date} submitted successfully! HR will review your request.`);
+      setSuccessMessage(`Regularization request for ${selectedMissedRecord.attendance_date} submitted successfully! Your reporting manager will review it.`);
       setShowSuccessModal(true);
       setShowRegularizationModal(false);
       setSelectedMissedRecord(null);
       setRegularizationTime('');
+      setRegularizationClockIn('');
       setRegularizationReason('');
+      setRegularizationBreakDuration('');
+      setRegularizationAttachment(null);
+      setAttachmentError('');
 
       await fetchMissedClockOuts();
       await fetchAttendanceHistory();
+      await fetchMyRegularizations();
       setMessage({ type: '', text: '' });
 
     } catch (error) {
@@ -809,6 +867,37 @@ const Attendance = () => {
     } finally {
       setSubmittingRequest(false);
     }
+  };
+
+  const REGULARIZATION_TYPE_OPTIONS = [
+    { value: 'missing_clock_in', label: 'Missing Clock In' },
+    { value: 'missing_clock_out', label: 'Missing Clock Out' },
+    { value: 'attendance_correction', label: 'Attendance Correction' },
+    { value: 'half_day_to_present', label: 'Half Day to Present' },
+    { value: 'present_to_half_day', label: 'Present to Half Day' },
+    { value: 'wrong_working_hours', label: 'Wrong Working Hours' },
+    { value: 'client_visit', label: 'Client Visit' },
+    { value: 'official_duty', label: 'Official Duty' },
+    { value: 'wfh', label: 'Work From Home' },
+    { value: 'break_correction', label: 'Break Correction' },
+    { value: 'other', label: 'Other' },
+  ];
+
+  const handleAttachmentChange = (e) => {
+    const file = e.target.files?.[0] || null;
+    setRegularizationAttachment(null);
+    setAttachmentError('');
+    if (!file) return;
+    const allowedExt = /\.(jpe?g|png|pdf|docx?)$/i;
+    if (!allowedExt.test(file.name)) {
+      setAttachmentError('Only JPG, PNG, PDF, or DOC/DOCX files are allowed.');
+      return;
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      setAttachmentError('File exceeds the 4 MB limit.');
+      return;
+    }
+    setRegularizationAttachment(file);
   };
 
   // Add the generateLast30DaysAttendance function if missing
@@ -1675,6 +1764,57 @@ const Attendance = () => {
     } else {
       setRegularizationMinTime(`${year}-${month}-${day}T00:00`);
     }
+    setRegularizationType('missing_clock_out');
+    setRegularizationClockIn('');
+    setRegularizationBreakDuration('');
+    setRegularizationAttachment(null);
+    setAttachmentError('');
+    setShowRegularizationModal(true);
+  };
+
+  // General entry point — one "Regularize" button per attendance-history row, covering
+  // all 11 request types (not just the missing-clock-out case above).
+  const handleOpenGeneralRegularizationModal = (record) => {
+    const pendingIds = new Set(
+      myRegularizations.filter(r => r.status === 'pending').map(r => String(r.attendance_id))
+    );
+    if (record.id && pendingIds.has(String(record.id))) {
+      setMessage({ type: 'warning', text: `A regularization request is already pending for ${record.attendance_date}.` });
+      return;
+    }
+    if (record.is_regularized) {
+      setMessage({ type: 'info', text: `Attendance for ${record.attendance_date} has already been regularized.` });
+      return;
+    }
+
+    setSelectedMissedRecord(record);
+    const [year, month, day] = record.attendance_date.split('-');
+
+    const hasClockIn = !!(record.clock_in_ist || record.clock_in);
+    const hasClockOut = !!(record.clock_out_ist || record.clock_out);
+    if (!record.id) {
+      setRegularizationType('wfh'); // no attendance row at all — only the no-punch types apply
+    } else if (hasClockIn && !hasClockOut) {
+      setRegularizationType('missing_clock_out');
+    } else if (!hasClockIn) {
+      setRegularizationType('missing_clock_in');
+    } else {
+      setRegularizationType('attendance_correction');
+    }
+
+    setRegularizationTime(hasClockOut ? '' : `${year}-${month}-${day}T18:00`);
+    setRegularizationClockIn(hasClockIn ? '' : `${year}-${month}-${day}T09:00`);
+    const clockInRaw = record.clock_in_ist || record.clock_in || '';
+    if (clockInRaw) {
+      const minDT = clockInRaw.includes('T') ? clockInRaw.slice(0, 16) : clockInRaw.replace(' ', 'T').slice(0, 16);
+      setRegularizationMinTime(minDT);
+    } else {
+      setRegularizationMinTime(`${year}-${month}-${day}T00:00`);
+    }
+    setRegularizationReason('');
+    setRegularizationBreakDuration('');
+    setRegularizationAttachment(null);
+    setAttachmentError('');
     setShowRegularizationModal(true);
   };
 
@@ -1901,6 +2041,10 @@ const Attendance = () => {
     if (user?.employeeId) fetchAttendanceHistory();
   }, [user?.employeeId]);
 
+  useEffect(() => {
+    if (user?.employeeId) fetchMyRegularizations();
+  }, [user?.employeeId]);
+
   // Removed: auto-polling for attendance history (was causing excessive DB requests)
 
   // Removed: heartbeat polling (was sending requests every 30s)
@@ -1910,6 +2054,7 @@ const Attendance = () => {
       await fetchTodayAttendance();
       await fetchMissedClockOuts();
       await fetchAttendanceHistory();
+      await fetchMyRegularizations();
       setActiveSession(null);
       clearSessionFromStorage();
       setHasClockedOutToday(false);
@@ -2254,18 +2399,23 @@ const Attendance = () => {
                     <Table className="mb-0">
                       <thead className="sticky-top" style={{ top: 0, zIndex: 10 }}>
                         <tr>
-                          <th style={{ ...DA_TH_STYLE, width: '14%' }}>Date</th>
-                          <th style={{ ...DA_TH_STYLE, width: '9%' }} className="d-none d-sm-table-cell">Day</th>
-                          <th style={{ ...DA_TH_STYLE, width: '18%' }}>Clock In</th>
-                          <th style={{ ...DA_TH_STYLE, width: '16%' }}>Clock Out</th>
-                          <th style={{ ...DA_TH_STYLE, width: '14%' }}>Hours</th>
-                          <th style={{ ...DA_TH_STYLE, width: '34%' }}>Status</th>
+                          <th style={{ ...DA_TH_STYLE, width: '13%' }}>Date</th>
+                          <th style={{ ...DA_TH_STYLE, width: '8%' }} className="d-none d-sm-table-cell">Day</th>
+                          <th style={{ ...DA_TH_STYLE, width: '16%' }}>Clock In</th>
+                          <th style={{ ...DA_TH_STYLE, width: '15%' }}>Clock Out</th>
+                          <th style={{ ...DA_TH_STYLE, width: '13%' }}>Hours</th>
+                          <th style={{ ...DA_TH_STYLE, width: '25%' }}>Status</th>
+                          <th style={{ ...DA_TH_STYLE, width: '10%' }}>Action</th>
                         </tr>
                       </thead>
                       <tbody>
                         {attendanceHistory.map((record, index) => {
                           const today = new Date().toISOString().split('T')[0];
                           const isToday = record.attendance_date === today;
+                          const hasPendingRegularization = myRegularizations.some(
+                            r => r.status === 'pending' && String(r.attendance_id) === String(record.id)
+                          );
+                          const canRegularize = !record.isWeeklyOff && !isToday && !record.is_regularized;
 
                           return (
                             <tr key={index} className={`da-row da-row-enter ${record.isToday ? 'fw-bold' : ''}`} style={{ borderBottom: `1px solid ${DA.border}` }}>
@@ -2337,6 +2487,20 @@ const Attendance = () => {
                               <td className="small">
                                 {getAttendanceStatusBadge(record)}
                               </td>
+                              <td className="small">
+                                {hasPendingRegularization ? (
+                                  <Badge bg="warning" text="dark" pill>Pending</Badge>
+                                ) : canRegularize ? (
+                                  <Button
+                                    variant="outline-primary"
+                                    size="sm"
+                                    style={{ fontSize: 11, padding: '2px 8px' }}
+                                    onClick={() => handleOpenGeneralRegularizationModal(record)}
+                                  >
+                                    Regularize
+                                  </Button>
+                                ) : null}
+                              </td>
                             </tr>
                           );
                         })}
@@ -2385,30 +2549,100 @@ const Attendance = () => {
       </Row>
 
       {/* Modals */}
-      <Modal show={showRegularizationModal} onHide={() => { setShowRegularizationModal(false); setSelectedMissedRecord(null); setRegularizationTime(''); setRegularizationReason(''); }} centered size="lg">
+      <Modal show={showRegularizationModal} onHide={() => { setShowRegularizationModal(false); setSelectedMissedRecord(null); setRegularizationTime(''); setRegularizationClockIn(''); setRegularizationReason(''); setRegularizationBreakDuration(''); setRegularizationAttachment(null); setAttachmentError(''); }} centered size="lg">
         <Modal.Header closeButton className="bg-warning">
-          <Modal.Title className="h6"><FaRegClock className="me-2" /> Request Regularization - {selectedMissedRecord?.attendance_date}</Modal.Title>
+          <Modal.Title className="h6"><FaRegClock className="me-2" /> Regularize Attendance - {selectedMissedRecord?.attendance_date}</Modal.Title>
         </Modal.Header>
         <Modal.Body className="p-4">
           {selectedMissedRecord && (
             <>
-              <div className="mb-4 p-3 bg-light rounded border">
-                <div className="d-flex align-items-center mb-2"><FaInfoCircle className="text-primary me-2" /><strong className="small">Missed Clock-out Record</strong></div>
-                <div className="row g-2">
-                  <div className="col-12"><div className="small text-muted">Attendance Date</div><div className="fw-semibold"><FaCalendarAlt className="me-2 text-primary" size={12} /> {selectedMissedRecord.attendance_date}</div></div>
-                  <div className="col-12"><div className="small text-muted">Clock In Time</div><div className="fw-semibold text-success"><FaClock className="me-2" size={12} /> {selectedMissedRecord.clock_in_display || formatTimeIST(selectedMissedRecord.clock_in_ist || selectedMissedRecord.clock_in)}</div></div>
-                  {selectedMissedRecord.shift_timing && (<div className="col-12"><div className="small text-muted">Expected Shift</div><Badge bg="info" className="mt-1">{selectedMissedRecord.shift_timing}</Badge></div>)}
+              <div className="row g-2 mb-3">
+                <div className="col-6 col-md-3">
+                  <div className="small text-muted">Attendance Date</div>
+                  <div className="fw-semibold small"><FaCalendarAlt className="me-1 text-primary" size={11} /> {selectedMissedRecord.attendance_date}</div>
+                </div>
+                <div className="col-6 col-md-3">
+                  <div className="small text-muted">Status</div>
+                  <div className="fw-semibold small">{selectedMissedRecord.status || selectedMissedRecord.original_status || '—'}</div>
+                </div>
+                <div className="col-6 col-md-3">
+                  <div className="small text-muted">Clock In</div>
+                  <div className="fw-semibold small text-success">
+                    {selectedMissedRecord.clock_in_display || formatTimeIST(selectedMissedRecord.clock_in_ist || selectedMissedRecord.clock_in) || '—'}
+                  </div>
+                </div>
+                <div className="col-6 col-md-3">
+                  <div className="small text-muted">Clock Out</div>
+                  <div className="fw-semibold small text-success">
+                    {selectedMissedRecord.clock_out_display || formatTimeIST(selectedMissedRecord.clock_out_ist || selectedMissedRecord.clock_out) || '—'}
+                  </div>
+                </div>
+                <div className="col-6 col-md-3">
+                  <div className="small text-muted">Working Hours</div>
+                  <div className="fw-semibold small">{selectedMissedRecord.total_hours_display || '—'}</div>
                 </div>
               </div>
-              <div className="mb-3"><label className="form-label fw-semibold">Select Clock Out Time *</label><input type="datetime-local" className="form-control" value={regularizationTime} min={regularizationMinTime} onChange={(e) => setRegularizationTime(e.target.value)} required /><small className="text-muted">Select the time you actually left work on {selectedMissedRecord?.attendance_date}</small></div>
-              <div className="mb-3"><label className="form-label fw-semibold">Reason (Optional)</label><textarea className="form-control" rows="3" placeholder="e.g., Forgot to clock out, System issue, Network problem, etc." value={regularizationReason} onChange={(e) => setRegularizationReason(e.target.value)} /></div>
-              <Alert variant="info" className="small"><FaInfoCircle className="me-2" /><strong>Note:</strong> Your request will be reviewed by HR. Once approved, your attendance will be updated with the correct clock-out time.</Alert>
+
+              <div className="mb-3">
+                <label className="form-label fw-semibold">Request Type *</label>
+                <select className="form-select" value={regularizationType} onChange={(e) => setRegularizationType(e.target.value)}>
+                  {REGULARIZATION_TYPE_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                </select>
+              </div>
+
+              {REQUEST_TYPES_NEEDING_CLOCK_IN.includes(regularizationType) && (
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">
+                    Requested Clock In {regularizationType === 'missing_clock_in' ? '*' : '(optional)'}
+                  </label>
+                  <input type="datetime-local" className="form-control" value={regularizationClockIn} onChange={(e) => setRegularizationClockIn(e.target.value)} />
+                </div>
+              )}
+
+              {REQUEST_TYPES_NEEDING_CLOCK_OUT.includes(regularizationType) && (
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">
+                    Requested Clock Out {regularizationType === 'missing_clock_out' ? '*' : '(optional)'}
+                  </label>
+                  <input type="datetime-local" className="form-control" value={regularizationTime} min={regularizationMinTime} onChange={(e) => setRegularizationTime(e.target.value)} />
+                </div>
+              )}
+
+              {regularizationType === 'break_correction' && (
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">Requested Break Duration (minutes) *</label>
+                  <input type="number" min="1" className="form-control" value={regularizationBreakDuration} onChange={(e) => setRegularizationBreakDuration(e.target.value)} />
+                </div>
+              )}
+
+              <div className="mb-3">
+                <label className="form-label fw-semibold">Reason * <span className="text-muted fw-normal">(minimum 20 characters)</span></label>
+                <textarea
+                  className="form-control"
+                  rows="3"
+                  placeholder="Explain why this attendance needs to be regularized…"
+                  value={regularizationReason}
+                  onChange={(e) => setRegularizationReason(e.target.value)}
+                />
+                <small className={regularizationReason.trim().length < 20 ? 'text-danger' : 'text-success'}>
+                  {regularizationReason.trim().length}/20 characters minimum
+                </small>
+              </div>
+
+              <div className="mb-3">
+                <label className="form-label fw-semibold">Attachment <span className="text-muted fw-normal">(optional, image or PDF, max 4 MB)</span></label>
+                <input type="file" className="form-control" accept=".jpg,.jpeg,.png,.pdf,.doc,.docx" onChange={handleAttachmentChange} />
+                {attachmentError && <small className="text-danger d-block mt-1">{attachmentError}</small>}
+                {regularizationAttachment && !attachmentError && <small className="text-success d-block mt-1">{regularizationAttachment.name}</small>}
+              </div>
+
+              <Alert variant="info" className="small mb-0"><FaInfoCircle className="me-2" /><strong>Note:</strong> Your request will be reviewed by your reporting manager. Attendance stays unchanged until it's approved.</Alert>
             </>
           )}
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" size="sm" onClick={() => { setShowRegularizationModal(false); setSelectedMissedRecord(null); }}>Cancel</Button>
-          <Button variant="warning" size="sm" onClick={handleRegularizationRequest} disabled={submittingRequest || !regularizationTime}>{submittingRequest ? (<><Spinner size="sm" animation="border" className="me-2" /> Submitting...</>) : (<><FaRegClock className="me-2" /> Submit Request</>)}</Button>
+          <Button variant="warning" size="sm" onClick={handleRegularizationRequest} disabled={submittingRequest || regularizationReason.trim().length < 20}>{submittingRequest ? (<><Spinner size="sm" animation="border" className="me-2" /> Submitting...</>) : (<><FaRegClock className="me-2" /> Submit Request</>)}</Button>
         </Modal.Footer>
       </Modal>
 
