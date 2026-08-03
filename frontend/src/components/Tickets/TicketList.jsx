@@ -85,6 +85,40 @@ const fmtDate = iso => {
     ' ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 };
 
+const parseEmployeeDetails = (description) => {
+  if (!description) return null;
+
+  const detailMap = {};
+  description.split(/\r?\n/).forEach(line => {
+    const match = line.match(/^([A-Za-z ./'()/-]+):\s*(.+)$/);
+    if (match) {
+      const label = match[1].trim();
+      const value = match[2].trim();
+      if (label && value) detailMap[label] = value;
+    }
+  });
+
+  const employeeNumber = detailMap['Employee Number'];
+  if (!employeeNumber && Object.keys(detailMap).length === 0) return null;
+
+  return {
+    employeeName: detailMap['Employee Name'] || '',
+    employeeNumber,
+    joiningDate: detailMap['Date of Joining'] || '',
+    dob: detailMap['Date of Birth'] || '',
+    designation: detailMap['Designation'] || '',
+    bloodGroup: detailMap['Blood Group'] || '',
+    reportingManager: detailMap['Reporting Manager'] || '',
+    contactNumber: detailMap['Contact Number'] || '',
+    emergencyContact: detailMap['Emergency Contact Number'] || '',
+    address: detailMap['Employee Address'] || '',
+  };
+};
+
+const getEmployeePhotoUrl = (employee) => (
+  employee?.profile_image || employee?.passport_photo || employee?.photo_url || employee?.profilePhoto || null
+);
+
 // ─── StatusBadge ─────────────────────────────────────────────────────────────
 
 const StatusBadge = ({ status }) => {
@@ -346,13 +380,33 @@ function TicketDetail({ ticketId, show, onHide, onUpdated, userRole, userEmploye
   const [acting,      setActing]      = useState('');
   const [showResolve, setShowResolve] = useState(false);
   const [showDecline, setShowDecline] = useState(false);
+  const [employeeDetails, setEmployeeDetails] = useState(null);
+  const [employeePhoto, setEmployeePhoto] = useState('');
 
   const fetch = useCallback(async () => {
     if (!ticketId) return;
     setLoading(true);
+    setEmployeeDetails(null);
+    setEmployeePhoto('');
     try {
       const res = await axios.get(API_ENDPOINTS.TICKET_BY_ID(ticketId));
-      if (res.data.success) { setTicket(res.data.ticket); setHistory(res.data.history || []); }
+      if (res.data.success) {
+        const nextTicket = res.data.ticket;
+        setTicket(nextTicket);
+        setHistory(res.data.history || []);
+
+        const parsedDetails = parseEmployeeDetails(nextTicket?.description);
+        setEmployeeDetails(parsedDetails);
+
+        if (parsedDetails?.employeeNumber) {
+          try {
+            const empRes = await axios.get(API_ENDPOINTS.EMPLOYEE_PROFILE(parsedDetails.employeeNumber));
+            setEmployeePhoto(getEmployeePhotoUrl(empRes.data) || '');
+          } catch {
+            setEmployeePhoto('');
+          }
+        }
+      }
     } catch { /* silent */ } finally { setLoading(false); }
   }, [ticketId]);
 
@@ -420,8 +474,62 @@ function TicketDetail({ ticketId, show, onHide, onUpdated, userRole, userEmploye
                 <strong style={{ color: '#111827' }}>Issue:</strong> {t.issue_type}
               </div>
 
-              <div style={{ background: '#f9fafb', borderRadius: 10, padding: '14px 16px', marginBottom: 16, fontSize: 13, color: '#374151', lineHeight: 1.7, borderLeft: '3px solid #6366f1' }}>
-                {t.description}
+              <div style={{ background: '#f8fafc', borderRadius: 14, padding: '16px 18px', marginBottom: 16, border: '1px solid #e2e8f0', boxShadow: '0 8px 24px rgba(15, 23, 42, 0.04)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Request Summary</div>
+                    <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.7 }}>{t.description.split('\n')[0] || t.description}</div>
+                  </div>
+                  {employeeDetails?.employeeName && (
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{employeeDetails.employeeName}</div>
+                      {employeeDetails.employeeNumber && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{employeeDetails.employeeNumber}</div>}
+                    </div>
+                  )}
+                </div>
+
+                {employeeDetails ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) 240px', gap: 18, alignItems: 'start' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px 14px' }}>
+                      {[
+                        ['Employee Name', employeeDetails.employeeName],
+                        ['Employee Number', employeeDetails.employeeNumber],
+                        ['Date of Joining', employeeDetails.joiningDate],
+                        ['Date of Birth', employeeDetails.dob],
+                        ['Designation', employeeDetails.designation],
+                        ['Blood Group', employeeDetails.bloodGroup],
+                        ['Reporting Manager', employeeDetails.reportingManager],
+                        ['Contact Number', employeeDetails.contactNumber],
+                        ['Emergency Contact', employeeDetails.emergencyContact],
+                        ['Employee Address', employeeDetails.address],
+                      ].map(([label, value]) => (
+                        <div key={label} style={{ background: '#fff', border: '1px solid #f3f4f6', borderRadius: 10, padding: '10px 12px' }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: 3 }}>{label}</div>
+                          <div style={{ fontSize: 12, color: '#111827', fontWeight: 600, lineHeight: 1.4 }}>{value || '—'}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ padding: '12px', border: '1px solid #e5e7eb', borderRadius: 12, background: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                      {employeePhoto ? (
+                        <img src={employeePhoto} alt={employeeDetails.employeeName || 'Employee profile'} style={{ width: '100%', height: 180, objectFit: 'cover', borderRadius: 10, border: '1px solid #e5e7eb' }} />
+                      ) : (
+                        <div style={{ width: '100%', height: 180, borderRadius: 10, background: 'linear-gradient(135deg, #eef2ff 0%, #f9fafb 100%)', border: '1px dashed #d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 12, textAlign: 'center', padding: 12 }}>
+                          No profile photo uploaded yet
+                        </div>
+                      )}
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#111827', marginTop: 10, textAlign: 'center' }}>{employeeDetails.employeeName || 'Employee Profile'}</div>
+                      {employeeDetails.employeeNumber && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{employeeDetails.employeeNumber}</div>}
+                      {employeePhoto && (
+                        <a href={employeePhoto} target="_blank" rel="noreferrer" style={{ marginTop: 10, fontSize: 11, fontWeight: 700, color: '#4f46e5', textDecoration: 'none' }}>
+                          ⬇ Download photo
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{t.description}</div>
+                )}
               </div>
 
               {t.attachment_url && (

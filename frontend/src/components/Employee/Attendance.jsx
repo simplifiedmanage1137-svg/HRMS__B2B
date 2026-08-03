@@ -2405,7 +2405,7 @@ const Attendance = () => {
                           <th style={{ ...DA_TH_STYLE, width: '15%' }}>Clock Out</th>
                           <th style={{ ...DA_TH_STYLE, width: '13%' }}>Hours</th>
                           <th style={{ ...DA_TH_STYLE, width: '25%' }}>Status</th>
-                          <th style={{ ...DA_TH_STYLE, width: '10%' }}>Action</th>
+                          {<th style={{ ...DA_TH_STYLE, width: '10%' }}>Action</th> }
                         </tr>
                       </thead>
                       <tbody>
