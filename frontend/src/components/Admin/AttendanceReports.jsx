@@ -1339,100 +1339,101 @@ const AttendanceReports = () => {
     );
   };
 
+  const viewTabs = [
+    { key: 'daily', label: 'Daily View', icon: FaEye },
+    { key: 'monthly', label: 'Monthly Calendar', icon: FaCalendarAlt },
+    { key: 'import', label: 'Import', icon: FaFileExcel },
+    { key: 'regularization', label: 'Regularization', icon: FaClock },
+  ];
+
   return (
     <div
       className="p-2 p-md-3 p-lg-4"
       style={isDailyView ? { background: DA.bg, minHeight: '100vh' } : undefined}
     >
-      <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-3 gap-2">
-        <div className="d-flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            onClick={() => setActiveView('daily')}
-            style={isDailyView
-              ? {
-    background: DA.primaryBlue,
-    borderColor: DA.primaryBlue,
-    color: '#fff'
-  }
-: {
-    background: '#fff',
-    borderColor: DA.primaryBlue,
-    color: DA.primaryBlue
-  }}
-          >
-            <FaEye className="me-1" size={12} /> Daily View
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => setActiveView('monthly')}
-            style={activeView === 'monthly'
-            ? {
-    background: DA.primaryBlue,
-    borderColor: DA.primaryBlue,
-    color: '#fff'
-  }
-: {
-    background: '#fff',
-    borderColor: DA.primaryBlue,
-    color: DA.primaryBlue
-  }}
-          >
-            <FaCalendarAlt className="me-1" size={12} /> Monthly Calendar
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => setActiveView('import')}
-            style={activeView === 'import'
-              ? {
-    background: DA.primaryBlue,
-    borderColor: DA.primaryBlue,
-    color: '#fff'
-  }
-: {
-    background: '#fff',
-    borderColor: DA.primaryBlue,
-    color: DA.primaryBlue
-  }}
-          >
-            <FaFileExcel className="me-1" size={12} /> Import
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => setActiveView('regularization')}
-            style={activeView === 'regularization'
-              ? {
-    background: DA.primaryBlue,
-    borderColor: DA.primaryBlue,
-    color: '#fff'
-  }
-: {
-    background: '#fff',
-    borderColor: DA.primaryBlue,
-    color: DA.primaryBlue
-  }}
-          >
-            <FaClock className="me-1" size={12} /> Regularization
-          </Button>
+      <div
+        style={{
+          background: 'linear-gradient(135deg, #f8fbff 0%, #f1f5ff 100%)',
+          border: '1px solid #e2e8f0',
+          borderRadius: 20,
+          padding: '18px 20px',
+          marginBottom: 16,
+          boxShadow: '0 10px 30px rgba(15, 23, 42, 0.05)',
+        }}
+      >
+        <div className="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3">
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#6366f1', marginBottom: 4 }}>
+              Attendance Workspace
+            </div>
+            <h4 className="mb-1 fw-bold" style={{ color: '#0f172a', margin: 0 }}>
+              Review attendance, imports, and regularization requests from one place
+            </h4>
+            <div style={{ color: '#64748b', fontSize: 13 }}>
+              Switch between daily, monthly, import, and review workflows with a cleaner page-style navigation.
+            </div>
+          </div>
+          <div className="d-flex align-items-center gap-2 flex-wrap">
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              disabled={loading}
+              onClick={() => activeView === 'daily' ? fetchDailyAttendance() : activeView === 'monthly' ? fetchMonthlyAttendance() : null}
+              title="Refresh current view"
+            >
+              {loading
+                ? <><Spinner animation="border" size="sm" style={{ width: 11, height: 11 }} className="me-1" /> Refreshing…</>
+                : <><FaSyncAlt className="me-1" size={11} /> Refresh</>}
+            </Button>
+            <button
+              className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
+              onClick={() => navigate(-1)}
+            >
+              <FaArrowLeft size={12} /> Back
+            </button>
+          </div>
         </div>
-        <div className="d-flex align-items-center gap-2">
-          <Button
-            variant="outline-secondary"
-            size="sm"
-            disabled={loading}
-            onClick={() => activeView === 'daily' ? fetchDailyAttendance() : activeView === 'monthly' ? fetchMonthlyAttendance() : null}
-            title="Refresh current view"
-          >
-            {loading
-              ? <><Spinner animation="border" size="sm" style={{ width: 11, height: 11 }} className="me-1" /> Refreshing…</>
-              : <><FaSyncAlt className="me-1" size={11} /> Refresh</>}
-          </Button>
-          <button
-            className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
-            onClick={() => navigate(-1)}
-          >
-            <FaArrowLeft size={12} /> Back
-          </button>
+
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 8,
+            marginTop: 14,
+            padding: '8px',
+            borderRadius: 16,
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+          }}
+        >
+          {viewTabs.map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeView === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveView(tab.key)}
+                style={{
+                  border: 'none',
+                  borderRadius: 12,
+                  padding: '10px 14px',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  color: isActive ? '#fff' : '#334155',
+                  background: isActive ? 'linear-gradient(135deg, #4f46e5 0%, #2563eb 100%)' : '#f8fafc',
+                  boxShadow: isActive ? '0 8px 20px rgba(79, 70, 229, 0.18)' : 'none',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <Icon size={12} />
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 

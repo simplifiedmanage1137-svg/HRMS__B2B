@@ -246,19 +246,32 @@ export default function RegularizationPanel({ embedded = false, onRequestCountCh
   return (
     <div className={embedded ? '' : 'p-2 p-md-3 p-lg-4'}>
       {!embedded && (
-        <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-4 gap-3">
-          <div>
-            <h5 className="mb-1 d-flex align-items-center gap-2">
-              <FaUserTie className="text-primary" />
-              Attendance Regularization Requests
-            </h5>
-            <small className="text-muted">
-              {pendingCount > 0 ? `${pendingCount} request${pendingCount > 1 ? 's' : ''} awaiting action` : 'No pending requests'}
-            </small>
+        <div
+          style={{
+            background: 'linear-gradient(135deg, #f8fbff 0%, #f5f3ff 100%)',
+            border: '1px solid #e2e8f0',
+            borderRadius: 18,
+            padding: '18px 20px',
+            marginBottom: 16,
+            boxShadow: '0 10px 30px rgba(15, 23, 42, 0.05)',
+          }}
+        >
+          <div className="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3">
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#7c3aed', marginBottom: 4 }}>
+                Attendance Review
+              </div>
+              <h5 className="mb-1 fw-bold" style={{ color: '#0f172a', margin: 0 }}>
+                <FaUserTie className="me-2" /> Attendance Regularization Requests
+              </h5>
+              <small style={{ color: '#64748b' }}>
+                {pendingCount > 0 ? `${pendingCount} request${pendingCount > 1 ? 's' : ''} awaiting action` : 'No pending requests'}
+              </small>
+            </div>
+            <Button variant="outline-primary" size="sm" onClick={fetchRequests}>
+              <FaSyncAlt className="me-1" size={12} /> Refresh
+            </Button>
           </div>
-          <Button variant="outline-primary" size="sm" onClick={fetchRequests}>
-            <FaSyncAlt className="me-1" size={12} /> Refresh
-          </Button>
         </div>
       )}
 
@@ -268,60 +281,76 @@ export default function RegularizationPanel({ embedded = false, onRequestCountCh
         </Alert>
       )}
 
-      <Row className="align-items-center mb-3 gx-2 gy-2">
-        <Col xs={12} lg={5}>
-          <div className="d-flex gap-2 flex-wrap">
-            {['pending', 'approved', 'rejected', 'cancelled', 'all'].map(f => (
-              <Button
-                key={f}
-                variant={filter === f ? (f === 'pending' ? 'warning' : f === 'approved' ? 'success' : f === 'rejected' ? 'danger' : 'primary') : 'outline-secondary'}
-                size="sm"
-                onClick={() => setFilter(f)}
-                className="text-capitalize"
-              >
-                {f}
-              </Button>
-            ))}
-          </div>
-        </Col>
-        <Col xs={12} md={4} lg={2}>
-          <Form.Select size="sm" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-            <option value="">All Types</option>
-            {Object.entries(REQUEST_TYPE_LABELS).map(([val, label]) => (
-              <option key={val} value={val}>{label}</option>
-            ))}
-          </Form.Select>
-        </Col>
-        <Col xs={6} md={4} lg={2}>
-          <Form.Control size="sm" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} title="From date" />
-        </Col>
-        <Col xs={6} md={4} lg={2}>
-          <Form.Control size="sm" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} title="To date" />
-        </Col>
-        <Col xs={12} lg={"auto"} className="ms-lg-auto" style={{ minWidth: 220 }}>
-          <InputGroup size="sm">
-            <InputGroup.Text><FaSearch size={12} /></InputGroup.Text>
-            <Form.Control
-              placeholder="Search employee, ID, dept…"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </InputGroup>
-        </Col>
-      </Row>
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '14px', boxShadow: '0 8px 24px rgba(15, 23, 42, 0.04)', marginBottom: 14 }}>
+        <Row className="align-items-center gx-2 gy-2">
+          <Col xs={12} lg={5}>
+            <div className="d-flex gap-2 flex-wrap">
+              {['pending', 'approved', 'rejected', 'cancelled', 'all'].map(f => {
+                const isActive = filter === f;
+                const activeStyle = f === 'pending' ? { background: '#fef3c7', color: '#92400e', borderColor: '#f59e0b' } : f === 'approved' ? { background: '#dcfce7', color: '#166534', borderColor: '#22c55e' } : f === 'rejected' ? { background: '#fee2e2', color: '#991b1b', borderColor: '#ef4444' } : { background: '#eef2ff', color: '#4338ca', borderColor: '#6366f1' };
+                return (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => setFilter(f)}
+                    style={{
+                      border: `1px solid ${isActive ? (f === 'pending' ? '#f59e0b' : f === 'approved' ? '#22c55e' : f === 'rejected' ? '#ef4444' : '#6366f1') : '#e2e8f0'}`,
+                      borderRadius: 999,
+                      padding: '7px 12px',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      textTransform: 'capitalize',
+                      background: isActive ? activeStyle.background : '#fff',
+                      color: isActive ? activeStyle.color : '#475569',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {f}
+                  </button>
+                );
+              })}
+            </div>
+          </Col>
+          <Col xs={12} md={4} lg={2}>
+            <Form.Select size="sm" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ borderRadius: 10 }}>
+              <option value="">All Types</option>
+              {Object.entries(REQUEST_TYPE_LABELS).map(([val, label]) => (
+                <option key={val} value={val}>{label}</option>
+              ))}
+            </Form.Select>
+          </Col>
+          <Col xs={6} md={4} lg={2}>
+            <Form.Control size="sm" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} title="From date" style={{ borderRadius: 10 }} />
+          </Col>
+          <Col xs={6} md={4} lg={2}>
+            <Form.Control size="sm" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} title="To date" style={{ borderRadius: 10 }} />
+          </Col>
+          <Col xs={12} lg={"auto"} className="ms-lg-auto" style={{ minWidth: 220 }}>
+            <InputGroup size="sm">
+              <InputGroup.Text><FaSearch size={12} /></InputGroup.Text>
+              <Form.Control
+                placeholder="Search employee, ID, dept…"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{ borderRadius: '0 10px 10px 0' }}
+              />
+            </InputGroup>
+          </Col>
+        </Row>
+      </div>
 
       {filteredRequests.length === 0 ? (
-        <Card className="border-0 shadow-sm">
+        <Card className="border-0 shadow-sm" style={{ borderRadius: 16 }}>
           <Card.Body className="text-center py-5">
             <FaRegClock size={40} className="text-muted mb-3" />
             <p className="text-muted mb-0">No regularization requests found.</p>
           </Card.Body>
         </Card>
       ) : (
-        <Card className="border-0 shadow-sm">
+        <Card className="border-0 shadow-sm" style={{ borderRadius: 16, overflow: 'hidden' }}>
           <Card.Body className="p-0">
             <div className="table-responsive">
-              <Table hover className="mb-0">
+              <Table hover className="mb-0" style={{ minWidth: 980 }}>
                 <thead className="bg-light">
                   <tr className="small">
                     <th className="fw-normal">Employee</th>

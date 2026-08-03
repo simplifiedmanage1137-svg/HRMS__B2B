@@ -59,6 +59,40 @@ const fmtSize = (bytes) => {
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 };
 
+const normalizeNameValue = (value = '') => value.replace(/\s+/g, ' ').trim();
+
+const getDraftStorageKey = (token) => `onboarding_draft_${token || 'unknown'}`;
+
+const loadDraftFromStorage = (token) => {
+    if (!token || typeof window === 'undefined') return null;
+    try {
+        const raw = window.localStorage.getItem(getDraftStorageKey(token));
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+        return null;
+    }
+};
+
+const saveDraftToStorage = (token, draft) => {
+    if (!token || typeof window === 'undefined') return;
+    try {
+        window.localStorage.setItem(getDraftStorageKey(token), JSON.stringify(draft));
+    } catch {
+        // ignore storage quota / browser restriction issues
+    }
+};
+
+const clearDraftFromStorage = (token) => {
+    if (!token || typeof window === 'undefined') return;
+    try {
+        window.localStorage.removeItem(getDraftStorageKey(token));
+    } catch {
+        // ignore storage errors
+    }
+};
+
 // ── File upload field ─────────────────────────────────────────────────────────
 function FileField({ label, required, accept, hint, maxMB, file, onChange, sizeError }) {
     const inputRef = useRef(null);
@@ -177,8 +211,13 @@ export default function OnboardingFormPage() {
     const [submitErr, setSubmitErr]           = useState('');
     const [done, setDone]                     = useState(false);
     const [uploadProgress, setUploadProgress] = useState('');
+    const [draftReady, setDraftReady]         = useState(false);
+    const [draftRestored, setDraftRestored]   = useState(false);
+    const [isDirty, setIsDirty]               = useState(false);
+    const saveTimerRef = useRef(null);
 
     useEffect(() => {
+        let cancelled = false;
         (async () => {
             try {
                 const res = await fetch(API_ENDPOINTS.ONBOARDING_BY_TOKEN(token));
@@ -189,23 +228,102 @@ export default function OnboardingFormPage() {
                     setOfferErr(`This offer cannot accept a form submission (status: ${o.status})`);
                     return;
                 }
-                setOffer(o);
                 const parts = (o.employee_name || '').trim().split(/\s+/);
-                setForm(f => ({
-                    ...f,
-                    first_name:  parts[0] || '',
-                    last_name:   parts.length > 1 ? parts[parts.length - 1] : '',
-                    middle_name: parts.length > 2 ? parts.slice(1, -1).join(' ') : '',
-                }));
+                const fallbackForm = {
+                    first_name:  normalizeNameValue(parts[0] || ''),
+                    last_name:   normalizeNameValue(parts.length > 1 ? parts[parts.length - 1] : ''),
+                    middle_name: normalizeNameValue(parts.length > 2 ? parts.slice(1, -1).join(' ') : ''),
+                };
+
+                const savedDraft = loadDraftFromStorage(token);
+                const initialForm = {
+                    ...form,
+                    ...fallbackForm,
+                    ...(savedDraft?.form || {}),
+                };
+
+                if (!cancelled) {
+                    setOffer(o);
+                    setForm({
+                        ...initialForm,
+                        first_name:  normalizeNameValue(initialForm.first_name || ''),
+                        last_name:   normalizeNameValue(initialForm.last_name || ''),
+                        middle_name: normalizeNameValue(initialForm.middle_name || ''),
+                    });
+                    if (savedDraft?.tab) setTab(savedDraft.tab);
+                    if (savedDraft?.form) setDraftRestored(true);
+                    setDraftReady(true);
+                }
             } catch {
-                setOfferErr('Failed to load offer details. Please try again.');
+                if (!cancelled) setOfferErr('Failed to load offer details. Please try again.');
             } finally {
-                setLoading(false);
+                if (!cancelled) setLoading(false);
             }
         })();
+
+        return () => { cancelled = true; };
     }, [token]);
 
-    const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+    const persistCurrentDraft = () => {
+        if (!draftReady || !token) return;
+        const draft = {
+            form: {
+                ...form,
+                first_name:  normalizeNameValue(form.first_name || ''),
+                middle_name: normalizeNameValue(form.middle_name || ''),
+                last_name:   normalizeNameValue(form.last_name || ''),
+                emergency_contact_name: normalizeNameValue(form.emergency_contact_name || ''),
+            },
+            tab,
+            updatedAt: Date.now(),
+        };
+        saveDraftToStorage(token, draft);
+        setIsDirty(false);
+    };
+
+    useEffect(() => {
+        if (!draftReady || !token) return;
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = setTimeout(() => {
+            persistCurrentDraft();
+        }, 400);
+
+        return () => {
+            if (saveTimerRef.current) {
+                clearTimeout(saveTimerRef.current);
+                saveTimerRef.current = null;
+            }
+        };
+    }, [draftReady, token, form, tab]);
+
+    useEffect(() => {
+        if (!draftReady || !token) return;
+        const handleBeforeUnload = (event) => {
+            if (isDirty) {
+                event.preventDefault();
+                event.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+            }
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [draftReady, token, isDirty]);
+
+    useEffect(() => {
+        return () => {
+            if (saveTimerRef.current) {
+                clearTimeout(saveTimerRef.current);
+            }
+            persistCurrentDraft();
+        };
+    }, [token, draftReady, form, tab]);
+
+    const set = (k, v) => {
+        const normalizedValue = ['first_name', 'middle_name', 'last_name', 'emergency_contact_name'].includes(k)
+            ? normalizeNameValue(v)
+            : v;
+        setForm(f => ({ ...f, [k]: normalizedValue }));
+        setIsDirty(true);
+    };
 
     const handleFileChange = (key, file, sizeErr) => {
         setFiles(f => ({ ...f, [key]: file }));
@@ -295,11 +413,19 @@ export default function OnboardingFormPage() {
             }
 
             // Step 2 — submit form fields + public URLs as JSON (tiny payload)
+            const normalizedForm = {
+                ...form,
+                first_name:  normalizeNameValue(form.first_name || ''),
+                middle_name: normalizeNameValue(form.middle_name || ''),
+                last_name:   normalizeNameValue(form.last_name || ''),
+                emergency_contact_name: normalizeNameValue(form.emergency_contact_name || ''),
+            };
+
             setUploadProgress('Saving your details…');
             const res = await fetch(API_ENDPOINTS.ONBOARDING_SUBMIT(token), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...form, ...docUrls }),
+                body: JSON.stringify({ ...normalizedForm, ...docUrls }),
             });
 
             const raw = await res.text();
@@ -309,6 +435,8 @@ export default function OnboardingFormPage() {
                 throw new Error(`Server error (${res.status}): ${preview || 'Unexpected response'}`);
             }
             if (!d.success) throw new Error(d.message);
+            clearDraftFromStorage(token);
+            setIsDirty(false);
             setDone(true);
         } catch (err) {
             console.error('[onboarding] submit error:', err);
@@ -400,6 +528,11 @@ export default function OnboardingFormPage() {
                 </div>
 
                 <Form onSubmit={handleSubmit}>
+                    {draftRestored && (
+                        <Alert variant="info" style={{ fontSize: 13, marginBottom: 16 }}>
+                            Your saved progress was restored. You can continue from where you left off.
+                        </Alert>
+                    )}
                     {submitErr && (
                         <Alert variant="danger" style={{ fontSize: 13, marginBottom: 16 }} dismissible onClose={() => setSubmitErr('')}>
                             {submitErr}
