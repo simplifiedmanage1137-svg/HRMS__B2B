@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Container, Row, Col, Card, Table, Button, Form,
+  Container, Row, Col, Card, Table, Button, Form, Modal,
   Badge, Spinner, Alert, InputGroup
 } from 'react-bootstrap';
 import {
@@ -8,7 +8,7 @@ import {
   FaDownload, FaUsers, FaReceipt, FaWallet, FaChartBar,
   FaCalendarAlt, FaFileExcel, FaFilePdf, FaChevronLeft,
   FaChevronRight, FaUserCircle, FaInfoCircle, FaClock,
-  FaCheckCircle, FaTimesCircle
+  FaCheckCircle, FaTimesCircle, FaPlus
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -51,11 +51,13 @@ export default function DeductionManager() {
   const [success, setSuccess] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [modalEmployeeSearch, setModalEmployeeSearch] = useState('');
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState('name');
   const [sortDirection, setSortDirection] = useState('asc');
   const [selectedRow, setSelectedRow] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
   const PAGE_SIZE = 8;
 
   useEffect(() => { fetchEmployees(); }, []);
@@ -99,6 +101,8 @@ export default function DeductionManager() {
     }
   };
 
+  const clearSelection = () => setSelectedIds(new Set());
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -121,8 +125,10 @@ export default function DeductionManager() {
       setSelectedIds(new Set());
       setAmount('');
       setReason('');
+      setDeductionDate(new Date().toISOString().split('T')[0]);
       setFilterMonth(formMonth);
       setFilterYear(formYear);
+      setShowAddModal(false);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to save deductions');
     } finally {
@@ -187,6 +193,15 @@ export default function DeductionManager() {
       return matchesSearch && matchesDepartment;
     });
   }, [employees, search, departmentFilter]);
+
+  const modalEmployeeOptions = useMemo(() => {
+    const q = modalEmployeeSearch.toLowerCase().trim();
+    return filteredEmployees.filter(emp => {
+      if (!q) return true;
+      const fullName = buildName(emp).toLowerCase();
+      return fullName.includes(q) || emp.employee_id?.toLowerCase().includes(q);
+    });
+  }, [filteredEmployees, modalEmployeeSearch]);
 
   const deductionMap = useMemo(() => {
     const map = new Map();
@@ -309,6 +324,7 @@ export default function DeductionManager() {
               <FaFilter /> Filter & Export
             </div>
             <div className="d-flex flex-wrap gap-2">
+              <Button size="sm" variant="primary" onClick={() => { setError(''); setSuccess(''); setShowAddModal(true); }}><FaPlus className="me-1" /> Add Deduction</Button>
               <Button size="sm" variant="outline-primary" onClick={() => { setSearch(searchInput); }}><FaSearch className="me-1" /> Search</Button>
               <Button size="sm" variant="outline-secondary" onClick={() => { setSearchInput(''); setSearch(''); setDepartmentFilter('All'); setStatusFilter('All'); }}>Reset</Button>
               <Button size="sm" variant="outline-success" onClick={exportExcel}><FaFileExcel className="me-1" /> Excel</Button>
@@ -474,6 +490,85 @@ export default function DeductionManager() {
 
       {error && <Alert variant="danger" className="mt-3">{error}</Alert>}
       {success && <Alert variant="success" className="mt-3">{success}</Alert>}
+
+      <Modal show={showAddModal} onHide={() => setShowAddModal(false)} size="lg" centered>
+        <Modal.Header closeButton>
+          <Modal.Title className="fw-semibold">Add deduction</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form onSubmit={handleSubmit}>
+            <Row className="g-3">
+              <Col md={6}>
+                <Form.Group>
+                  <Form.Label className="small fw-semibold">Amount</Form.Label>
+                  <Form.Control type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Enter amount" required />
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group>
+                  <Form.Label className="small fw-semibold">Deduction date</Form.Label>
+                  <Form.Control type="date" value={deductionDate} onChange={(e) => setDeductionDate(e.target.value)} required />
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group>
+                  <Form.Label className="small fw-semibold">Month</Form.Label>
+                  <Form.Select value={formMonth} onChange={(e) => setFormMonth(parseInt(e.target.value))}>
+                    {MONTHS.map((m, idx) => <option key={m} value={idx + 1}>{m}</option>)}
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group>
+                  <Form.Label className="small fw-semibold">Year</Form.Label>
+                  <Form.Select value={formYear} onChange={(e) => setFormYear(parseInt(e.target.value))}>
+                    {years.map(y => <option key={y} value={y}>{y}</option>)}
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+              <Col xs={12}>
+                <Form.Group>
+                  <Form.Label className="small fw-semibold">Reason</Form.Label>
+                  <Form.Control as="textarea" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Add a reason for the deduction" required />
+                </Form.Group>
+              </Col>
+            </Row>
+
+            <div className="mt-4">
+              <div className="d-flex justify-content-between align-items-center mb-2">
+                <div className="fw-semibold">Select employees</div>
+                <div className="d-flex gap-2">
+                  <Button type="button" size="sm" variant="outline-secondary" onClick={() => setSelectedIds(new Set(filteredEmployees.map(e => e.employee_id)))}>Select visible</Button>
+                  <Button type="button" size="sm" variant="outline-secondary" onClick={clearSelection}>Clear</Button>
+                </div>
+              </div>
+              <Form.Control
+                size="sm"
+                className="mb-2"
+                placeholder="Search by name or employee ID"
+                value={modalEmployeeSearch}
+                onChange={(e) => setModalEmployeeSearch(e.target.value)}
+              />
+              <div style={{ maxHeight: 280, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 12, padding: 10, background: '#f8fafc' }}>
+                {modalEmployeeOptions.length === 0 ? (
+                  <div className="text-muted small">No employees match your search.</div>
+                ) : modalEmployeeOptions.map(emp => (
+                  <label key={emp.employee_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={selectedIds.has(emp.employee_id)} onChange={() => toggleSelect(emp.employee_id)} />
+                    <span className="small fw-semibold">{buildName(emp)} <span className="text-muted">({emp.employee_id})</span></span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </Form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => setShowAddModal(false)}>Cancel</Button>
+          <Button variant="primary" onClick={(e) => handleSubmit(e)} disabled={saving}>
+            {saving ? 'Saving...' : 'Save deduction'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       {drawerOpen && selectedRow && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(15,23,42,0.45)' }} onClick={closeDrawer}>

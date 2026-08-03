@@ -1,6 +1,6 @@
 // components/Admin/EmployeeList.jsx
 import React, { useState, useEffect } from 'react';
-import { Spinner, Modal, Table, Button } from 'react-bootstrap';
+import { Spinner, Modal, Table, Button, Form } from 'react-bootstrap';
 import {
   FaEdit, FaEye, FaPlus, FaDownload, FaFilePdf, FaFileImage, FaFileAlt,
   FaSearch, FaTimes, FaSyncAlt, FaArrowLeft, FaCheckCircle, FaUserSlash,
@@ -493,6 +493,11 @@ const EmployeeList = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [togglingStatus, setTogglingStatus] = useState(null);
+  const [showBulkFormModal, setShowBulkFormModal] = useState(false);
+  const [bulkFormTarget, setBulkFormTarget] = useState('on');
+  const [bulkFormSelection, setBulkFormSelection] = useState([]);
+  const [bulkFormLoading, setBulkFormLoading] = useState(false);
+  const [bulkFormSearch, setBulkFormSearch] = useState('');
 
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -627,6 +632,66 @@ const EmployeeList = () => {
     }
   };
 
+  const toggleBulkSelection = (id) => {
+    setBulkFormSelection(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+  };
+
+  const selectAllVisibleBulk = () => {
+    setBulkFormSelection(filteredEmployees.map(emp => emp.id));
+  };
+
+  const clearBulkSelection = () => {
+    setBulkFormSelection([]);
+  };
+
+  const handleBulkProfileForm = async () => {
+    if (!bulkFormSelection.length) {
+      showNotification('Select at least one employee first.', 'warning');
+      return;
+    }
+
+    setBulkFormLoading(true);
+    try {
+      const shouldRequire = bulkFormTarget === 'on';
+      const selectedIds = bulkFormSelection;
+
+      await Promise.all(selectedIds.map(async (id) => {
+        const employee = employees.find(emp => emp.id === id);
+        if (!employee) return;
+        const currentValue = Boolean(employee.require_profile_completion);
+        if (currentValue === shouldRequire) return;
+        await axios.post(API_ENDPOINTS.EMPLOYEE_TOGGLE_PROFILE_FORM(id));
+      }));
+
+      setEmployees(prev => prev.map(emp => {
+        if (!selectedIds.includes(emp.id)) return emp;
+        const currentValue = Boolean(emp.require_profile_completion);
+        if (currentValue === shouldRequire) return emp;
+        return {
+          ...emp,
+          require_profile_completion: shouldRequire,
+          profile_completed: shouldRequire ? false : emp.profile_completed,
+        };
+      }));
+
+      showNotification(`${selectedIds.length} employee(s) updated successfully.`, 'success');
+      setShowBulkFormModal(false);
+      setBulkFormSelection([]);
+      setBulkFormTarget('on');
+    } catch (err) {
+      showNotification(err.response?.data?.message || 'Failed to update profile form for selected employees.', 'danger');
+    } finally {
+      setBulkFormLoading(false);
+    }
+  };
+
+  const modalEmployeeOptions = filteredEmployees.filter(emp => {
+    const q = bulkFormSearch.toLowerCase().trim();
+    if (!q) return true;
+    const fullName = getFullName(emp).toLowerCase();
+    return fullName.includes(q) || (emp.employee_id || '').toLowerCase().includes(q);
+  });
+
   const selectedEmp = employees.find(e => e.id === selectedEmpId) || null;
   const activeCount = employees.filter(e => e.is_active !== false).length;
   const inactiveCount = employees.filter(e => e.is_active === false).length;
@@ -676,6 +741,13 @@ const EmployeeList = () => {
                 display: 'flex', alignItems: 'center', gap: 6,
               }}>
                 <FaLink size={11} /> Offer Link
+              </button>
+              <button onClick={() => { setBulkFormSelection([]); setBulkFormTarget('on'); setShowBulkFormModal(true); }} style={{
+                background: '#0f766e', color: '#fff', border: 'none', borderRadius: 20,
+                padding: '8px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                <FaUsers size={11} /> Form
               </button>
               <button onClick={() => navigate('/admin/add-employee')} style={{
                 background: '#111827', color: '#fff', border: 'none', borderRadius: 20,
@@ -848,6 +920,55 @@ const EmployeeList = () => {
         onHide={() => setShowGenLink(false)}
         onGenerated={() => {}}
       />
+
+      {/* ── Bulk Profile Form Modal ── */}
+      <Modal show={showBulkFormModal} onHide={() => setShowBulkFormModal(false)} size="lg" centered>
+        <Modal.Header closeButton>
+          <Modal.Title className="fw-semibold">Bulk profile form</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form.Group className="mb-3">
+            <Form.Label className="small fw-semibold">Action</Form.Label>
+            <Form.Select value={bulkFormTarget} onChange={(e) => setBulkFormTarget(e.target.value)}>
+              <option value="on">Require profile form</option>
+              <option value="off">Stop requiring profile form</option>
+            </Form.Select>
+          </Form.Group>
+
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <div className="fw-semibold">Select employees</div>
+            <div className="d-flex gap-2">
+              <Button type="button" size="sm" variant="outline-secondary" onClick={selectAllVisibleBulk}>Select visible</Button>
+              <Button type="button" size="sm" variant="outline-secondary" onClick={clearBulkSelection}>Clear</Button>
+            </div>
+          </div>
+
+          <Form.Control
+            size="sm"
+            className="mb-2"
+            placeholder="Search by name or employee ID"
+            value={bulkFormSearch}
+            onChange={(e) => setBulkFormSearch(e.target.value)}
+          />
+
+          <div style={{ maxHeight: 300, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 12, padding: 10, background: '#f8fafc' }}>
+            {modalEmployeeOptions.length === 0 ? (
+              <div className="text-muted small">No employees match your search.</div>
+            ) : modalEmployeeOptions.map(emp => (
+              <label key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer' }}>
+                <input type="checkbox" checked={bulkFormSelection.includes(emp.id)} onChange={() => toggleBulkSelection(emp.id)} />
+                <span className="small fw-semibold">{getFullName(emp)} <span className="text-muted">({emp.employee_id})</span></span>
+              </label>
+            ))}
+          </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => setShowBulkFormModal(false)}>Cancel</Button>
+          <Button variant="primary" onClick={handleBulkProfileForm} disabled={bulkFormLoading}>
+            {bulkFormLoading ? 'Updating...' : 'Apply'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       {/* ── Documents Modal ── */}
       <Modal show={showDocumentModal} onHide={() => setShowDocumentModal(false)} size="lg" centered>
