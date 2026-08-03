@@ -6,7 +6,7 @@ import {
   FaUserCircle, FaSignOutAlt, FaFingerprint, FaClock,
   FaBell, FaPaperPlane, FaEdit, FaUserTie,
   FaBullhorn, FaStar, FaChevronRight, FaLayerGroup, FaDesktop, FaChartLine, FaMinusCircle, FaFileExcel,
-  FaTicketAlt
+  FaTicketAlt, FaReceipt
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -228,7 +228,7 @@ const Sidebar = () => {
               <NavItem to="/admin/attendance/reports" icon={<FaClock />}       label="Attendance" />
               <NavItem to="/admin/ratings"            icon={<FaStar />}        label="Employee Ratings" />
               <NavItem to="/performance/reviews"      icon={<FaChartLine />}   label="Performance Reviews" />
-              <NavItem to="/admin/deductions"         icon={<FaMinusCircle />} label="Deductions" />
+              <NavItem to="/admin/deductions"         icon={<FaReceipt />} label="Deductions" />
               <NavItem to="/tickets"                  icon={<FaTicketAlt />}   label="Support Tickets" />
               <Section label="Admin Tools" />
               <NavItem to="/admin/teams"          icon={<FaLayerGroup />}  label="TL Teams" />
@@ -256,7 +256,7 @@ const Sidebar = () => {
               <NavItem to="/admin/ratings"            icon={<FaStar />}        label="Employee Ratings" />
               <NavItem to="/performance/reviews"      icon={<FaChartLine />}   label="Performance Reviews" />
               <NavItem to="/admin/payroll"            icon={<FaMoneyBill />}   label="Payroll" />
-              <NavItem to="/admin/deductions"         icon={<FaMinusCircle />} label="Deductions" />
+              <NavItem to="/admin/deductions"         icon={<FaReceipt />} label="Deductions" />
               <NavItem to="/tickets"                  icon={<FaTicketAlt />}   label="Support Tickets" />
               <Section label="Admin Tools" />
               <NavItem to="/admin/teams"          icon={<FaLayerGroup />}  label="TL Teams" />
@@ -292,6 +292,7 @@ const Sidebar = () => {
               <NavItem to="/attendance" icon={<FaFingerprint />} label="Daily Attendance" />
               <NavItem to="/apply-leave" icon={<FaCalendarAlt />} label="Apply Leave" />
               <NavItem to="/salary-slip" icon={<FaMoneyBill />}   label="Salary Slip" />
+              <NavItem to="/employee/deductions" icon={<FaReceipt />} label="My Deductions" />
               <Section label="Team" />
               <NavItem to="/manager/panel"       icon={<FaUserTie />}    label="Team Panel" />
               <NavItem to="/performance/reviews" icon={<FaChartLine />}  label="Performance Reviews" />
@@ -307,6 +308,7 @@ const Sidebar = () => {
               <NavItem to="/attendance"              icon={<FaFingerprint />} label="Daily Attendance" />
               <NavItem to="/apply-leave"             icon={<FaCalendarAlt />} label="Apply Leave" />
               <NavItem to="/salary-slip"             icon={<FaMoneyBill />}   label="Salary Slip" />
+              <NavItem to="/employee/deductions"     icon={<FaReceipt />}    label="My Deductions" />
               <NavItem to="/employee/update-requests" icon={<FaEdit />}       label="Update Requests" />
               <NavItem to="/performance/history"     icon={<FaChartLine />}   label="My Performance" />
               <NavItem to="/tickets"                 icon={<FaTicketAlt />}   label="Support Tickets" />

@@ -54,6 +54,7 @@ const ProfileEdit            = lazy(() => import('./components/Employee/ProfileE
 const ApplyLeave             = lazy(() => import('./components/Employee/ApplyLeave'));
 const SalarySlip             = lazy(() => import('./components/Employee/SalarySlip'));
 const Attendance             = lazy(() => import('./components/Employee/Attendance'));
+const EmployeeDeductions     = lazy(() => import('./components/Employee/EmployeeDeductions'));
 const EmployeeUpdateRequests = lazy(() => import('./components/Employee/EmployeeUpdateRequests'));
 const EmployeeUpdateForm     = lazy(() => import('./components/Employee/EmployeeUpdateForm'));
 const ManagerLeaveRequests   = lazy(() => import('./components/Employee/ManagerLeaveRequests'));
@@ -355,6 +356,12 @@ function AppContent() {
             <Route path="/salary-slip" element={
               <PrivateRoute allowedRoles={['employee', 'manager']}>
                 <SalarySlip />
+              </PrivateRoute>
+            } />
+
+            <Route path="/employee/deductions" element={
+              <PrivateRoute allowedRoles={['employee', 'manager']}>
+                <EmployeeDeductions />
               </PrivateRoute>
             } />
 
