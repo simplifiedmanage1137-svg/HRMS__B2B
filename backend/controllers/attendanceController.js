@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const supabase = require('../config/supabase');
 const { holidays } = require('../data/holidays');
 const { normalizeName, getEmployeeById, getTeamEmployeeIdsByManagerName, employeeHasDirectReports } = require('../utils/employeeLookup');
+const { isFlexibleShiftEnabled, getFlexibleShiftStatus } = require('../utils/flexibleShift');
 
 // Generate unique session ID
 const generateSessionId = () => {
@@ -464,6 +465,7 @@ exports.clockIn = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Employee not found' });
         }
         const emp = employees[0];
+        const isFlexibleShift = isFlexibleShiftEnabled(emp);
 
         // ✅ NEW: Check for any incomplete attendance record from previous day(s)
         // But ONLY block if the record is NOT part of an active session (night shift support)
@@ -643,29 +645,34 @@ exports.clockIn = async (req, res) => {
             }
         }
 
-        // Late calculation using IST-aware UTC ms diff
-        const shiftStartIST = `${istDateForAttendance} ${String(shiftHour).padStart(2, '0')}:${String(shiftMinute).padStart(2, '0')}:00`;
-        const clockInMs = toUTCMs(clockInISTValue);
-        const shiftStartMs = toUTCMs(shiftStartIST);
-        const diffMs = clockInMs - shiftStartMs;
-        const isLate = diffMs > 0;
-        const isEarly = diffMs < 0;
-
+        // Flexible-shift employees ignore shift timing, late marks, and early-arrival calculations.
         let lateMinutes = 0, earlyMinutes = 0, lateDisplay = null;
-        if (isLate) {
-            lateMinutes = diffMs / (1000 * 60);
-            const totalSeconds = Math.floor(diffMs / 1000);
-            const hours = Math.floor(totalSeconds / 3600);
-            const remainingSeconds = totalSeconds % 3600;
-            const minutes = Math.floor(remainingSeconds / 60);
-            const seconds = remainingSeconds % 60;
-            const parts = [];
-            if (hours > 0) parts.push(`${hours}h`);
-            if (minutes > 0) parts.push(`${minutes}m`);
-            if (seconds > 0 || (hours === 0 && minutes === 0)) parts.push(`${seconds}s`);
-            lateDisplay = parts.join(' ');
-        } else if (isEarly) {
-            earlyMinutes = Math.abs(diffMs) / (1000 * 60);
+        let isLate = false;
+        let isEarly = false;
+
+        if (!isFlexibleShift) {
+            const shiftStartIST = `${istDateForAttendance} ${String(shiftHour).padStart(2, '0')}:${String(shiftMinute).padStart(2, '0')}:00`;
+            const clockInMs = toUTCMs(clockInISTValue);
+            const shiftStartMs = toUTCMs(shiftStartIST);
+            const diffMs = clockInMs - shiftStartMs;
+            isLate = diffMs > 0;
+            isEarly = diffMs < 0;
+
+            if (isLate) {
+                lateMinutes = diffMs / (1000 * 60);
+                const totalSeconds = Math.floor(diffMs / 1000);
+                const hours = Math.floor(totalSeconds / 3600);
+                const remainingSeconds = totalSeconds % 3600;
+                const minutes = Math.floor(remainingSeconds / 60);
+                const seconds = remainingSeconds % 60;
+                const parts = [];
+                if (hours > 0) parts.push(`${hours}h`);
+                if (minutes > 0) parts.push(`${minutes}m`);
+                if (seconds > 0 || (hours === 0 && minutes === 0)) parts.push(`${seconds}s`);
+                lateDisplay = parts.join(' ');
+            } else if (isEarly) {
+                earlyMinutes = Math.abs(diffMs) / (1000 * 60);
+            }
         }
 
         const lateMinutesToSave = isLate ? parseFloat(lateMinutes.toFixed(4)) : 0;
@@ -750,7 +757,8 @@ exports.clockIn = async (req, res) => {
         }]);
 
         let message = '✅ Clocked in on time';
-        if (isLate) message = `⚠️ Clocked in (${lateDisplay} late)`;
+        if (isFlexibleShift) message = '✅ Clocked in with flexible-shift rules';
+        else if (isLate) message = `⚠️ Clocked in (${lateDisplay} late)`;
         else if (isEarly) message = `⏰ Clocked in (${Math.floor(earlyMinutes)}m early)`;
 
         const response = {
@@ -761,6 +769,7 @@ exports.clockIn = async (req, res) => {
             clock_in_ist: clockInISTValue,
             shift_time: shiftDisplay,
             shift_start: `${shiftHour.toString().padStart(2, '0')}:${shiftMinute.toString().padStart(2, '0')}`,
+            isFlexibleShift,
             is_late: isLate,
             is_early: isEarly,
             late_minutes: lateMinutesToSave,
@@ -933,6 +942,7 @@ exports.clockOut = async (req, res) => {
             attendanceRecord = crossMidnightRecords[0];
         }
         const employee = attendanceRecord.employees;
+        const isFlexibleShift = isFlexibleShiftEnabled(employee);
         const queryTime = Date.now() - startTime;
         console.log(`✅ Query time: ${queryTime}ms`);
 
@@ -984,20 +994,22 @@ exports.clockOut = async (req, res) => {
         if (totalMinutes < 0) totalMinutes += 24 * 60;
         const totalHours = totalMinutes / 60;
 
-        // Get expected work hours from shift timing
-        const shiftTiming = parseShiftTiming(employee?.shift_timing);
-        const expectedWorkHours = shiftTiming.totalHours || 9;
-        const expectedWorkMinutes = expectedWorkHours * 60;
-
-        // Calculate status based on expected work hours
+        // Flexible-shift employees are evaluated by total working hours only.
         let status = 'half_day';
-        if (totalMinutes >= expectedWorkMinutes) {
-            status = 'present';
-        } else if (totalMinutes < 300) {
-            status = 'absent';
+        const shiftTiming = parseShiftTiming(employee?.shift_timing);
+        const expectedWorkMinutes = isFlexibleShift ? 540 : (shiftTiming.totalHours || 9) * 60;
+        if (isFlexibleShift) {
+            const flexibleStatus = getFlexibleShiftStatus(totalMinutes);
+            status = flexibleStatus.status;
+        } else {
+            if (totalMinutes >= expectedWorkMinutes) {
+                status = 'present';
+            } else if (totalMinutes < 300) {
+                status = 'absent';
+            }
         }
 
-        const overtime = calculateOvertime(clockInIST, clockOutIST, shiftTiming);
+        const overtime = isFlexibleShift ? { overtimeHours: 0, overtimeMinutes: 0, hasOvertime: false, overtimeAmount: 0 } : calculateOvertime(clockInIST, clockOutIST, shiftTiming);
 
         // Calculate display hours and minutes
         const displayHours = Math.floor(totalMinutes / 60);
@@ -1117,6 +1129,12 @@ exports.clockOutMissed = async (req, res) => {
             return res.status(400).json({ success: false, message: 'This attendance record already has a clock-out time' });
         }
 
+        const { data: employeeProfile } = await supabase
+            .from('employees')
+            .select('*')
+            .eq('employee_id', employee_id)
+            .maybeSingle();
+
         const currentIST = nowIST();
         const currentDatePart = currentIST.split(' ')[0];
         const currentTimePart = currentIST.split(' ')[1];
@@ -1150,14 +1168,18 @@ exports.clockOutMissed = async (req, res) => {
         const totalHoursDisplay = `${displayHours}h ${displayMinutes}m`;
 
         // Determine status
-        const shiftTiming = parseShiftTiming(attendance.shift_time_used);
-        const expectedWorkMinutes = (shiftTiming.totalHours || 9) * 60;
-
+        const isFlexibleShift = isFlexibleShiftEnabled(employeeProfile || {});
         let status = 'half_day';
-        if (totalMinutes >= expectedWorkMinutes) {
-            status = 'present';
-        } else if (totalMinutes < 300) {
-            status = 'absent';
+        if (isFlexibleShift) {
+            status = getFlexibleShiftStatus(totalMinutes).status;
+        } else {
+            const shiftTiming = parseShiftTiming(attendance.shift_time_used || employeeProfile?.shift_timing);
+            const expectedWorkMinutes = (shiftTiming.totalHours || 9) * 60;
+            if (totalMinutes >= expectedWorkMinutes) {
+                status = 'present';
+            } else if (totalMinutes < 300) {
+                status = 'absent';
+            }
         }
 
         // Update attendance
@@ -1242,6 +1264,7 @@ exports.getTodayAttendance = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Employee not found' });
         }
         const employee = employees[0];
+        const isFlexibleShift = isFlexibleShiftEnabled(employee);
 
         const { data: todayAttendance } = await supabase
             .from('attendance')
@@ -1307,6 +1330,7 @@ exports.getTodayAttendance = async (req, res) => {
                 formattedAttendance.first_name = formattedAttendance.employees.first_name;
                 formattedAttendance.last_name = formattedAttendance.employees.last_name;
                 formattedAttendance.shift_timing = formattedAttendance.employees.shift_timing;
+                formattedAttendance.isFlexibleShift = isFlexibleShiftEnabled(formattedAttendance.employees);
                 delete formattedAttendance.employees;
             }
 
@@ -1328,9 +1352,9 @@ exports.getTodayAttendance = async (req, res) => {
                 if (clockInTime && !isNaN(clockInTime.getTime())) {
                     // Parse shift timing
                     let shiftHour = 9, shiftMinute = 0;
-                    const shiftString = employee.shift_timing || formattedAttendance.shift_time_used;
+                const shiftString = employee.shift_timing || formattedAttendance.shift_time_used;
 
-                    if (shiftString) {
+                if (!isFlexibleShift && shiftString) {
                         let startTimeStr = shiftString.trim();
 
                         if (startTimeStr.includes('-')) {
@@ -1412,9 +1436,9 @@ exports.getTodayAttendance = async (req, res) => {
                     }
 
                     // Update the formatted attendance with calculated values
-                    formattedAttendance.late_minutes = isLate ? parseFloat(lateMinutes.toFixed(4)) : 0;
-                    formattedAttendance.late_display = lateDisplay;
-                    formattedAttendance.is_late = isLate;
+                    formattedAttendance.late_minutes = isFlexibleShift ? 0 : (isLate ? parseFloat(lateMinutes.toFixed(4)) : 0);
+                    formattedAttendance.late_display = isFlexibleShift ? null : lateDisplay;
+                    formattedAttendance.is_late = isFlexibleShift ? false : isLate;
 
                     console.log(`📊 Real-time late calculation for ${employee_id}:`, {
                         shift_start: `${shiftHour}:${shiftMinute.toString().padStart(2, '0')}`,
@@ -1466,7 +1490,7 @@ exports.getTodayAttendance = async (req, res) => {
                 if (formattedAttendance.clock_in && !formattedAttendance.clock_out) {
                     formattedAttendance.status = 'working';
                 } else if (formattedAttendance.clock_in && formattedAttendance.clock_out) {
-                    formattedAttendance.status = 'present';
+                    formattedAttendance.status = isFlexibleShift ? getFlexibleShiftStatus(formattedAttendance.total_minutes || formattedAttendance.total_hours * 60 || 0).status : 'present';
                 }
             }
         }

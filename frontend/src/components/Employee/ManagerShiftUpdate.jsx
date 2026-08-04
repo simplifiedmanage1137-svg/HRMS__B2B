@@ -87,6 +87,24 @@ const ManagerShiftUpdate = ({ embedded = false }) => {
 
   const shiftVal = useCustom ? custom.trim() : shift;
 
+  const handleFlexibleToggle = async (employeeId, enabled) => {
+    const employee = team.find(item => item.employee_id === employeeId);
+    if (!employee) return;
+
+    try {
+      const res = await axios.put(API_ENDPOINTS.MANAGER_UPDATE_SHIFT(employeeId), {
+        isFlexibleShift: enabled,
+      });
+      setTeam(prev => prev.map(item => item.employee_id === employeeId ? { ...item, isFlexibleShift: enabled } : item));
+      showMsg('success', `${employee.first_name} ${employee.last_name} ${enabled ? 'enabled' : 'disabled'} flexible shift.`);
+      if (res?.data?.employee) {
+        setTeam(prev => prev.map(item => item.employee_id === employeeId ? { ...item, ...res.data.employee } : item));
+      }
+    } catch (err) {
+      showMsg('danger', err.response?.data?.message || 'Failed to update flexible shift');
+    }
+  };
+
   const handleUpload = async () => {
     if (selectedIds.size === 0) return showMsg('warning', 'Select at least one employee.');
     if (!shiftVal)              return showMsg('warning', 'Select or enter a shift timing.');
@@ -308,6 +326,7 @@ const ManagerShiftUpdate = ({ embedded = false }) => {
                       <th className="d-none d-md-table-cell">Department</th>
                       <th className="d-none d-sm-table-cell">Designation</th>
                       <th>Current Shift</th>
+                      <th className="text-center">Flexible Shift</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -338,6 +357,13 @@ const ManagerShiftUpdate = ({ embedded = false }) => {
                               <FaClock className="me-1" size={9} />
                               {checked && shiftVal ? shiftVal : (emp.shift_timing || 'Not set')}
                             </Badge>
+                          </td>
+                          <td className="text-center" onClick={e => e.stopPropagation()}>
+                            <Form.Check
+                              type="switch"
+                              checked={Boolean(emp.isFlexibleShift)}
+                              onChange={(e) => handleFlexibleToggle(emp.employee_id, e.target.checked)}
+                            />
                           </td>
                         </tr>
                       );

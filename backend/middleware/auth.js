@@ -34,7 +34,7 @@ const isAdmin = (req, res, next) => {
 };
 
 const isAdminOrManager = (req, res, next) => {
-    if (!['admin', 'sub_admin', 'manager', 'hr'].includes(req.user?.role)) {
+    if (!['admin', 'sub_admin', 'manager', 'hr', 'team_leader'].includes(req.user?.role)) {
         return res.status(403).json({ success: false, message: 'Manager or Admin access required' });
     }
     next();

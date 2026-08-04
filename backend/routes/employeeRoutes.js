@@ -136,15 +136,19 @@ router.get('/stats/summary', verifyToken, isAdmin, async (req, res) => {
 });
 
 // ============== REPORTING MANAGER: GET TEAM MEMBERS ==============
-router.get('/manager/team', verifyToken, async (req, res) => {
+router.get('/manager/team', verifyToken, isAdminOrManager, async (req, res) => {
     try {
+        const isAdminRole = ['admin', 'sub_admin', 'hr'].includes(req.user?.role);
         const managerEmployeeId = req.user?.employeeId;
-        const { data: manager, error: mErr } = await supabase
-            .from('employees').select('first_name, last_name')
-            .eq('employee_id', managerEmployeeId).single();
-        if (mErr || !manager) return res.status(404).json({ success: false, message: 'Manager not found' });
+        let managerName = null;
 
-        const managerName = `${manager.first_name} ${manager.last_name}`.trim();
+        if (!isAdminRole) {
+            const { data: manager, error: mErr } = await supabase
+                .from('employees').select('first_name, last_name')
+                .eq('employee_id', managerEmployeeId).single();
+            if (mErr || !manager) return res.status(404).json({ success: false, message: 'Manager not found' });
+            managerName = `${manager.first_name} ${manager.last_name}`.trim();
+        }
 
         // Fetch team members - trim stored values to handle any whitespace issues
         const { data: allEmps, error } = await supabase
@@ -154,12 +158,15 @@ router.get('/manager/team', verifyToken, async (req, res) => {
 
         if (error) throw error;
 
-        // Filter in JS: trim + lowercase compare to handle any DB whitespace/case issues
-        const team = (allEmps || []).filter(e =>
-            e.reporting_manager?.trim().toLowerCase() === managerName.toLowerCase()
-        );
+        const team = (allEmps || []).filter(e => {
+            if (isAdminRole) return true;
+            return e.reporting_manager?.trim().toLowerCase() === managerName.toLowerCase();
+        }).map(e => ({
+            ...e,
+            isFlexibleShift: typeof e.isFlexibleShift === 'boolean' ? e.isFlexibleShift : false
+        }));
 
-        res.json({ success: true, team, manager_name: managerName });
+        res.json({ success: true, team, manager_name: managerName || 'Admin / HR' });
     } catch (error) {
         console.error('Error fetching team:', error);
         res.status(500).json({ success: false, message: 'Failed to fetch team', error: error.message });
@@ -167,23 +174,38 @@ router.get('/manager/team', verifyToken, async (req, res) => {
 });
 
 // ============== REPORTING MANAGER: UPDATE TEAM MEMBER SHIFT ==============
-router.put('/manager/shift/:employee_id', verifyToken, async (req, res) => {
+router.put('/manager/shift/:employee_id', verifyToken, isAdminOrManager, async (req, res) => {
     console.log(`🔄 [SHIFT UPDATE] API hit — employee_id: ${req.params.employee_id} | by: ${req.user?.employeeId}`);
     try {
         const { employee_id } = req.params;
-        const { shift_timing, effective_from, effective_until } = req.body;
+        const { shift_timing, effective_from, effective_until, isFlexibleShift } = req.body;
         const managerEmployeeId = req.user?.employeeId;
 
-        if (!shift_timing || !shift_timing.trim()) {
-            return res.status(400).json({ success: false, message: 'Shift timing is required' });
+        const updates = {};
+        if (shift_timing !== undefined) {
+            if (!String(shift_timing).trim()) {
+                return res.status(400).json({ success: false, message: 'Shift timing is required' });
+            }
+            updates.shift_timing = String(shift_timing).trim();
+        }
+        if (isFlexibleShift !== undefined) {
+            updates.isFlexibleShift = Boolean(isFlexibleShift);
         }
 
-        const { data: manager, error: mErr } = await supabase
-            .from('employees').select('first_name, last_name')
-            .eq('employee_id', managerEmployeeId).single();
-        if (mErr || !manager) return res.status(403).json({ success: false, message: 'Manager not found' });
+        if (Object.keys(updates).length === 0) {
+            return res.status(400).json({ success: false, message: 'No update data provided' });
+        }
 
-        const managerName = `${manager.first_name} ${manager.last_name}`.trim();
+        const isAdminRole = ['admin', 'sub_admin', 'hr'].includes(req.user?.role);
+        let managerName = null;
+
+        if (!isAdminRole) {
+            const { data: manager, error: mErr } = await supabase
+                .from('employees').select('first_name, last_name')
+                .eq('employee_id', managerEmployeeId).single();
+            if (mErr || !manager) return res.status(403).json({ success: false, message: 'Manager not found' });
+            managerName = `${manager.first_name} ${manager.last_name}`.trim();
+        }
 
         const { data: emp, error: empErr } = await supabase
             .from('employees').select('employee_id, first_name, last_name, reporting_manager, email, shift_timing')
@@ -192,28 +214,46 @@ router.put('/manager/shift/:employee_id', verifyToken, async (req, res) => {
 
         console.log(`📧 [SHIFT UPDATE] Employee email found: ${emp.email || 'NULL — no email on record'}`);
 
-        if (emp.reporting_manager?.trim().toLowerCase() !== managerName.toLowerCase()) {
+        if (!isAdminRole && emp.reporting_manager?.trim().toLowerCase() !== managerName.toLowerCase()) {
             return res.status(403).json({ success: false, message: 'You can only update shift for employees who report to you' });
         }
 
         const effectiveFrom = effective_from || new Date().toISOString().split('T')[0];
 
-        const { data, error } = await supabase
-            .from('employees')
-            .update({ shift_timing: shift_timing.trim(), updated_at: new Date().toISOString() })
-            .eq('employee_id', employee_id)
-            .select('employee_id, first_name, last_name, shift_timing');
+        let data;
+        let error;
+        try {
+            ({ data, error } = await supabase
+                .from('employees')
+                .update({ ...updates, updated_at: new Date().toISOString() })
+                .eq('employee_id', employee_id)
+                .select('employee_id, first_name, last_name, shift_timing'));
+        } catch (updateErr) {
+            error = updateErr;
+        }
+
+        if (error && /isFlexibleShift|does not exist/i.test(error.message || '')) {
+            const { isFlexibleShift, ...safeUpdates } = updates;
+            ({ data, error } = await supabase
+                .from('employees')
+                .update({ ...safeUpdates, updated_at: new Date().toISOString() })
+                .eq('employee_id', employee_id)
+                .select('employee_id, first_name, last_name, shift_timing'));
+        }
 
         if (error) throw error;
 
-        await supabase.from('employee_shift_history').insert([{
-            employee_id,
-            shift_timing: shift_timing.trim(),
-            effective_from: effectiveFrom,
-            ...(effective_until ? { effective_until } : {})
-        }]);
-
-        console.log(`✅ [SHIFT UPDATE] DB updated — new shift: ${shift_timing.trim()} | effective_from: ${effectiveFrom}`);
+        if (updates.shift_timing) {
+            await supabase.from('employee_shift_history').insert([{
+                employee_id,
+                shift_timing: updates.shift_timing,
+                effective_from: effectiveFrom,
+                ...(effective_until ? { effective_until } : {})
+            }]);
+            console.log(`✅ [SHIFT UPDATE] DB updated — new shift: ${updates.shift_timing} | effective_from: ${effectiveFrom}`);
+        } else {
+            console.log(`✅ [SHIFT UPDATE] DB updated — flexible-shift flag changed for ${employee_id}`);
+        }
 
         res.json({ success: true, message: `Shift updated for ${emp.first_name} ${emp.last_name}`, employee: data[0] });
 
@@ -527,6 +567,7 @@ router.post('/', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
                     phone: employeeData.phone || null,
                     employment_type: employeeData.employment_type || 'Full Time',
                     shift_timing: employeeData.shift_timing || '9:00 AM - 6:00 PM',
+                    isFlexibleShift: employeeData.isFlexibleShift ?? employeeData.is_flexible_shift ?? false,
                     in_hand_salary: employeeData.in_hand_salary || 0,
                     gross_salary: employeeData.gross_salary || 0,
                     bank_account_name: employeeData.bank_account_name || null,
@@ -550,10 +591,24 @@ router.post('/', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
 
                 console.log('📦 Inserting employee with data:', newEmployee);
 
-                const { data, error } = await supabase
-                    .from('employees')
-                    .insert([newEmployee])
-                    .select();
+                let data;
+                let error;
+                try {
+                    ({ data, error } = await supabase
+                        .from('employees')
+                        .insert([newEmployee])
+                        .select());
+                } catch (insertErr) {
+                    error = insertErr;
+                }
+
+                if (error && /isFlexibleShift|does not exist/i.test(error.message || '')) {
+                    const { isFlexibleShift, ...safeEmployee } = newEmployee;
+                    ({ data, error } = await supabase
+                        .from('employees')
+                        .insert([safeEmployee])
+                        .select());
+                }
 
                 if (error) {
                     if (error.code === '23505') { // Duplicate key error
@@ -762,6 +817,12 @@ router.put('/:id', verifyToken, isAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         const updates = req.body;
+        if (updates.isFlexibleShift !== undefined) {
+            updates.isFlexibleShift = Boolean(updates.isFlexibleShift);
+        }
+        if (updates.is_flexible_shift !== undefined) {
+            updates.isFlexibleShift = Boolean(updates.is_flexible_shift);
+        }
         const newShiftTiming = updates.shift_timing;
 
         // Only admin/sub_admin can change role

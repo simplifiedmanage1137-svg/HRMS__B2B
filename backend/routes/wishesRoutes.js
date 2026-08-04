@@ -79,6 +79,7 @@ module.exports = (supabase, authenticateToken) => {
                 recipient_employee_id,
                 recipient_name,
                 sender_employee_id: employeeId,
+                
                 sender_name: senderName,
                 event_type: event_type || 'birthday',
                 event_date: today,
@@ -100,7 +101,7 @@ module.exports = (supabase, authenticateToken) => {
                     employee_id: recipient_employee_id,
                     type: 'wish_received',
                     title: eventLabel === 'anniversary' ? '🏆 New Work Anniversary Wish' : '🎂 New Birthday Wish',
-                    message: `${senderName} wished you a happy ${eventLabel}: "${message.trim().slice(0, 80)}"`,
+                    // message: `${senderName} wished you a happy ${eventLabel}: "${message.trim().slice(0, 80)}"`,
                     is_read: false,
                 });
             } catch (notifyErr) {
@@ -114,7 +115,7 @@ module.exports = (supabase, authenticateToken) => {
                     employee_id: employeeId,
                     author_name: senderName,
                     post_type: 'wish',
-                    content: `Wished ${recipient_name} a happy ${eventLabel}: "${message.trim()}"`,
+                    // content: `Wished ${recipient_name} a happy ${eventLabel}: "${message.trim()}"`,
                     praised_employee_id: recipient_employee_id,
                     praised_employee_name: recipient_name,
                     mentioned_employees: [],
