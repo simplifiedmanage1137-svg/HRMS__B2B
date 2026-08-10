@@ -3,7 +3,7 @@ import { Spinner, Alert, Modal, Button } from 'react-bootstrap';
 import {
     Copy, RefreshCw, CheckCircle, XCircle, FileText, Trash2, UserPlus,
     Search, Download, ExternalLink, ChevronRight, Clock, User, CreditCard,
-    ShieldCheck, Phone, ImageIcon, AlertTriangle,
+    ShieldCheck, Phone, ImageIcon, AlertTriangle, KeyRound, Zap, EyeOff,
 } from 'lucide-react';
 import API_ENDPOINTS from '../../config/api';
 
@@ -117,6 +117,7 @@ export default function OfferLinksManager() {
     const [search, setSearch]       = useState('');
     const [copied, setCopied]       = useState(null);
     const [actioning, setActioning] = useState(null);
+    const [clearingPwd, setClearingPwd] = useState(null);
 
     // Selected link + its submission
     const [selected, setSelected]       = useState(null);
@@ -178,6 +179,28 @@ export default function OfferLinksManager() {
             setCopied(token);
             setTimeout(() => setCopied(null), 2000);
         });
+    };
+
+    const copyValue = (e, key, value) => {
+        e.stopPropagation();
+        if (!value) return;
+        navigator.clipboard.writeText(value).then(() => {
+            setCopied(key);
+            setTimeout(() => setCopied(null), 2000);
+        });
+    };
+
+    const doClearTempPassword = async (link) => {
+        if (!window.confirm('Hide the temporary password for this employee? Only do this after you\'ve relayed it to them.')) return;
+        setClearingPwd(link.id);
+        try {
+            const res = await authFetch(API_ENDPOINTS.ONBOARDING_LINK_CLEAR_TEMP_PASSWORD(link.id), { method: 'PATCH' });
+            const d = await res.json();
+            if (!d.success) throw new Error(d.message);
+            setSelected(prev => prev && prev.id === link.id ? { ...prev, temp_password: null } : prev);
+            await load();
+        } catch (err) { alert(err.message); }
+        finally { setClearingPwd(null); }
     };
 
     const doExpire = async (e, link) => {
@@ -307,7 +330,14 @@ export default function OfferLinksManager() {
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ fontWeight: 700, color: isSelected ? '#3730a3' : '#111827', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.employee_name}</span>
-                                            <StatusBadge status={st} />
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                                                {st === 'approved' && l.temp_password && (
+                                                    <span title="Temp password not yet relayed" style={{ display: 'inline-flex', alignItems: 'center', background: '#fef3c7', color: '#92400e', borderRadius: 20, padding: '2px 7px' }}>
+                                                        <KeyRound size={10} />
+                                                    </span>
+                                                )}
+                                                <StatusBadge status={st} />
+                                            </div>
                                         </div>
                                         <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                             {l.designation} · {l.department} · {l.employment_type}
@@ -388,6 +418,11 @@ export default function OfferLinksManager() {
                                 </div>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 12, alignItems: 'center' }}>
                                     <StatusBadge status={selSt} size="lg" />
+                                    {selSt === 'approved' && selected.auto_approved && (
+                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#ecfeff', color: '#0e7490', borderRadius: 20, padding: '4px 12px', fontSize: 12, fontWeight: 600 }}>
+                                            <Zap size={12} /> Auto-Approved
+                                        </span>
+                                    )}
                                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                                         <span style={{ fontSize: 11, color: '#9ca3af' }}>Salary</span>
                                         <span style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>{fmtMoney(selected.salary)}<span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>/month</span></span>
@@ -423,6 +458,61 @@ export default function OfferLinksManager() {
                                 )}
                             </div>
                         </div>
+
+                        {/* ── Credentials (account was created — auto-approved on submit, or legacy manual approval) ── */}
+                        {selSt === 'approved' && selected.created_employee_id && (
+                            <div style={{ marginBottom: 20, padding: '18px 20px', background: '#fff', borderRadius: 14, border: '1px solid #bbf7d0' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                                    <div style={{ width: 28, height: 28, borderRadius: 7, background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <KeyRound size={14} color="#16a34a" />
+                                    </div>
+                                    <span style={{ fontSize: 13, fontWeight: 700, color: '#14532d', textTransform: 'uppercase', letterSpacing: 0.6 }}>Employee Account Created</span>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+                                    <div>
+                                        <span style={{ fontSize: 11, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600, display: 'block', marginBottom: 3 }}>Employee ID</span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <span style={{ fontSize: 14, fontWeight: 700, color: '#111827', fontFamily: 'monospace' }}>{selected.created_employee_id}</span>
+                                            <button onClick={e => copyValue(e, `empid-${selected.id}`, selected.created_employee_id)} title="Copy" style={{ background: 'none', border: 'none', cursor: 'pointer', color: copied === `empid-${selected.id}` ? '#16a34a' : '#9ca3af', padding: 2 }}>
+                                                {copied === `empid-${selected.id}` ? <CheckCircle size={13} /> : <Copy size={13} />}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <span style={{ fontSize: 11, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600, display: 'block', marginBottom: 3 }}>Login Email</span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <span style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>{subData?.email || '—'}</span>
+                                            {subData?.email && (
+                                                <button onClick={e => copyValue(e, `email-${selected.id}`, subData.email)} title="Copy" style={{ background: 'none', border: 'none', cursor: 'pointer', color: copied === `email-${selected.id}` ? '#16a34a' : '#9ca3af', padding: 2 }}>
+                                                    {copied === `email-${selected.id}` ? <CheckCircle size={13} /> : <Copy size={13} />}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <span style={{ fontSize: 11, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600, display: 'block', marginBottom: 3 }}>Temporary Password</span>
+                                        {selected.temp_password ? (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <span style={{ fontSize: 14, fontWeight: 700, color: '#92400e', fontFamily: 'monospace' }}>{selected.temp_password}</span>
+                                                <button onClick={e => copyValue(e, `pwd-${selected.id}`, selected.temp_password)} title="Copy" style={{ background: 'none', border: 'none', cursor: 'pointer', color: copied === `pwd-${selected.id}` ? '#16a34a' : '#9ca3af', padding: 2 }}>
+                                                    {copied === `pwd-${selected.id}` ? <CheckCircle size={13} /> : <Copy size={13} />}
+                                                </button>
+                                                <button onClick={() => doClearTempPassword(selected)} disabled={clearingPwd === selected.id} title="Hide password (after it's been relayed)" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 2 }}>
+                                                    {clearingPwd === selected.id ? <Spinner size="sm" animation="border" style={{ width: 12, height: 12 }} /> : <EyeOff size={13} />}
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <span style={{ fontSize: 13, color: '#9ca3af', fontStyle: 'italic' }}>Already changed / hidden</span>
+                                        )}
+                                    </div>
+                                </div>
+                                {selected.temp_password && (
+                                    <div style={{ fontSize: 11, color: '#92400e', marginTop: 12, background: '#fef3c7', borderRadius: 8, padding: '6px 10px' }}>
+                                        Share this securely with the employee. It's cleared automatically once they change their password.
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {/* ── Notes ── */}
                         {selected.notes && (

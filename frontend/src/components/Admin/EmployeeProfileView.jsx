@@ -21,8 +21,6 @@ import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useNavigate, useParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
-import SalarySlipManager from './SalarySlipManager';
-import AttendanceCalendar from './AttendanceCalendar';
 
 ChartJS.register(
   CategoryScale, LinearScale, BarElement,
@@ -166,9 +164,6 @@ const EmployeeProfileView = () => {
   const [leaveBalance, setLeaveBalance] = useState(null);
   const [leaveHistory, setLeaveHistory] = useState([]);
 
-  // salary
-  const [salaryList, setSalaryList] = useState([]);
-
   // ratings
   const [ratings, setRatings] = useState({ manager_ratings: [], admin_ratings: [], manager_average: null, admin_average: null });
 
@@ -181,9 +176,6 @@ const EmployeeProfileView = () => {
   // analytics
   const [overtimeData, setOvertimeData] = useState({ total: 0, monthly: [] });
   const [performanceTrend, setPerformanceTrend] = useState([]);
-
-  // salary slip refresh key — incremented after attendance is saved to trigger regeneration
-  const [salaryRefreshKey, setSalaryRefreshKey] = useState(0);
 
   // ── load employee profile ───────────────────────────────────────────────────
   useEffect(() => {
@@ -205,7 +197,6 @@ const EmployeeProfileView = () => {
           loadAttendanceSummary(emp.employee_id);
           loadLeaveBalance(emp.employee_id);
           loadRatings(emp.employee_id);
-          loadSalary(emp.employee_id);
           loadDocuments(emp.employee_id);
           loadActivities(emp.employee_id);
         }
@@ -220,7 +211,6 @@ const EmployeeProfileView = () => {
             loadAttendanceSummary(emp.employee_id);
             loadLeaveBalance(emp.employee_id);
             loadRatings(emp.employee_id);
-            loadSalary(emp.employee_id);
             loadDocuments(emp.employee_id);
             loadActivities(emp.employee_id);
           } else {
@@ -310,14 +300,6 @@ const EmployeeProfileView = () => {
       setLeaveBalance(balRes.data);
       const all = Array.isArray(leavesRes.data) ? leavesRes.data : leavesRes.data?.data || [];
       setLeaveHistory(all.filter(l => l.employee_id === empId));
-    } catch { /* non-fatal */ }
-  };
-
-  const loadSalary = async (empId) => {
-    try {
-      const res = await axios.get(API_ENDPOINTS.SALARY_EMPLOYEE(empId));
-      const data = Array.isArray(res.data) ? res.data : res.data?.data || [];
-      setSalaryList(data);
     } catch { /* non-fatal */ }
   };
 
@@ -471,34 +453,6 @@ const EmployeeProfileView = () => {
     XLSX.writeFile(wb, `leaves_${employee?.employee_id}.xlsx`);
   };
 
-  const exportPayroll = () => {
-    const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    const rows = salaryList.map((s, i) => {
-      const customDed = parseFloat(s.custom_deduction || 0);
-      const absentDed = parseFloat(s.unpaid_deduction || 0);
-      const dtDed     = parseFloat(s.dt || 0);
-      const totalDed  = dtDed + absentDed + customDed;
-      return {
-        'Sr': i + 1,
-        'Month': MONTH_NAMES[(parseInt(s.month) - 1)] || s.month,
-        'Year': s.year,
-        'Monthly Salary': s.monthly_salary,
-        'Basic (Earned)': s.basic_salary,
-        'Overtime': s.overtime_amount || 0,
-        'Fixed Deduction (DT/PF+PT)': dtDed,
-        'Absent Deduction': absentDed,
-        'Other Deduction': customDed,
-        'Total Deductions': totalDed,
-        'Net Salary': s.net_salary,
-        'Status': s.is_paid ? 'Paid' : 'Unpaid',
-      };
-    });
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Payroll');
-    XLSX.writeFile(wb, `payroll_${employee?.employee_id}.xlsx`);
-  };
-
   const exportEmployeeSummary = () => {
     const data = {
       'Employee Information': {
@@ -542,18 +496,6 @@ const EmployeeProfileView = () => {
   };
 
   // After attendance is saved via calendar, regenerate the salary slip so counts stay in sync
-  const handleAttendanceSaved = useCallback(async (month, year) => {
-    if (!employee?.employee_id) return;
-    try {
-      await axios.post(API_ENDPOINTS.SALARY_GENERATE, {
-        employee_id: employee.employee_id, month, year,
-      });
-      setSalaryRefreshKey(k => k + 1);
-    } catch {
-      // Non-fatal — salary slip regeneration failed; admin can still click Generate manually
-    }
-  }, [employee?.employee_id]);
-
   // ── loading / error states ─────────────────────────────────────────────────
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -580,7 +522,6 @@ const EmployeeProfileView = () => {
     { id: 'overview',    label: 'Overview',    icon: <FaUser /> },
     { id: 'attendance',  label: 'Attendance',  icon: <FaClock /> },
     { id: 'leaves',      label: 'Leaves',      icon: <FaUmbrellaBeach /> },
-    { id: 'payroll',     label: 'Payroll',     icon: <FaCreditCard /> },
     { id: 'performance', label: 'Performance', icon: <FaStar /> },
     { id: 'documents',   label: 'Documents',   icon: <FaFileContract /> },
     { id: 'timeline',    label: 'Timeline',    icon: <FaHistory /> },
@@ -935,20 +876,6 @@ const EmployeeProfileView = () => {
           </>
         )}
 
-        {/* ═══════════════════════ PAYROLL TAB ═════════════════════════════════ */}
-        {activeTab === 'payroll' && (
-          <>
-            <Row className="g-3 mb-3">
-              {[
-                { label: 'Gross Salary',   value: fmtCurrency(employee.gross_salary),   color: '#22c55e', icon: <FaCreditCard /> },
-                { label: 'In-Hand Salary', value: fmtCurrency(employee.in_hand_salary), color: '#6366f1', icon: <FaCreditCard /> },
-              ].map(s => <Col xs={12} md={6} key={s.label}><StatCard {...s} /></Col>)}
-            </Row>
-            <SalarySlipManager employee={employee} refreshKey={salaryRefreshKey} />
-            <AttendanceCalendar employee={employee} onAttendanceSaved={handleAttendanceSaved} />
-          </>
-        )}
-
         {/* ═══════════════════════ PERFORMANCE TAB ════════════════════════════ */}
         {activeTab === 'performance' && (
           <>
@@ -1165,9 +1092,6 @@ const EmployeeProfileView = () => {
           </button>
           <button onClick={exportLeaves} style={{ background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s' }}>
             <FaDownload size={10} /> Leaves
-          </button>
-          <button onClick={exportPayroll} style={{ background: '#22c55e', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s' }}>
-            <FaDownload size={10} /> Payroll
           </button>
           <button onClick={exportEmployeeSummary} style={{ background: '#f97316', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s' }}>
             <FaDownload size={10} /> Summary

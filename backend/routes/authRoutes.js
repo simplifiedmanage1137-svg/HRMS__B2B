@@ -350,6 +350,17 @@ router.post('/change-password', passwordLimiter, async (req, res) => {
         const { error: updateError } = await supabase.from('employees').update({ password: hashedPassword, updated_at: new Date().toISOString() }).eq('id', decoded.id);
         if (updateError) throw updateError;
 
+        // If this account was auto-created from an onboarding offer link, clear the
+        // plaintext temp password HR/Admin could see in Offer Links — it's no longer
+        // valid once the employee sets their own password. Never fails the response.
+        if (user.employee_id) {
+            supabase.from('employee_offer_links')
+                .update({ temp_password: null })
+                .eq('created_employee_id', user.employee_id)
+                .then(() => {})
+                .catch(() => {});
+        }
+
         res.json({ success: true, message: 'Password changed successfully' });
 
     } catch (error) {

@@ -132,8 +132,13 @@ export const API_ENDPOINTS = {
   SALARY_EMPLOYEE:      (employeeId) => ep(`/api/salary/employee/${employeeId}`),
   SALARY_BY_ID:         (id) => ep(`/api/salary/${id}`),
   SALARY_GENERATE:      ep('/api/salary/generate'),
+  SALARY_GENERATE_BULK: ep('/api/salary/generate-bulk'),
   SALARY_BULK_PAYROLL:  (month, year) => ep(`/api/salary/bulk?month=${month}&year=${year}`),
   SALARY_ADJUSTMENT:    ep('/api/salary/adjustment'),
+  SALARY_STATISTICS:    ep('/api/salary/stats/summary'),
+  SALARY_MARK_PAID:     (id) => ep(`/api/salary/${id}/mark-paid`),
+  SALARY_DELETE:        (id) => ep(`/api/salary/${id}`),
+  SALARY_UPDATE:        (id) => ep(`/api/salary/${id}`),
 
   // Notifications
   NOTIFICATIONS:        ep('/api/notifications'),
@@ -218,6 +223,7 @@ export const API_ENDPOINTS = {
   ONBOARDING_LINK_EXPIRE:       (id) => ep(`/api/onboarding/links/${id}/expire`),
   ONBOARDING_LINK_DELETE:       (id) => ep(`/api/onboarding/links/${id}`),
   ONBOARDING_LINK_APPROVE:      (id) => ep(`/api/onboarding/links/${id}/approve`),
+  ONBOARDING_LINK_CLEAR_TEMP_PASSWORD: (id) => ep(`/api/onboarding/links/${id}/clear-temp-password`),
   ONBOARDING_LINK_SUBMISSION:   (id) => ep(`/api/onboarding/links/${id}/submission`),
   ONBOARDING_BY_TOKEN:          (token) => ep(`/api/onboarding/${token}`),
   ONBOARDING_ACCEPT:            (token) => ep(`/api/onboarding/${token}/accept`),

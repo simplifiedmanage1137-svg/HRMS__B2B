@@ -278,7 +278,7 @@ const EmpQuickView = ({ emp, onClose, navigate, user, onToggleStatus, togglingSt
                   <QuickActionBtn icon={FaEdit} label="Edit Details" color="#0ea5e9" onClick={() => navigate(`/admin/edit-employee/${emp.id}`)} />
                 )}
                 <QuickActionBtn icon={FaClock} label="Attendance" color="#22c55e" onClick={() => navigate(`/admin/employees/${emp.employee_id}`)} />
-                <QuickActionBtn icon={FaCreditCard} label="Salary / Payroll" color="#f97316" onClick={() => navigate(`/admin/employees/${emp.employee_id}`)} />
+                <QuickActionBtn icon={FaCreditCard} label="Salary / Payroll" color="#f97316" onClick={() => navigate('/admin/payroll')} />
                 <QuickActionBtn icon={FaFileAlt} label="Documents" color="#8b5cf6" onClick={() => onViewDocs(emp)} />
               </div>
             </div>
@@ -384,7 +384,7 @@ const EmpQuickView = ({ emp, onClose, navigate, user, onToggleStatus, togglingSt
                 <div style={{ fontSize: 22, fontWeight: 800, color: '#111827', marginTop: 2 }}>{fmtCurrency(emp.in_hand_salary)}</div>
               </div>
             </div>
-            <button onClick={() => navigate(`/admin/employees/${emp.employee_id}`)} style={{ width: '100%', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <button onClick={() => navigate('/admin/payroll')} style={{ width: '100%', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               <FaEye size={12} /> View Full Payroll & Salary Slips
             </button>
           </>

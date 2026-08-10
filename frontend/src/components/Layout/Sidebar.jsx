@@ -6,7 +6,7 @@ import {
   FaUserCircle, FaSignOutAlt, FaFingerprint, FaClock,
   FaBell, FaPaperPlane, FaEdit, FaUserTie,
   FaBullhorn, FaStar, FaChevronRight, FaLayerGroup, FaDesktop, FaChartLine, FaMinusCircle, FaFileExcel,
-  FaTicketAlt, FaReceipt
+  FaTicketAlt, FaReceipt, FaFileInvoiceDollar
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -228,7 +228,11 @@ const Sidebar = () => {
               <NavItem to="/admin/attendance/reports" icon={<FaClock />}       label="Attendance" />
               <NavItem to="/admin/ratings"            icon={<FaStar />}        label="Employee Ratings" />
               <NavItem to="/performance/reviews"      icon={<FaChartLine />}   label="Performance Reviews" />
+              <NavItem to="/admin/payroll"            icon={<FaMoneyBill />}   label="Payroll" />
               <NavItem to="/admin/deductions"         icon={<FaReceipt />} label="Deductions" />
+              {user?.role === 'admin' && (
+                <NavItem to="/editslip" icon={<FaFileInvoiceDollar />} label="Manual Salary Slip" />
+              )}
               <NavItem to="/tickets"                  icon={<FaTicketAlt />}   label="Support Tickets" />
               <Section label="Admin Tools" />
               <NavItem to="/admin/teams"          icon={<FaLayerGroup />}  label="TL Teams" />

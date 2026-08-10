@@ -86,8 +86,13 @@ const PayrollAdjustment = () => {
   const [dirty,    setDirty]    = useState({});    // { employee_id: true }
   const [saved,    setSaved]    = useState({});    // { employee_id: true }
 
-  // Local edits: { employee_id: { salary_earned: string, shift_hours: string } }
+  // Local edits: { employee_id: { salary_earned: string, shift_hours: string, pf_amount: string, pt_amount: string } }
   const [edits, setEdits] = useState({});
+
+  // Bulk PF/PT: select employees, stage one PF/PT value across all of them
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkPf, setBulkPf] = useState('');
+  const [bulkPt, setBulkPt] = useState('');
 
   // Debounce timers
   const debounceRef = useRef({});
@@ -98,6 +103,7 @@ const PayrollAdjustment = () => {
     setEdits({});
     setDirty({});
     setSaved({});
+    setSelectedIds(new Set());
     try {
       const res = await axios.get(API_ENDPOINTS.SALARY_BULK_PAYROLL(month, year));
       setRecords(res.data.records || []);
@@ -115,11 +121,66 @@ const PayrollAdjustment = () => {
     const e = edits[rec.employee_id] || {};
     const salaryEarned  = e.salary_earned  !== undefined ? e.salary_earned  : String(rec.salary_earned  ?? rec.monthly_salary);
     const shiftHours    = e.shift_hours    !== undefined ? e.shift_hours    : String(rec.shift_hours    ?? 8);
+    // '' means "not set" — falls back to the default (1800 for PF, 200 for PT) at calculation time.
+    // Explicit 0 is a valid value (PF/PT-exempt) and is kept as '0', not treated as unset.
+    const pfAmount      = e.pf_amount      !== undefined ? e.pf_amount      : (rec.pf_amount != null ? String(rec.pf_amount) : '');
+    const ptAmount      = e.pt_amount      !== undefined ? e.pt_amount      : (rec.pt_amount != null ? String(rec.pt_amount) : '');
 
     const earnedNum = salaryEarned === '' ? rec.monthly_salary : Number(salaryEarned);
     const calc = calcAdjustment(rec.monthly_salary, earnedNum, rec.total_working_days, Number(shiftHours) || 8);
 
-    return { salaryEarned, shiftHours, ...calc };
+    return { salaryEarned, shiftHours, pfAmount, ptAmount, ...calc };
+  };
+
+  // ── Bulk PF/PT selection ─────────────────────────────────────────────────────
+  const toggleSelect = (employeeId) => {
+    setSelectedIds(prev => {
+      const n = new Set(prev);
+      if (n.has(employeeId)) n.delete(employeeId); else n.add(employeeId);
+      return n;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds(prev => (prev.size === records.length ? new Set() : new Set(records.map(r => r.employee_id))));
+  };
+
+  const applyBulkPfPt = () => {
+    if (selectedIds.size === 0) {
+      showNotification('Select at least one employee first', 'warning');
+      return;
+    }
+    if (bulkPf === '' && bulkPt === '') {
+      showNotification('Enter a PF and/or PT amount to apply', 'warning');
+      return;
+    }
+    const pfNum = bulkPf === '' ? undefined : Number(bulkPf);
+    const ptNum = bulkPt === '' ? undefined : Number(bulkPt);
+    if ((pfNum !== undefined && (isNaN(pfNum) || pfNum < 0)) || (ptNum !== undefined && (isNaN(ptNum) || ptNum < 0))) {
+      showNotification('PF and PT must be 0 or a positive amount', 'danger');
+      return;
+    }
+
+    setEdits(prev => {
+      const next = { ...prev };
+      selectedIds.forEach(id => {
+        next[id] = { ...(next[id] || {}) };
+        if (pfNum !== undefined) next[id].pf_amount = String(pfNum);
+        if (ptNum !== undefined) next[id].pt_amount = String(ptNum);
+      });
+      return next;
+    });
+    setDirty(prev => {
+      const next = { ...prev };
+      selectedIds.forEach(id => { next[id] = true; });
+      return next;
+    });
+    setSaved(prev => {
+      const next = { ...prev };
+      selectedIds.forEach(id => { delete next[id]; });
+      return next;
+    });
+    showNotification(`PF/PT staged for ${selectedIds.size} employee(s) — click "Save All" to persist`, 'success');
   };
 
   // ── Handle field change (instant recalc, debounced dirty mark) ──────────────
@@ -148,6 +209,13 @@ const PayrollAdjustment = () => {
       return;
     }
 
+    const pfNum = row.pfAmount === '' ? null : Number(row.pfAmount);
+    const ptNum = row.ptAmount === '' ? null : Number(row.ptAmount);
+    if ((pfNum !== null && (isNaN(pfNum) || pfNum < 0)) || (ptNum !== null && (isNaN(ptNum) || ptNum < 0))) {
+      showNotification('PF and PT cannot be negative', 'danger');
+      return;
+    }
+
     setSaving(prev => ({ ...prev, [rec.employee_id]: true }));
     try {
       await axios.post(API_ENDPOINTS.SALARY_ADJUSTMENT, {
@@ -157,6 +225,17 @@ const PayrollAdjustment = () => {
         salary_earned: parseFloat(salaryEarnedNum.toFixed(2)),
         shift_hours:   parseFloat(row.shiftHours) || 8,
       });
+
+      // Only touch the employee record when PF/PT was actually edited (avoids an
+      // unnecessary write on every save when only Salary Earned/Shift Hours changed).
+      const edited = edits[rec.employee_id] || {};
+      if (edited.pf_amount !== undefined || edited.pt_amount !== undefined) {
+        await axios.put(API_ENDPOINTS.EMPLOYEE_BY_ID(rec.id), {
+          pf_amount: pfNum,
+          pt_amount: ptNum,
+        });
+      }
+
       setSaved(prev  => ({ ...prev, [rec.employee_id]: true }));
       setDirty(prev  => { const n = { ...prev }; delete n[rec.employee_id]; return n; });
       // Refresh the record from server
@@ -267,6 +346,48 @@ const PayrollAdjustment = () => {
         </div>
       </div>
 
+      {/* ── Bulk PF/PT toolbar ───────────────────────────────────────────────── */}
+      {records.length > 0 && (
+        <div style={{ background: '#fff', borderRadius: 12, padding: '14px 20px', boxShadow: '0 1px 6px rgba(0,0,0,0.06)', marginBottom: 20, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>
+            Bulk PF / PT{selectedIds.size > 0 ? ` — ${selectedIds.size} selected` : ''}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>PF (₹)</label>
+            <input
+              type="number" min="0" step="1" placeholder="e.g. 1800"
+              value={bulkPf}
+              onChange={e => setBulkPf(e.target.value)}
+              style={{ width: 90, padding: '6px 8px', fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0', outline: 'none' }}
+            />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>PT (₹)</label>
+            <input
+              type="number" min="0" step="1" placeholder="e.g. 200"
+              value={bulkPt}
+              onChange={e => setBulkPt(e.target.value)}
+              style={{ width: 90, padding: '6px 8px', fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0', outline: 'none' }}
+            />
+          </div>
+          <button
+            onClick={applyBulkPfPt}
+            disabled={selectedIds.size === 0}
+            style={{
+              ...primaryBtn,
+              background: selectedIds.size > 0 ? '#6366f1' : '#e2e8f0',
+              color:      selectedIds.size > 0 ? '#fff'    : '#94a3b8',
+              cursor:     selectedIds.size === 0 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            Apply to {selectedIds.size || 0} selected
+          </button>
+          <span style={{ fontSize: 11, color: '#94a3b8' }}>
+            Select employees below, enter a value, apply — then Save All to persist. 0 is valid (PF/PT-exempt).
+          </span>
+        </div>
+      )}
+
       {/* ── Summary cards ────────────────────────────────────────────────────── */}
       {records.length > 0 && (
         <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
@@ -315,9 +436,17 @@ const PayrollAdjustment = () => {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ background: '#1e3a5f', color: '#fff' }}>
+                  <th style={{ padding: '11px 12px', textAlign: 'center', borderRight: '1px solid rgba(255,255,255,0.08)', width: 36 }}>
+                    <input
+                      type="checkbox"
+                      checked={records.length > 0 && selectedIds.size === records.length}
+                      onChange={toggleSelectAll}
+                      title="Select all"
+                    />
+                  </th>
                   {[
                     'Employee', 'Code', 'Monthly Salary',
-                    'Salary Earned\nThis Month', 'Shift Hrs',
+                    'Salary Earned\nThis Month', 'Shift Hrs', 'PF (₹)', 'PT (₹)',
                     'Difference', 'OT Amount', 'OT Hours',
                     'Deduction', 'Final Payable', 'Status', 'Action'
                   ].map(h => (
@@ -333,8 +462,12 @@ const PayrollAdjustment = () => {
                   const isSaving  = saving[rec.employee_id];
                   const isDirty   = dirty[rec.employee_id];
                   const isSaved   = saved[rec.employee_id];
+                  const isSelected = selectedIds.has(rec.employee_id);
                   const earnedNum = row.salaryEarned === '' ? rec.monthly_salary : Number(row.salaryEarned);
-                  const isInvalid = isNaN(earnedNum) || earnedNum < 0;
+                  const pfNum = row.pfAmount === '' ? null : Number(row.pfAmount);
+                  const ptNum = row.ptAmount === '' ? null : Number(row.ptAmount);
+                  const isPfPtInvalid = (pfNum !== null && (isNaN(pfNum) || pfNum < 0)) || (ptNum !== null && (isNaN(ptNum) || ptNum < 0));
+                  const isInvalid = isNaN(earnedNum) || earnedNum < 0 || isPfPtInvalid;
 
                   return (
                     <tr
@@ -345,6 +478,11 @@ const PayrollAdjustment = () => {
                         transition: 'background 0.15s',
                       }}
                     >
+                      {/* Select */}
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(rec.employee_id)} />
+                      </td>
+
                       {/* Employee */}
                       <td style={{ padding: '10px 12px', fontWeight: 600, color: '#1e293b' }}>
                         <div>{rec.first_name} {rec.last_name}</div>
@@ -399,6 +537,46 @@ const PayrollAdjustment = () => {
                             border: `1.5px solid ${isDirty ? '#fbbf24' : '#e2e8f0'}`,
                             borderRadius: 7, outline: 'none', textAlign: 'center',
                             background: '#fff', color: '#475569',
+                          }}
+                          onFocus={e => e.target.select()}
+                        />
+                      </td>
+
+                      {/* PF — editable, blank = default (₹1800), 0 valid (exempt) */}
+                      <td style={{ padding: '8px 10px' }}>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          placeholder="1800"
+                          value={row.pfAmount}
+                          onChange={e => handleChange(rec.employee_id, 'pf_amount', e.target.value)}
+                          style={{
+                            width: 80, padding: '5px 8px', fontSize: 12, fontWeight: 600,
+                            border: `1.5px solid ${isPfPtInvalid ? '#fca5a5' : isDirty ? '#fbbf24' : '#e2e8f0'}`,
+                            borderRadius: 7, outline: 'none', textAlign: 'right',
+                            background: isPfPtInvalid ? '#fef2f2' : '#fff',
+                            color: '#1e293b',
+                          }}
+                          onFocus={e => e.target.select()}
+                        />
+                      </td>
+
+                      {/* PT — editable, blank = default (₹200), 0 valid (exempt) */}
+                      <td style={{ padding: '8px 10px' }}>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          placeholder="200"
+                          value={row.ptAmount}
+                          onChange={e => handleChange(rec.employee_id, 'pt_amount', e.target.value)}
+                          style={{
+                            width: 70, padding: '5px 8px', fontSize: 12, fontWeight: 600,
+                            border: `1.5px solid ${isPfPtInvalid ? '#fca5a5' : isDirty ? '#fbbf24' : '#e2e8f0'}`,
+                            borderRadius: 7, outline: 'none', textAlign: 'right',
+                            background: isPfPtInvalid ? '#fef2f2' : '#fff',
+                            color: '#1e293b',
                           }}
                           onFocus={e => e.target.select()}
                         />

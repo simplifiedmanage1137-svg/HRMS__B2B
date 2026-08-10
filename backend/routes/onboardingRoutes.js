@@ -4,12 +4,77 @@ const router  = express.Router();
 const crypto  = require('crypto');
 const path    = require('path');
 const multer  = require('multer');
+const bcrypt  = require('bcryptjs');
 const supabase = require('../config/supabase');
 const { verifyToken, isAdmin, isAdminOrDesktopSupport } = require('../middleware/auth');
 const { uploadFile } = require('../lib/supabaseStorage');
 const { createOnboardingTickets } = require('../utils/onboardingTickets');
 
 const BUCKET = 'hrms-documents';
+
+// ── Shared account-creation logic ─────────────────────────────────────────────
+// Used by both the auto-approval path (POST /:token/submit) and the legacy manual
+// /links/:id/approve endpoint, so the two can never calculate/insert an employee
+// record differently. `sub` uses the same field names as an
+// employee_onboarding_submissions row (first_name, middle_name, ... joining_date).
+const createEmployeeAccountFromSubmission = async (offer, sub) => {
+    const now = new Date();
+
+    // Generate employee_id (B2BYYMMNN)
+    const { data: existing } = await supabase.from('employees').select('employee_id');
+    const yy  = String(now.getFullYear()).slice(-2);
+    const mm  = String(now.getMonth() + 1).padStart(2, '0');
+    const prefix = `B2B${yy}${mm}`;
+    const count = (existing || []).filter(e => e.employee_id?.startsWith(prefix)).length;
+    const newEmployeeId = `${prefix}${String(count + 1).padStart(2, '0')}`;
+
+    const tempPassword = `HRMS@${Math.random().toString(36).slice(-6).toUpperCase()}`;
+    const hashed = await bcrypt.hash(tempPassword, 10);
+
+    const { data: emp, error: empErr } = await supabase.from('employees').insert([{
+        employee_id:    newEmployeeId,
+        first_name:     sub.first_name,
+        middle_name:    sub.middle_name || null,
+        last_name:      sub.last_name,
+        email:          sub.email,
+        password:       hashed,
+        phone:          sub.phone || null,
+        dob:            sub.dob || null,
+        gender:         sub.gender || null,
+        blood_group:    sub.blood_group || null,
+        linkedin_url:   sub.linkedin_url || null,
+        address:        sub.address || null,
+        city:           sub.city || null,
+        state:          sub.state || null,
+        pincode:        sub.pincode || null,
+        designation:    offer.designation,
+        department:     offer.department,
+        employment_type: offer.employment_type,
+        gross_salary:   offer.salary,
+        in_hand_salary: Math.max(0, offer.salary - 200),
+        reporting_manager: offer.reporting_manager || null,
+        joining_date:   sub.joining_date || now.toISOString().split('T')[0],
+        bank_account_name: sub.bank_account_name || null,
+        account_number: sub.account_number || null,
+        ifsc_code:      sub.ifsc_code || null,
+        branch_name:    sub.branch_name || null,
+        pan_number:     sub.pan_number || null,
+        aadhar_number:  sub.aadhar_number || null,
+        uan:            sub.uan || null,
+        emergency_contact: sub.emergency_contact || null,
+        emergency_contact_name: sub.emergency_contact_name || null,
+        emergency_contact_relation: sub.emergency_contact_relation || null,
+        role:           'employee',
+        is_active:      true,
+        can_apply_leave: true,
+        profile_completed: true,
+        shift_timing:   '9:00 AM - 6:00 PM',
+    }]).select().single();
+
+    if (empErr) throw empErr;
+
+    return { employee: emp, employeeId: newEmployeeId, tempPassword };
+};
 
 // 4 MB per file — keeps each multipart request well under Vercel's 4.5 MB payload cap.
 const uploadSingle = multer({
@@ -135,11 +200,28 @@ router.delete('/links/:id', verifyToken, isAdmin, async (req, res) => {
     }
 });
 
+// ── PATCH /api/onboarding/links/:id/clear-temp-password — Protected ───────────
+// Lets HR/Admin deliberately hide the temp password from Offer Links once
+// they've relayed it to the new hire (independent of the automatic clear that
+// happens when the employee changes their own password — see /auth/change-password).
+router.patch('/links/:id/clear-temp-password', verifyToken, isAdmin, async (req, res) => {
+    try {
+        const { error } = await supabase.from('employee_offer_links')
+            .update({ temp_password: null, updated_at: new Date().toISOString() })
+            .eq('id', req.params.id);
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 // ── PATCH /api/onboarding/links/:id/approve — Protected: create employee account
+// Legacy manual-approval path — kept for any pre-existing 'submitted' links from
+// before auto-approval-on-submit shipped. New submissions never reach this route
+// since /:token/submit below now creates the account immediately.
 router.patch('/links/:id/approve', verifyToken, isAdmin, async (req, res) => {
     try {
-        const bcrypt = require('bcryptjs');
-
         const { data: offer } = await supabase
             .from('employee_offer_links').select('*').eq('id', req.params.id).maybeSingle();
         if (!offer) return res.status(404).json({ success: false, message: 'Offer not found' });
@@ -150,67 +232,18 @@ router.patch('/links/:id/approve', verifyToken, isAdmin, async (req, res) => {
             .from('employee_onboarding_submissions').select('*').eq('offer_id', req.params.id).maybeSingle();
         if (!sub) return res.status(404).json({ success: false, message: 'No submission found for this offer' });
 
-        // Generate employee_id (B2BYYMMNN)
-        const { data: existing } = await supabase.from('employees').select('employee_id');
-        const now = new Date();
-        const yy  = String(now.getFullYear()).slice(-2);
-        const mm  = String(now.getMonth() + 1).padStart(2, '0');
-        const prefix = `B2B${yy}${mm}`;
-        const count = (existing || []).filter(e => e.employee_id?.startsWith(prefix)).length;
-        const newEmployeeId = `${prefix}${String(count + 1).padStart(2, '0')}`;
-
-        const tempPassword = `HRMS@${Math.random().toString(36).slice(-6).toUpperCase()}`;
-        const hashed = await bcrypt.hash(tempPassword, 10);
-
-        const { data: emp, error: empErr } = await supabase.from('employees').insert([{
-            employee_id:    newEmployeeId,
-            first_name:     sub.first_name,
-            middle_name:    sub.middle_name || null,
-            last_name:      sub.last_name,
-            email:          sub.email,
-            password:       hashed,
-            phone:          sub.phone || null,
-            dob:            sub.dob || null,
-            gender:         sub.gender || null,
-            blood_group:    sub.blood_group || null,
-            linkedin_url:   sub.linkedin_url || null,
-            address:        sub.address || null,
-            city:           sub.city || null,
-            state:          sub.state || null,
-            pincode:        sub.pincode || null,
-            designation:    offer.designation,
-            department:     offer.department,
-            employment_type: offer.employment_type,
-            gross_salary:   offer.salary,
-            in_hand_salary: Math.max(0, offer.salary - 200),
-            reporting_manager: offer.reporting_manager || null,
-            joining_date:   sub.joining_date || now.toISOString().split('T')[0],
-            bank_account_name: sub.bank_account_name || null,
-            account_number: sub.account_number || null,
-            ifsc_code:      sub.ifsc_code || null,
-            branch_name:    sub.branch_name || null,
-            pan_number:     sub.pan_number || null,
-            aadhar_number:  sub.aadhar_number || null,
-            uan:            sub.uan || null,
-            emergency_contact: sub.emergency_contact || null,
-            emergency_contact_name: sub.emergency_contact_name || null,
-            emergency_contact_relation: sub.emergency_contact_relation || null,
-            role:           'employee',
-            is_active:      true,
-            can_apply_leave: true,
-            profile_completed: true,
-            shift_timing:   '9:00 AM - 6:00 PM',
-        }]).select().single();
-
-        if (empErr) throw empErr;
+        const { employee: emp, employeeId: newEmployeeId, tempPassword } = await createEmployeeAccountFromSubmission(offer, sub);
 
         await createOnboardingTickets(supabase, { employee: emp, actor: req.user });
 
+        const now = new Date();
         await supabase.from('employee_offer_links').update({
-            status:      'approved',
-            approved_at: now.toISOString(),
-            approved_by: req.user.employeeId,
-            updated_at:  now.toISOString(),
+            status:               'approved',
+            approved_at:          now.toISOString(),
+            approved_by:          req.user.employeeId,
+            temp_password:        tempPassword,
+            created_employee_id:  newEmployeeId,
+            updated_at:           now.toISOString(),
         }).eq('id', req.params.id);
 
         res.json({
@@ -428,8 +461,9 @@ router.post('/:token/submit', async (req, res) => {
         if (!aadhar_card_doc)           return res.status(400).json({ success: false, message: 'Aadhar card document is required' });
         if (!pan_card_doc)              return res.status(400).json({ success: false, message: 'PAN card document is required' });
 
-        const { error } = await supabase.from('employee_onboarding_submissions').insert([{
-            offer_id:      offer.id,
+        // Shared shape: inserted as-is into employee_onboarding_submissions, and reused
+        // directly (no re-fetch) by createEmployeeAccountFromSubmission below.
+        const submissionRow = {
             first_name:    first_name.trim(),
             middle_name:   middle_name?.trim() || null,
             last_name:     last_name.trim(),
@@ -454,14 +488,44 @@ router.post('/:token/submit', async (req, res) => {
             aadhar_card_doc,
             pan_card_doc,
             offer_letter_doc: offer_letter_doc || null,
-        }]);
+        };
+
+        const { error } = await supabase.from('employee_onboarding_submissions')
+            .insert([{ offer_id: offer.id, ...submissionRow }]);
         if (error) throw error;
 
-        await supabase.from('employee_offer_links').update({
-            status: 'submitted',
-            submitted_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-        }).eq('token', req.params.token);
+        // Auto-approve immediately — no manual admin review gate. Creates the employee
+        // account right away, raises the onboarding tickets, and records the temp
+        // password on the offer link so HR/Admin can view it in Offer Links until the
+        // employee changes it on first login (see /auth/change-password clearing it).
+        const now = new Date();
+        try {
+            const { employee: emp, employeeId: newEmployeeId, tempPassword } =
+                await createEmployeeAccountFromSubmission(offer, submissionRow);
+
+            await createOnboardingTickets(supabase, { employee: emp, actor: { employeeId: offer.generated_by } });
+
+            await supabase.from('employee_offer_links').update({
+                status:               'approved',
+                submitted_at:         now.toISOString(),
+                approved_at:          now.toISOString(),
+                approved_by:          null, // auto-approved — no admin action
+                auto_approved:        true,
+                temp_password:        tempPassword,
+                created_employee_id:  newEmployeeId,
+                updated_at:           now.toISOString(),
+            }).eq('token', req.params.token);
+        } catch (autoApproveErr) {
+            // Submission itself already succeeded — fall back to the old manual-review
+            // state rather than losing the candidate's data if account creation fails
+            // (e.g. duplicate email already in `employees`).
+            console.error('[onboarding] auto-approve on submit failed:', autoApproveErr);
+            await supabase.from('employee_offer_links').update({
+                status: 'submitted',
+                submitted_at: now.toISOString(),
+                updated_at: now.toISOString(),
+            }).eq('token', req.params.token);
+        }
 
         return res.status(201).json({ success: true, message: 'Onboarding form submitted successfully' });
     } catch (err) {

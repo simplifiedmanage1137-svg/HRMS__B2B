@@ -1,6 +1,7 @@
 const supabase = require('../config/supabase');
 const { isDateHoliday, getHolidayName } = require('../data/holidays');
 const { getDeductionTotal } = require('./deductionController');
+const { toUTCMs } = require('./attendanceController')._shared;
 
 const FIXED_WORKING_DAYS = 22;
 // Helper function to get month name
@@ -127,22 +128,26 @@ const getEmployeeDetails = async (employeeId) => {
 };
 
 // Get attendance records for the cycle - best record per day
+//
+// Dedup logic mirrors attendanceController.getAttendanceReport exactly (same bug, same fix,
+// ported rather than reinvented): this used to have a rule where a 0-minute "admin absent"
+// row always beat a genuine clock-in row for the same day, on the theory that it must have
+// been an explicit admin override. In practice that shape is indistinguishable from
+// cron/absentEmployeeCheck.js's stale nightly placeholder (clock_in null, status 'absent',
+// written before the employee actually clocked in) — so real present/working days were
+// silently counted as absent in salary calculations whenever both rows existed for a date.
+// Recency (whichever row was actually written most recently) is the reliable signal instead.
 const getAttendanceRecords = async (employeeId, startDateStr, endDateStr) => {
     const { data: attendance, error } = await supabase
         .from('attendance')
-        .select('attendance_date, clock_in, clock_out, status, total_minutes, late_minutes, overtime_hours, overtime_amount, is_holiday, holiday_name')
+        .select('attendance_date, clock_in, clock_out, clock_in_ist, clock_out_ist, status, total_minutes, late_minutes, overtime_hours, overtime_amount, is_holiday, holiday_name, created_at, updated_at')
         .eq('employee_id', employeeId)
         .gte('attendance_date', startDateStr)
         .lte('attendance_date', endDateStr)
-        .order('attendance_date', { ascending: true })
-        .order('total_minutes', { ascending: false, nullsFirst: false });
+        .order('attendance_date', { ascending: true });
 
     if (error) throw error;
 
-    // Keep best record per day.
-    // Priority: admin-set status (absent/present with total_minutes=0 from import) > clock data.
-    // When admin marks a day via the calendar, all duplicate records get the same status (fixed in importAttendance).
-    // We pick the record with the highest total_minutes so a genuinely worked day is represented correctly.
     const bestPerDay = {};
     for (const rec of (attendance || [])) {
         const dateKey = rec.attendance_date.split('T')[0];
@@ -151,32 +156,27 @@ const getAttendanceRecords = async (employeeId, startDateStr, endDateStr) => {
             bestPerDay[dateKey] = rec;
             continue;
         }
-        const recStatus = (rec.status || '').toLowerCase();
-        const existingStatus = (existing.status || '').toLowerCase();
 
-        // Admin-absent = status 'absent' with total_minutes=0 AND no clock_in
-        // (clock_in present means it's a genuine clock-in record that was later updated, not a pure admin mark)
-        // Admin-absent should beat a genuine clock-in record, but NOT an admin-present record (total_minutes=540).
-        const recIsAdminAbsent = recStatus === 'absent' && (rec.total_minutes || 0) === 0 && !rec.clock_in;
-        const existingIsAdminAbsent = existingStatus === 'absent' && (existing.total_minutes || 0) === 0 && !existing.clock_in;
+        const existingClockOut = existing.clock_out_ist || existing.clock_out;
+        const newClockOut = rec.clock_out_ist || rec.clock_out;
 
-        if (recIsAdminAbsent && existing.clock_in) {
-            // Admin explicitly marked absent; existing is a genuine clock-in → admin wins
+        if (newClockOut && !existingClockOut) {
             bestPerDay[dateKey] = rec;
-            continue;
-        }
-        if (existingIsAdminAbsent && rec.clock_in) {
-            // Existing is admin-absent; new rec is a genuine clock-in → keep admin-absent
-            continue;
-        }
-
-        // Otherwise: prefer higher total_minutes (admin-present = 540, genuine work hours, etc.)
-        if ((rec.total_minutes || 0) > (existing.total_minutes || 0)) {
-            bestPerDay[dateKey] = rec;
-        } else if ((rec.total_minutes || 0) === (existing.total_minutes || 0)) {
-            // Tie: prefer clocked-out record
-            if (!existing.clock_out && rec.clock_out) {
+        } else if (newClockOut && existingClockOut) {
+            if (toUTCMs(newClockOut) > toUTCMs(existingClockOut)) {
                 bestPerDay[dateKey] = rec;
+            }
+        } else if (!existingClockOut && !newClockOut) {
+            const existingTime = new Date(existing.updated_at || existing.created_at).getTime() || 0;
+            const newTime = new Date(rec.updated_at || rec.created_at).getTime() || 0;
+            if (newTime > existingTime) {
+                bestPerDay[dateKey] = rec;
+            } else if (newTime === existingTime) {
+                const existingHasClockIn = !!(existing.clock_in || existing.clock_in_ist);
+                const newHasClockIn = !!(rec.clock_in || rec.clock_in_ist);
+                if (newHasClockIn && !existingHasClockIn) {
+                    bestPerDay[dateKey] = rec;
+                }
             }
         }
     }
@@ -426,11 +426,14 @@ exports.generateSalarySlip = async (req, res) => {
             ? attendanceOtHours
             : parseFloat((overtimeAmount / 150).toFixed(2));
 
-        // Fixed deduction: DT ₹200 before May 2026; PF (per employee) + PT ₹200 from May 2026 onwards
+        // Fixed deduction: DT ₹200 before May 2026; PF (per employee) + PT + Professional Tax from May 2026 onwards
         const isPFApplicable = parseInt(year) > 2026 || (parseInt(year) === 2026 && parseInt(month) >= 5);
         const pfAmount = isPFApplicable ? (employee.pf_amount != null ? parseInt(employee.pf_amount) : 1800) : 0;
-        const ptAmount = isPFApplicable ? 200 : 0;
-        const dtDeduction = basicSalary > 0 ? (isPFApplicable ? pfAmount + ptAmount : 200) : 0;
+        // PT no longer auto-defaults to ₹200 — admin must explicitly set it (PF/PT tab); unset = 0.
+        const ptAmount = isPFApplicable ? (employee.pt_amount != null ? parseInt(employee.pt_amount) : 0) : 0;
+        // Professional Tax is a distinct deduction from PT — no prior hardcoded value, so null = 0.
+        const professionalTaxAmount = isPFApplicable ? (employee.professional_tax_amount != null ? parseInt(employee.professional_tax_amount) : 0) : 0;
+        const dtDeduction = basicSalary > 0 ? (isPFApplicable ? pfAmount + ptAmount + professionalTaxAmount : 200) : 0;
 
         // Custom admin deductions for this employee/month/year
         const customDeduction = parseFloat((await getDeductionTotal(employee_id, month, year)).toFixed(2));
@@ -475,15 +478,42 @@ exports.generateSalarySlip = async (req, res) => {
             overtimeHours, overtimeAmount, dtDeduction, netSalary
         });
 
-        const { data: salarySlip, error: insertError } = await supabase
+        let { data: salarySlip, error: insertError } = await supabase
             .from('salary_slips').insert([salaryData]).select().single();
+
+        // present_days/half_days/absent_days/total_working_days are INTEGER on some DBs
+        // (not yet migrated to NUMERIC — see scripts/widen-salary-slips-day-columns.sql).
+        // Half-day attendance produces genuinely fractional values (e.g. 9.5 present days),
+        // which those columns reject outright. Retry with rounded values rather than hard-
+        // failing generation — but flag it clearly, since rounding does lose precision until
+        // the migration is run.
+        let roundedFallbackUsed = false;
+        if (insertError && /invalid input syntax for type integer/i.test(insertError.message || '')) {
+            roundedFallbackUsed = true;
+            const roundedData = {
+                ...salaryData,
+                present_days: Math.round(salaryData.present_days),
+                half_days: Math.round(salaryData.half_days),
+                absent_days: Math.round(salaryData.absent_days),
+                total_working_days: Math.round(salaryData.total_working_days),
+            };
+            ({ data: salarySlip, error: insertError } = await supabase
+                .from('salary_slips').insert([roundedData]).select().single());
+        }
 
         if (insertError) {
             console.error('❌ Insert error:', insertError);
             return res.status(500).json({ success: false, message: 'Failed to insert salary slip', error: insertError.message });
         }
 
-        res.json({ success: true, message: 'Salary slip generated successfully', salarySlip });
+        res.json({
+            success: true,
+            message: roundedFallbackUsed
+                ? 'Salary slip generated (day counts rounded to whole numbers — run scripts/widen-salary-slips-day-columns.sql for exact half-day precision)'
+                : 'Salary slip generated successfully',
+            salarySlip,
+            ...(roundedFallbackUsed ? { warning: 'day_columns_not_migrated' } : {}),
+        });
 
     } catch (error) {
         console.error('❌ Error generating salary slip:', error);
@@ -624,11 +654,31 @@ exports.getSalarySlipByMonth = async (req, res) => {
 // Generate bulk salary slips
 exports.generateBulkSalarySlips = async (req, res) => {
     try {
-        const { month, year } = req.body;
+        const { month, year, employee_ids } = req.body;
 
-        const { data: employees, error: empError } = await supabase
+        // Only active, non-excluded employees are ever eligible for bulk generation —
+        // enforced here server-side so exclusion can't be bypassed by frontend state,
+        // and so inactive employees (a latent bug — this used to have no filter at all)
+        // never get slips generated.
+        let query = supabase
             .from('employees')
-            .select('employee_id');
+            .select('employee_id')
+            .eq('is_active', true)
+            .eq('exclude_from_payroll', false);
+        if (Array.isArray(employee_ids) && employee_ids.length > 0) {
+            query = query.in('employee_id', employee_ids);
+        }
+
+        let { data: employees, error: empError } = await query;
+
+        if (empError && /exclude_from_payroll|does not exist/i.test(empError.message || '')) {
+            // exclude_from_payroll not migrated yet on this DB — fall back without it.
+            let fallbackQuery = supabase.from('employees').select('employee_id').eq('is_active', true);
+            if (Array.isArray(employee_ids) && employee_ids.length > 0) {
+                fallbackQuery = fallbackQuery.in('employee_id', employee_ids);
+            }
+            ({ data: employees, error: empError } = await fallbackQuery);
+        }
 
         if (empError) throw empError;
 
@@ -915,7 +965,9 @@ exports.saveSalaryAdjustment = async (req, res) => {
             const monthlySalary = parseFloat(employee.in_hand_salary || employee.gross_salary || employee.salary || 0);
             const isPFApplicableOT = parseInt(year) > 2026 || (parseInt(year) === 2026 && parseInt(month) >= 5);
             const pfAmountOT = isPFApplicableOT ? (employee.pf_amount != null ? parseInt(employee.pf_amount) : 1800) : 0;
-            const dt = monthlySalary > 0 ? (isPFApplicableOT ? pfAmountOT + 200 : 200) : 0;
+            const ptAmountOT = isPFApplicableOT ? (employee.pt_amount != null ? parseInt(employee.pt_amount) : 0) : 0;
+            const professionalTaxAmountOT = isPFApplicableOT ? (employee.professional_tax_amount != null ? parseInt(employee.professional_tax_amount) : 0) : 0;
+            const dt = monthlySalary > 0 ? (isPFApplicableOT ? pfAmountOT + ptAmountOT + professionalTaxAmountOT : 200) : 0;
 
             // Use limit(1) to avoid maybeSingle() error when duplicate rows exist
             const { data: slipRows } = await supabase
@@ -1031,7 +1083,9 @@ exports.saveSalaryAdjustment = async (req, res) => {
 
         const isPFApplicableAdj = parseInt(year) > 2026 || (parseInt(year) === 2026 && parseInt(month) >= 5);
         const pfAmountAdj = isPFApplicableAdj ? (employee.pf_amount != null ? parseInt(employee.pf_amount) : 1800) : 0;
-        const fixedDeductions = monthlySalary > 0 ? (isPFApplicableAdj ? pfAmountAdj + 200 : 200) : 0;
+        const ptAmountAdj = isPFApplicableAdj ? (employee.pt_amount != null ? parseInt(employee.pt_amount) : 0) : 0;
+        const professionalTaxAmountAdj = isPFApplicableAdj ? (employee.professional_tax_amount != null ? parseInt(employee.professional_tax_amount) : 0) : 0;
+        const fixedDeductions = monthlySalary > 0 ? (isPFApplicableAdj ? pfAmountAdj + ptAmountAdj + professionalTaxAmountAdj : 200) : 0;
 
         // basic_salary = what the employee earned (before fixed deductions)
         // For OT case:  earned(49900) - OT(1900) = monthly(48000) ← base pay
@@ -1065,21 +1119,26 @@ exports.saveSalaryAdjustment = async (req, res) => {
         let resultSlip;
 
         if (existingSlip) {
-            const { data, error } = await supabase
+            // Single combined update (core + extended adj_ columns) so the returned
+            // resultSlip always reflects everything that was actually saved, instead of
+            // core-only stale data from a separate first call. Falls back to core-only if
+            // the extended migration columns don't exist yet on this DB.
+            let { data, error } = await supabase
                 .from('salary_slips')
-                .update(corePayload)
+                .update({ ...corePayload, ...extPayload })
                 .eq('id', existingSlip.id)
                 .select()
                 .single();
+            if (error && /does not exist|schema cache/i.test(error.message || '')) {
+                ({ data, error } = await supabase
+                    .from('salary_slips')
+                    .update(corePayload)
+                    .eq('id', existingSlip.id)
+                    .select()
+                    .single());
+            }
             if (error) throw error;
             resultSlip = data;
-
-            // Try saving extended adj_ columns — silently skip if migration not yet run
-            await supabase
-                .from('salary_slips')
-                .update(extPayload)
-                .eq('id', existingSlip.id)
-                .catch(() => {});
         } else {
             // No attendance-based slip yet — create a stub with adjustment only
             const totalWD = calculateWorkingDaysInCycle(cycle.startDate, cycle.endDate);
@@ -1137,12 +1196,29 @@ exports.getBulkPayroll = async (req, res) => {
             return res.status(400).json({ success: false, message: 'month and year are required' });
         }
 
-        const [{ data: employees, error: empErr }, { data: slips, error: slipErr }] = await Promise.all([
-            supabase
-                .from('employees')
-                .select('employee_id, first_name, last_name, designation, department, in_hand_salary, gross_salary, salary, shift_timing, status')
-                .eq('status', 'active')
-                .order('first_name', { ascending: true }),
+        const EMP_FIELDS_FULL = 'id, employee_id, first_name, last_name, designation, department, in_hand_salary, gross_salary, shift_timing, is_active, joining_date, reporting_manager, pf_amount, pt_amount, professional_tax_amount, exclude_from_payroll';
+        const EMP_FIELDS_NO_PROF_EXCL = 'id, employee_id, first_name, last_name, designation, department, in_hand_salary, gross_salary, shift_timing, is_active, joining_date, reporting_manager, pf_amount, pt_amount';
+        const EMP_FIELDS_BASE = 'id, employee_id, first_name, last_name, designation, department, in_hand_salary, gross_salary, shift_timing, is_active, joining_date, reporting_manager, pf_amount';
+
+        // employees.professional_tax_amount / exclude_from_payroll / pt_amount may not be
+        // migrated on this DB yet — cascading fallback so the page still loads either way.
+        const fetchEmployees = async () => {
+            let { data, error } = await supabase.from('employees').select(EMP_FIELDS_FULL)
+                .eq('is_active', true).order('first_name', { ascending: true });
+            if (error && /professional_tax_amount|exclude_from_payroll|does not exist/i.test(error.message || '')) {
+                ({ data, error } = await supabase.from('employees').select(EMP_FIELDS_NO_PROF_EXCL)
+                    .eq('is_active', true).order('first_name', { ascending: true }));
+            }
+            if (error && /pt_amount|does not exist/i.test(error.message || '')) {
+                ({ data, error } = await supabase.from('employees').select(EMP_FIELDS_BASE)
+                    .eq('is_active', true).order('first_name', { ascending: true }));
+            }
+            if (error) throw error;
+            return data || [];
+        };
+
+        const [employees, { data: slips, error: slipErr }] = await Promise.all([
+            fetchEmployees(),
             supabase
                 .from('salary_slips')
                 .select('*')
@@ -1150,7 +1226,6 @@ exports.getBulkPayroll = async (req, res) => {
                 .eq('year',  parseInt(year)),
         ]);
 
-        if (empErr) throw empErr;
         if (slipErr) throw slipErr;
 
         const slipMap = {};
@@ -1159,11 +1234,32 @@ exports.getBulkPayroll = async (req, res) => {
         const cycle = getCycleDates(parseInt(month), parseInt(year));
         const defaultWD = calculateWorkingDaysInCycle(cycle.startDate, cycle.endDate);
 
-        const records = (employees || []).map(emp => {
+        // Attendance summary per employee for this cycle — reuses the exact same helpers
+        // generateSalarySlip uses, so Payroll Preview numbers are guaranteed to match the
+        // slip that would actually be generated (single source of truth, not a second calc).
+        const attendanceByEmployee = {};
+        await Promise.all(employees.map(async emp => {
+            try {
+                const joiningDate = emp.joining_date ? new Date(emp.joining_date) : null;
+                const [attendanceRecords, leaveRecords] = await Promise.all([
+                    getAttendanceRecords(emp.employee_id, cycle.startDateStr, cycle.endDateStr),
+                    getApprovedLeaves(emp.employee_id, cycle.startDateStr, cycle.endDateStr),
+                ]);
+                attendanceByEmployee[emp.employee_id] = calculateAttendanceSummary(
+                    attendanceRecords, leaveRecords, cycle.startDateStr, cycle.endDateStr, joiningDate
+                );
+            } catch (attErr) {
+                console.error(`Error computing attendance summary for ${emp.employee_id}:`, attErr);
+                attendanceByEmployee[emp.employee_id] = null;
+            }
+        }));
+
+        const records = employees.map(emp => {
             const monthlySalary   = parseFloat(emp.in_hand_salary || emp.gross_salary || emp.salary || 0);
             const slip            = slipMap[emp.employee_id] || null;
             const totalWorkingDays = slip?.total_working_days || defaultWD;
             const shiftHours      = slip?.shift_hours || parseShiftHours(emp.shift_timing) || 8;
+            const attendance      = attendanceByEmployee[emp.employee_id];
 
             let adj;
             if (slip?.salary_earned != null) {
@@ -1181,11 +1277,13 @@ exports.getBulkPayroll = async (req, res) => {
             }
 
             return {
+                id:                 emp.id,
                 employee_id:        emp.employee_id,
                 first_name:         emp.first_name,
                 last_name:          emp.last_name,
                 designation:        emp.designation || '',
                 department:         emp.department  || '',
+                reporting_manager:  emp.reporting_manager || '',
                 monthly_salary:     monthlySalary,
                 shift_hours:        shiftHours,
                 total_working_days: totalWorkingDays,
@@ -1193,6 +1291,22 @@ exports.getBulkPayroll = async (req, res) => {
                 slip_id:            slip?.id   || null,
                 net_salary:         slip?.net_salary != null ? parseFloat(slip.net_salary) : null,
                 is_paid:            slip?.is_paid || false,
+                basic_salary:       slip?.basic_salary != null ? parseFloat(slip.basic_salary) : null,
+                overtime_amount:    slip?.overtime_amount != null ? parseFloat(slip.overtime_amount) : 0,
+                dt_deduction:       slip?.dt != null ? parseFloat(slip.dt) : null,
+                custom_deduction:   slip?.custom_deduction != null ? parseFloat(slip.custom_deduction) : 0,
+                cycle_start_date:   slip?.cycle_start_date || null,
+                cycle_end_date:     slip?.cycle_end_date || null,
+                generated_date:     slip?.generated_date || null,
+                pf_amount:                emp.pf_amount != null ? parseFloat(emp.pf_amount) : null,
+                pt_amount:                emp.pt_amount != null ? parseFloat(emp.pt_amount) : null,
+                professional_tax_amount:  emp.professional_tax_amount != null ? parseFloat(emp.professional_tax_amount) : null,
+                exclude_from_payroll:     Boolean(emp.exclude_from_payroll),
+                present_days:       attendance ? attendance.presentDays : null,
+                half_days:          attendance ? attendance.halfDays : null,
+                absent_days:        attendance ? attendance.absentDays : null,
+                paid_leave_days:    attendance ? attendance.paidLeaveDays : null,
+                unpaid_leave_days:  attendance ? attendance.unpaidLeaveDays : null,
                 ...adj,
             };
         });

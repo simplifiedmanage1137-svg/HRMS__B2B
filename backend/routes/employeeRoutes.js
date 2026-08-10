@@ -151,10 +151,18 @@ router.get('/manager/team', verifyToken, isAdminOrManager, async (req, res) => {
         }
 
         // Fetch team members - trim stored values to handle any whitespace issues
-        const { data: allEmps, error } = await supabase
+        let { data: allEmps, error } = await supabase
             .from('employees')
-            .select('id, employee_id, first_name, last_name, department, designation, shift_timing, reporting_manager')
+            .select('id, employee_id, first_name, last_name, department, designation, shift_timing, reporting_manager, "isFlexibleShift"')
             .order('first_name', { ascending: true });
+
+        if (error && /isFlexibleShift|does not exist/i.test(error.message || '')) {
+            // isFlexibleShift column not migrated yet on this DB — fall back so the team list still loads.
+            ({ data: allEmps, error } = await supabase
+                .from('employees')
+                .select('id, employee_id, first_name, last_name, department, designation, shift_timing, reporting_manager')
+                .order('first_name', { ascending: true }));
+        }
 
         if (error) throw error;
 
@@ -227,7 +235,7 @@ router.put('/manager/shift/:employee_id', verifyToken, isAdminOrManager, async (
                 .from('employees')
                 .update({ ...updates, updated_at: new Date().toISOString() })
                 .eq('employee_id', employee_id)
-                .select('employee_id, first_name, last_name, shift_timing'));
+                .select('employee_id, first_name, last_name, shift_timing, "isFlexibleShift"'));
         } catch (updateErr) {
             error = updateErr;
         }
@@ -844,11 +852,25 @@ router.put('/:id', verifyToken, isAdmin, async (req, res) => {
         // Add updated timestamp
         updates.updated_at = new Date().toISOString();
 
-        const { data, error } = await supabase
+        let { data, error } = await supabase
             .from('employees')
             .update(updates)
             .eq('id', id)
             .select();
+
+        // Supabase reports a missing column differently depending on the operation:
+        // SELECT-style reads say "column X does not exist"; UPDATE payloads referencing an
+        // unknown key say "Could not find the 'X' column ... in the schema cache" (PGRST204).
+        // Match both, and strip every recently-added optional column at once so a single
+        // not-yet-migrated field doesn't lose the rest of the update in the same request.
+        if (error && /does not exist|schema cache/i.test(error.message || '')) {
+            const { pt_amount, professional_tax_amount, exclude_from_payroll, isFlexibleShift, ...safeUpdates } = updates;
+            ({ data, error } = await supabase
+                .from('employees')
+                .update(safeUpdates)
+                .eq('id', id)
+                .select());
+        }
 
         if (error) throw error;
 

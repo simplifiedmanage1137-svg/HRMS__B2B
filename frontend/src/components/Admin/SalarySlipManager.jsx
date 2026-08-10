@@ -3,243 +3,28 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Row, Col, Spinner, Modal, Button } from 'react-bootstrap';
 import {
   FaFilePdf, FaEye, FaDownload, FaSync, FaCheckCircle,
-  FaMoneyBillWave, FaHistory, FaPlus, FaCalendarAlt, FaRedo
+  FaMoneyBillWave, FaHistory, FaPlus, FaRedo
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import { useNotification } from '../../context/NotificationContext';
-
-// ── Constants ──────────────────────────────────────────────────────────────────
-const MONTHS = [
-  'January','February','March','April','May','June',
-  'July','August','September','October','November','December'
-];
+import {
+  MONTHS, getAmounts, downloadSalarySlipPDF,
+} from '../../utils/salarySlipTemplate';
+import SalarySlipView from '../Common/SalarySlipView';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+// MONTHS, getAmounts, downloadSalarySlipPDF now live in
+// src/utils/salarySlipTemplate.js (imported above) — shared with GeneratedSlipsTab.jsx
+// and EditSlip.jsx so none of them calculate or render a slip's numbers differently.
+// The on-screen slip layout itself lives in ../Common/SalarySlipView.jsx.
 const fmt = (v) =>
   v != null
     ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(Number(v) || 0)
     : '₹0';
 
-const fmtNum = (v) => new Intl.NumberFormat('en-IN').format(Number(v) || 0);
-
 const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
-
-const numberToWords = (num) => {
-  const ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine',
-    'Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
-  const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
-  if (!num || num === 0) return 'Zero';
-  const n2w = (n) => {
-    if (n < 20) return ones[n];
-    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
-    if (n < 1000) return ones[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' ' + n2w(n % 100) : '');
-    if (n < 100000) return n2w(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 ? ' ' + n2w(n % 1000) : '');
-    if (n < 10000000) return n2w(Math.floor(n / 100000)) + ' Lakh' + (n % 100000 ? ' ' + n2w(n % 100000) : '');
-    return n2w(Math.floor(n / 10000000)) + ' Crore' + (n % 10000000 ? ' ' + n2w(n % 10000000) : '');
-  };
-  return n2w(Math.abs(Math.round(num)));
-};
-
-// Returns PF/PT/DT breakdown based on slip period and employee.pf_amount:
-// Before May 2026 → DT ₹200, PF ₹0, PT ₹0
-// May 2026 onwards → PF from emp.pf_amount (if set, including 0) else slip.dt - 200, PT ₹200
-const getDeductionBreakdown = (slip, emp) => {
-  const m = parseInt(slip?.month || 0);
-  const y = parseInt(slip?.year  || 0);
-  const isPFApplicable = y > 2026 || (y === 2026 && m >= 5);
-  if (isPFApplicable) {
-    if (emp?.pf_amount != null) {
-      return { pf: parseInt(emp.pf_amount), pt: 200, dt: 0 };
-    }
-    const totalFixed = Number(slip?.dt) || 2000;
-    return { pf: totalFixed - 200, pt: 200, dt: 0 };
-  }
-  return { pf: 0, pt: 0, dt: null }; // dt: null = use a.deduction from slip
-};
-
-const getAmounts = (slip, emp) => {
-  const monthlySalary    = Number(slip?.monthly_salary)    || Number(emp?.in_hand_salary) || Number(emp?.gross_salary) || 0;
-  const basicSalaryRaw   = Number(slip?.basic_salary) || 0;
-  const netSalaryRaw     = slip?.net_salary != null ? Number(slip.net_salary) : 0;
-  // Old stub fix: basic_salary=0 but net>0 means manual adjustment slip — treat net as earned base
-  const basicSalary      = basicSalaryRaw > 0 ? basicSalaryRaw : (netSalaryRaw > 0 ? netSalaryRaw : monthlySalary);
-  const hasEarnings      = basicSalary > 0;
-  const deduction        = hasEarnings ? (Number(slip?.dt) || 200) : 0; // DT only
-  const netSalary        = netSalaryRaw > 0 ? netSalaryRaw : Math.max(0, basicSalary - deduction);
-  const overtimeAmount   = Number(slip?.overtime_amount)    || 0;
-  const overtimeHours    = Number(slip?.overtime_hours)     || 0;
-  const presentDays      = Number(slip?.present_days)       || 0;
-  const absentDays       = Number(slip?.absent_days)        || 0;
-  const paidLeaveDays    = Number(slip?.paid_leave_days)    || 0;
-  const unpaidLeaveDays  = Number(slip?.unpaid_leave_days)  || 0;
-  const halfDays         = Number(slip?.half_days)          || 0;
-  const totalWorkingDays = Number(slip?.total_working_days) || 22;
-  const perDaySalary     = Number(slip?.per_day_salary)     || 0;
-  const unpaidDeduction  = Number(slip?.unpaid_deduction)   || 0;
-  return {
-    monthlySalary, basicSalary, deduction, netSalary,
-    overtimeAmount, overtimeHours,
-    presentDays, absentDays, paidLeaveDays, unpaidLeaveDays, halfDays,
-    totalWorkingDays, perDaySalary, unpaidDeduction
-  };
-};
-
-// PropCulture employees have pf_amount explicitly set to 0
-const isPropCulture = (emp) => emp?.pf_amount != null && parseInt(emp.pf_amount) === 0;
-
-const COMPANY = {
-  b2b: {
-    accent:  '#1e3a5f',
-    name:    'B2BinDemand',
-    address: '8th Floor SkyVista, 805, Mhada Colony, Viman Nagar, Pune, Maharashtra 411014',
-  },
-  pc: {
-    accent:  '#0d7b6f',
-    name:    'PropCulture',
-    address: 'Pune, Maharashtra',
-  },
-};
-
-// ── PDF HTML template ──────────────────────────────────────────────────────────
-const buildPDFHTML = (slip, emp, a, monthName, logoBase64) => {
-  const bd = getDeductionBreakdown(slip, emp);
-  const pfAmt     = bd.pf;
-  const ptAmt     = bd.pt;
-  const dtAmt     = bd.dt !== null ? bd.dt : a.deduction;
-  const customDed = parseFloat(slip?.custom_deduction || 0);
-  const co = isPropCulture(emp) ? COMPANY.pc : COMPANY.b2b;
-  const cycleLabel = slip.cycle_start_date && slip.cycle_end_date
-    ? `${new Date(slip.cycle_start_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} – ${new Date(slip.cycle_end_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`
-    : `${monthName} ${slip.year}`;
-
-  return `
-    <div style="border:1px solid #e2e8f0;padding:32px 36px;font-size:13px;color:#1e293b;font-family:Arial,sans-serif;">
-      <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid ${co.accent};padding-bottom:20px;margin-bottom:20px;">
-        <div>
-          ${!isPropCulture(emp) && logoBase64
-            ? `<img src="data:image/jpeg;base64,${logoBase64}" style="height:52px;width:auto;object-fit:contain;" />`
-            : `<div style="font-size:22px;font-weight:900;color:${co.accent};letter-spacing:1px;">${co.name}</div>`}
-          <div style="font-size:11px;color:#64748b;margin-top:6px;max-width:280px;">${co.address}</div>
-        </div>
-        <div style="text-align:right;">
-          <div style="font-size:18px;font-weight:800;text-transform:uppercase;letter-spacing:2px;color:${co.accent};">Salary Slip</div>
-          <div style="font-size:13px;color:#475569;margin-top:4px;">${monthName} ${slip.year}</div>
-          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Pay Cycle: ${cycleLabel}</div>
-        </div>
-      </div>
-
-      <table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:12.5px;background:#f8fafc;border-radius:8px;">
-        <tr>
-          <td style="padding:8px 14px;width:50%;"><span style="color:#64748b;">Employee Name</span><br/><b style="color:#1e293b;">${(emp?.first_name || '')} ${(emp?.last_name || '')}</b></td>
-          <td style="padding:8px 14px;width:50%;"><span style="color:#64748b;">Employee Code</span><br/><b style="color:#1e293b;">${emp?.employee_id || ''}</b></td>
-        </tr>
-        <tr>
-          <td style="padding:8px 14px;"><span style="color:#64748b;">Designation</span><br/><b style="color:#1e293b;">${emp?.designation || emp?.position || 'N/A'}</b></td>
-          <td style="padding:8px 14px;"><span style="color:#64748b;">Department</span><br/><b style="color:#1e293b;">${emp?.department || 'N/A'}</b></td>
-        </tr>
-        <tr>
-          <td style="padding:8px 14px;"><span style="color:#64748b;">Date of Joining</span><br/><b style="color:#1e293b;">${emp?.joining_date ? new Date(emp.joining_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</b></td>
-          <td style="padding:8px 14px;"><span style="color:#64748b;">Bank Account</span><br/><b style="color:#1e293b;">${emp?.account_number ? `****${String(emp.account_number).slice(-4)}` : 'N/A'}</b></td>
-        </tr>
-        ${emp?.pan_number ? `<tr>
-          <td style="padding:8px 14px;"><span style="color:#64748b;">PAN Number</span><br/><b style="color:#1e293b;">${emp.pan_number}</b></td>
-          <td style="padding:8px 14px;"></td>
-        </tr>` : ''}
-      </table>
-
-      <div style="background:#f1f5f9;border-radius:8px;padding:14px 18px;margin-bottom:20px;">
-        <div style="font-weight:700;font-size:12px;color:#475569;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Attendance Summary</div>
-        <table style="width:100%;border-collapse:collapse;text-align:center;font-size:12px;">
-          <tr>
-            <th style="padding:6px;color:#64748b;font-weight:600;">Working Days</th>
-            <th style="padding:6px;color:#64748b;font-weight:600;">Present</th>
-            <th style="padding:6px;color:#64748b;font-weight:600;">Paid Leave</th>
-            <th style="padding:6px;color:#64748b;font-weight:600;">Unpaid Leave</th>
-            <th style="padding:6px;color:#64748b;font-weight:600;">Half Days</th>
-            <th style="padding:6px;color:#64748b;font-weight:600;">Absent</th>
-          </tr>
-          <tr>
-            <td style="padding:6px;font-weight:800;font-size:15px;color:#1e3a5f;">${a.totalWorkingDays}</td>
-            <td style="padding:6px;font-weight:800;font-size:15px;color:#16a34a;">${a.presentDays}</td>
-            <td style="padding:6px;font-weight:800;font-size:15px;color:#0369a1;">${a.paidLeaveDays}</td>
-            <td style="padding:6px;font-weight:800;font-size:15px;color:#d97706;">${a.unpaidLeaveDays}</td>
-            <td style="padding:6px;font-weight:800;font-size:15px;color:#7c3aed;">${a.halfDays}</td>
-            <td style="padding:6px;font-weight:800;font-size:15px;color:#dc2626;">${a.absentDays}</td>
-          </tr>
-        </table>
-      </div>
-
-      <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
-        <tr style="vertical-align:top;">
-          <td style="width:49%;">
-            <div style="font-weight:700;font-size:11px;color:#475569;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Earnings</div>
-            <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
-              <tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#475569;">Monthly Salary (CTC)</td><td style="padding:7px 0;text-align:right;">₹${fmtNum(a.monthlySalary)}</td></tr>
-              <tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#475569;">Earned Salary (${a.presentDays + a.paidLeaveDays} paid days)</td><td style="padding:7px 0;text-align:right;">₹${fmtNum(a.basicSalary)}</td></tr>
-              ${a.overtimeAmount > 0 ? `<tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#16a34a;">Overtime (${a.overtimeHours}h @ ₹150/h)</td><td style="padding:7px 0;text-align:right;color:#16a34a;font-weight:700;">+₹${fmtNum(a.overtimeAmount)}</td></tr>` : ''}
-              <tr style="background:#f8fafc;"><td style="padding:8px 4px;font-weight:700;color:#1e293b;">Gross Earnings</td><td style="padding:8px 4px;text-align:right;font-weight:700;color:#1e293b;">₹${fmtNum(a.basicSalary + a.overtimeAmount)}</td></tr>
-            </table>
-          </td>
-          <td style="width:2%;"></td>
-          <td style="width:49%;">
-            <div style="font-weight:700;font-size:11px;color:#475569;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Deductions</div>
-            <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
-              ${pfAmt > 0 ? `<tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#475569;">Provident Fund (PF)</td><td style="padding:7px 0;text-align:right;">₹${fmtNum(pfAmt)}</td></tr>` : ''}
-              <tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#475569;">Professional Tax</td><td style="padding:7px 0;text-align:right;">₹${fmtNum(ptAmt)}</td></tr>
-              <tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#475569;">TDS</td><td style="padding:7px 0;text-align:right;">₹0</td></tr>
-              ${(a.absentDays + a.unpaidLeaveDays) > 0 ? `<tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#dc2626;font-weight:600;">Absent Deduction (${a.absentDays > 0 ? a.absentDays + ' absent' : ''}${a.unpaidLeaveDays > 0 ? (a.absentDays > 0 ? ' + ' : '') + a.unpaidLeaveDays + ' unpaid leave' : ''} × ₹${fmtNum(a.perDaySalary)}/day)</td><td style="padding:7px 0;text-align:right;color:#dc2626;font-weight:700;">₹${fmtNum((a.absentDays + a.unpaidLeaveDays) * a.perDaySalary)}</td></tr>` : ''}
-              ${dtAmt > 0 ? `<tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#b45309;font-weight:600;">DT (Fixed Deduction)</td><td style="padding:7px 0;text-align:right;color:#b45309;font-weight:700;">₹${fmtNum(dtAmt)}</td></tr>` : ''}
-              ${customDed > 0 ? `<tr style="border-bottom:1px solid #e2e8f0;"><td style="padding:7px 0;color:#dc2626;font-weight:600;">Other Deduction</td><td style="padding:7px 0;text-align:right;color:#dc2626;font-weight:700;">₹${fmtNum(customDed)}</td></tr>` : ''}
-              <tr style="background:#f8fafc;"><td style="padding:8px 4px;font-weight:700;color:#dc2626;">Total Deductions</td><td style="padding:8px 4px;text-align:right;font-weight:700;color:#dc2626;">₹${fmtNum(pfAmt + ptAmt + dtAmt + (a.absentDays + a.unpaidLeaveDays) * a.perDaySalary + customDed)}</td></tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-
-      <div style="background:${co.accent};color:#fff;padding:18px 24px;border-radius:10px;display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
-        <div>
-          <div style="font-size:10px;opacity:0.7;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">Net Salary Payable</div>
-          <div style="font-size:11px;opacity:0.6;">Rupees ${numberToWords(Math.round(a.netSalary))} Only</div>
-        </div>
-        <div style="font-size:28px;font-weight:900;">₹${fmtNum(a.netSalary)}</div>
-      </div>
-
-      <div style="display:flex;justify-content:space-between;margin-top:32px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:12px;">
-        <div style="text-align:center;"><div style="border-top:1px solid #94a3b8;width:160px;margin-bottom:8px;"></div><div style="color:#64748b;">Employee Signature</div></div>
-        <div style="text-align:center;"><div style="border-top:1px solid #94a3b8;width:160px;margin-bottom:8px;"></div><div style="color:#64748b;">Authorized Signatory</div></div>
-      </div>
-      <div style="text-align:center;margin-top:16px;font-size:10px;color:#94a3b8;">
-        This is a computer-generated salary slip. No physical signature required. | Generated: ${new Date().toLocaleString('en-IN')}
-      </div>
-    </div>
-  `;
-};
-
-// ── Stat pill ──────────────────────────────────────────────────────────────────
-const StatPill = ({ label, value, color }) => (
-  <div style={{ textAlign: 'center', padding: '6px 12px', background: '#f8fafc', borderRadius: 8, minWidth: 72 }}>
-    <div style={{ fontWeight: 800, fontSize: 20, color, lineHeight: 1 }}>{value}</div>
-    <div style={{ color: '#94a3b8', fontSize: 10, marginTop: 4 }}>{label}</div>
-  </div>
-);
-
-// ── Salary row ─────────────────────────────────────────────────────────────────
-const SalaryRow = ({ label, value, bold, accent, last }) => (
-  <div style={{
-    display: 'flex', justifyContent: 'space-between',
-    padding: '7px 14px',
-    borderBottom: last ? 'none' : '1px solid #f1f5f9',
-    fontWeight: bold ? 700 : 400,
-    background: bold ? '#f8fafc' : 'transparent',
-  }}>
-    <span style={{ color: accent || (bold ? '#1e293b' : '#475569'), fontSize: 12.5 }}>{label}</span>
-    <span style={{ color: accent || (bold ? '#1e293b' : '#475569'), fontSize: 12.5 }}>₹{fmtNum(value)}</span>
-  </div>
-);
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Main Component
@@ -386,177 +171,13 @@ const SalarySlipManager = ({ employee, refreshKey }) => {
     if (!slip || !employee) return;
     setDownloading(slip.id);
     try {
-      const a = getAmounts(slip, employee);
-      const monthName = MONTHS[Number(slip.month) - 1];
-
-      let logoBase64 = '';
-      try {
-        const r    = await fetch('/images/b2bindemand_logo.jfif');
-        const blob = await r.blob();
-        logoBase64 = await new Promise((res, rej) => {
-          const reader = new FileReader();
-          reader.onloadend = () => res(reader.result.split(',')[1]);
-          reader.onerror  = rej;
-          reader.readAsDataURL(blob);
-        });
-      } catch { /* logo optional */ }
-
-      const div = document.createElement('div');
-      div.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;background:#fff;';
-      div.innerHTML = buildPDFHTML(slip, employee, a, monthName, logoBase64);
-      document.body.appendChild(div);
-
-      const canvas = await html2canvas(div, {
-        scale: 2, backgroundColor: '#ffffff',
-        logging: false, useCORS: true, windowWidth: 860
-      });
-      document.body.removeChild(div);
-
-      const img = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: 'portrait', unit: 'px',
-        format: [canvas.width * 0.75, canvas.height * 0.75]
-      });
-      pdf.addImage(img, 'PNG', 0, 0, canvas.width * 0.75, canvas.height * 0.75);
-      pdf.save(`Salary_Slip_${employee.employee_id}_${monthName}_${slip.year}.pdf`);
-
+      await downloadSalarySlipPDF(slip, employee, `Salary_Slip_${employee.employee_id}`);
       showNotification('PDF downloaded successfully', 'success');
     } catch {
       showNotification('Failed to download PDF', 'danger');
     } finally {
       setDownloading(null);
     }
-  };
-
-  // ── Slip modal view ────────────────────────────────────────────────────────
-  const SlipView = ({ slip }) => {
-    const a = getAmounts(slip, employee);
-    const bd = getDeductionBreakdown(slip, employee);
-    const pfAmt = bd.pf;
-    const ptAmt = bd.pt;
-    const dtAmt = bd.dt !== null ? bd.dt : a.deduction;
-    const monthName = MONTHS[Number(slip.month) - 1];
-    const cycleLabel = slip.cycle_start_date && slip.cycle_end_date
-      ? `${fmtDate(slip.cycle_start_date)} – ${fmtDate(slip.cycle_end_date)}`
-      : `${monthName} ${slip.year}`;
-    const co = isPropCulture(employee) ? COMPANY.pc : COMPANY.b2b;
-
-    return (
-      <div style={{ fontFamily: 'system-ui, -apple-system, Arial, sans-serif' }}>
-
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `2px solid ${co.accent}`, paddingBottom: 18, marginBottom: 20 }}>
-          <div>
-            {isPropCulture(employee) ? (
-              <div style={{ fontSize: 22, fontWeight: 900, color: co.accent, letterSpacing: 1, marginBottom: 6 }}>{co.name}</div>
-            ) : (
-              <img
-                src="/images/b2bindemand_logo.jfif" alt="logo"
-                style={{ height: 44, objectFit: 'contain', display: 'block', marginBottom: 6 }}
-                onError={(e) => { e.target.style.display = 'none'; }}
-              />
-            )}
-            <div style={{ fontSize: 11, color: '#64748b', maxWidth: 260 }}>{co.address}</div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 17, fontWeight: 800, color: co.accent, textTransform: 'uppercase', letterSpacing: 1.5 }}>Salary Slip</div>
-            <div style={{ fontSize: 13, color: '#475569', marginTop: 4 }}>{monthName} {slip.year}</div>
-            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>Pay Cycle: {cycleLabel}</div>
-          </div>
-        </div>
-
-        {/* Employee Info */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 24px', marginBottom: 20, background: '#f8fafc', borderRadius: 10, padding: '14px 16px' }}>
-          {[
-            ['Employee Name', `${employee?.first_name || ''} ${employee?.last_name || ''}`.trim()],
-            ['Employee Code', employee?.employee_id],
-            ['Designation',   employee?.designation || employee?.position],
-            ['Department',    employee?.department],
-            ['Date of Joining', employee?.joining_date ? fmtDate(employee.joining_date) : 'N/A'],
-            ['Bank Account',  employee?.account_number ? `****${String(employee.account_number).slice(-4)}` : 'N/A'],
-            ...(employee?.pan_number ? [['PAN Number', employee.pan_number]] : []),
-          ].map(([l, v]) => (
-            <div key={l}>
-              <div style={{ color: '#94a3b8', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>{l}</div>
-              <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 12.5 }}>{v || 'N/A'}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Attendance */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontWeight: 700, fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <FaCalendarAlt size={10} color="#6366f1" /> Attendance Summary
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <StatPill label="Working Days" value={a.totalWorkingDays} color="#1e3a5f" />
-            <StatPill label="Present"      value={a.presentDays}      color="#16a34a" />
-            <StatPill label="Paid Leave"   value={a.paidLeaveDays}    color="#0369a1" />
-            <StatPill label="Unpaid Leave" value={a.unpaidLeaveDays}  color="#d97706" />
-            <StatPill label="Half Days"    value={a.halfDays}         color="#7c3aed" />
-            <StatPill label="Absent"       value={a.absentDays}       color="#dc2626" />
-          </div>
-        </div>
-
-        {/* Earnings & Deductions */}
-        <Row className="g-2 mb-3">
-          <Col xs={12} sm={6}>
-            <div style={{ border: `1px solid ${co.accent}30`, borderRadius: 10, overflow: 'hidden' }}>
-              <div style={{ background: co.accent, color: '#fff', padding: '9px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                Earnings
-              </div>
-              <SalaryRow label="Monthly Salary (CTC)" value={a.monthlySalary} />
-              <SalaryRow label={`Earned Salary (${a.presentDays + a.paidLeaveDays} days)`} value={a.basicSalary} />
-              {a.overtimeAmount > 0 && (
-                <SalaryRow label={`Overtime (${a.overtimeHours}h @ ₹150/h)`} value={a.overtimeAmount} accent="#16a34a" />
-              )}
-              <SalaryRow label="Gross Earnings" value={a.basicSalary + a.overtimeAmount} bold last />
-            </div>
-          </Col>
-          <Col xs={12} sm={6}>
-            <div style={{ border: `1px solid ${co.accent}30`, borderRadius: 10, overflow: 'hidden' }}>
-              <div style={{ background: co.accent, color: '#fff', padding: '9px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                Deductions
-              </div>
-              {pfAmt > 0 && <SalaryRow label="Provident Fund (PF)" value={pfAmt} />}
-              <SalaryRow label="Professional Tax"      value={ptAmt} />
-              <SalaryRow label="TDS"                   value={0} />
-              {(a.absentDays + a.unpaidLeaveDays) > 0 && (
-                <SalaryRow
-                  label={`Absent Deduction (${a.absentDays > 0 ? `${a.absentDays} absent` : ''}${a.unpaidLeaveDays > 0 ? `${a.absentDays > 0 ? ' + ' : ''}${a.unpaidLeaveDays} unpaid` : ''} × ₹${fmtNum(a.perDaySalary)}/day)`}
-                  value={(a.absentDays + a.unpaidLeaveDays) * a.perDaySalary}
-                  accent="#dc2626"
-                />
-              )}
-              {dtAmt > 0 && <SalaryRow label="DT (Fixed Deduction)" value={dtAmt} accent="#b45309" />}
-              {parseFloat(slip?.custom_deduction || 0) > 0 && (
-                <SalaryRow label="Other Deduction" value={parseFloat(slip.custom_deduction)} accent="#dc2626" />
-              )}
-              <SalaryRow label="Total Deductions" value={pfAmt + ptAmt + dtAmt + (a.absentDays + a.unpaidLeaveDays) * a.perDaySalary + parseFloat(slip?.custom_deduction || 0)} bold accent="#dc2626" last />
-            </div>
-          </Col>
-        </Row>
-
-        {/* Net Salary */}
-        <div style={{ background: co.accent, color: '#fff', borderRadius: 10, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <div>
-            <div style={{ fontSize: 10, opacity: 0.65, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Net Salary Payable</div>
-            <div style={{ fontSize: 11, opacity: 0.55 }}>Rupees {numberToWords(Math.round(a.netSalary))} Only</div>
-          </div>
-          <div style={{ fontSize: 26, fontWeight: 900 }}>{fmt(a.netSalary)}</div>
-        </div>
-
-        {a.perDaySalary > 0 && (
-          <div style={{ background: '#f0f9ff', borderRadius: 8, padding: '7px 14px', fontSize: 11, color: '#0369a1', marginBottom: 10 }}>
-            Per-day rate: {fmt(a.perDaySalary)} &nbsp;·&nbsp; Working days in cycle: {a.totalWorkingDays}
-          </div>
-        )}
-
-        <div style={{ fontSize: 10, color: '#94a3b8', textAlign: 'center', marginTop: 10, paddingTop: 10, borderTop: '1px solid #f1f5f9' }}>
-          Computer-generated salary slip — no physical signature required
-        </div>
-      </div>
-    );
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -897,7 +518,7 @@ const SalarySlipManager = ({ employee, refreshKey }) => {
         </Modal.Header>
 
         <Modal.Body style={{ padding: 24 }}>
-          {viewSlip && <SlipView slip={viewSlip} />}
+          {viewSlip && <SalarySlipView slip={viewSlip} employee={employee} />}
         </Modal.Body>
 
         <Modal.Footer style={{ border: 'none', background: '#f8fafc', gap: 8, padding: '12px 22px' }}>

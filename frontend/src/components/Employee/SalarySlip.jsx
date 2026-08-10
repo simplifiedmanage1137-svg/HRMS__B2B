@@ -409,8 +409,9 @@ const SalarySlip = () => {
       const bd = getDeductionBreakdown(slip);
       const pfAmt = bd.pf;
       const ptAmt = bd.pt;
+      const professionalTaxAmt = bd.professionalTax || 0;
       const dtAmt = bd.dt !== null ? bd.dt : deduction;
-      const totalDeductionsForPrint = pfAmt + ptAmt + dtAmt + totalAbsentDeduction;
+      const totalDeductionsForPrint = pfAmt + ptAmt + professionalTaxAmt + dtAmt + totalAbsentDeduction;
 
       let logoBase64 = '';
       try {
@@ -492,7 +493,8 @@ const SalarySlip = () => {
           </thead>
           <tbody>
             ${pfAmt > 0 ? `<tr><td style="padding: 4px 4px;">PF (Provident Fund)</td><td style="text-align: right; padding: 4px 4px;">${formatCurrency(pfAmt)}</td></tr>` : ''}
-            <tr><td style="padding: 4px 4px;">Professional Tax</td><td style="text-align: right; padding: 4px 4px;">${ptAmt > 0 ? formatCurrency(ptAmt) : '0'}</td></tr>
+            <tr><td style="padding: 4px 4px;">PT</td><td style="text-align: right; padding: 4px 4px;">${ptAmt > 0 ? formatCurrency(ptAmt) : '0'}</td></tr>
+            ${professionalTaxAmt > 0 ? `<tr><td style="padding: 4px 4px;">Professional Tax</td><td style="text-align: right; padding: 4px 4px;">${formatCurrency(professionalTaxAmt)}</td></tr>` : ''}
             <tr><td style="padding: 4px 4px;">TDS</td><td style="text-align: right; padding: 4px 4px;">0</td></tr>
             ${totalAbsentDeduction > 0 ? `
             <tr style="background-color: #ffe0e0;">
@@ -518,7 +520,7 @@ const SalarySlip = () => {
           <strong>Calculation:</strong> Basic Salary (₹${formatCurrency(basicSalary)})
           + Overtime (₹${formatCurrency(overtimeAmount)})
           ${totalAbsentDeduction > 0 ? ` - Absent Deduction (₹${formatCurrency(totalAbsentDeduction)})` : ''}
-          ${dtAmt > 0 ? `- DT Deduction (₹${formatCurrency(dtAmt)})` : pfAmt > 0 ? `- PF+PT (₹${formatCurrency(pfAmt + ptAmt)})` : ''} = Net Salary (₹${formatCurrency(netSalary)})
+          ${dtAmt > 0 ? `- DT Deduction (₹${formatCurrency(dtAmt)})` : pfAmt > 0 ? `- PF+PT+Prof.Tax (₹${formatCurrency(pfAmt + ptAmt + professionalTaxAmt)})` : ''} = Net Salary (₹${formatCurrency(netSalary)})
         </div>
 
         <div style="font-size: 14px; margin-bottom: 30px;">
@@ -599,13 +601,16 @@ const SalarySlip = () => {
     const y = parseInt(slip?.year  || 0);
     const isPFApplicable = y > 2026 || (y === 2026 && m >= 5);
     if (isPFApplicable) {
+      // PT no longer auto-defaults to ₹200 — admin must explicitly set it; unset = 0.
+      const pt = employee?.pt_amount != null ? parseInt(employee.pt_amount) : 0;
+      const professionalTax = employee?.professional_tax_amount != null ? parseInt(employee.professional_tax_amount) : 0;
       if (employee?.pf_amount != null) {
-        return { pf: parseInt(employee.pf_amount), pt: 200, dt: 0 };
+        return { pf: parseInt(employee.pf_amount), pt, professionalTax, dt: 0 };
       }
-      const totalFixed = Number(slip?.dt) || 2000;
-      return { pf: totalFixed - 200, pt: 200, dt: 0 };
+      const totalFixed = Number(slip?.dt) || (1800 + pt + professionalTax);
+      return { pf: totalFixed - pt - professionalTax, pt, professionalTax, dt: 0 };
     }
-    return { pf: 0, pt: 0, dt: null };
+    return { pf: 0, pt: 0, professionalTax: 0, dt: null };
   };
 
   const getSlipAmounts = (slip) => {
@@ -1225,12 +1230,14 @@ const SalarySlip = () => {
                       const bdown = getDeductionBreakdown(selectedSlip);
                       const pfV = bdown.pf;
                       const ptV = bdown.pt;
+                      const professionalTaxV = bdown.professionalTax || 0;
                       const dtV = bdown.dt !== null ? bdown.dt : selectedSlipAmounts.deduction;
                       const customDed = parseFloat(selectedSlip?.custom_deduction || 0);
                       const absentDeduct = (selectedSlipAmounts.absentDays + selectedSlipAmounts.unpaidLeaveDays) * selectedSlipAmounts.perDaySalary;
                       return (<>
                         {pfV > 0 && <tr><td className="py-1 ps-2">PF (Provident Fund)</td><td className="text-end py-1 pe-2">{formatCurrency(pfV)}</td></tr>}
-                        <tr><td className="py-1 ps-2">Professional Tax</td><td className="text-end py-1 pe-2">{ptV > 0 ? formatCurrency(ptV) : '0'}</td></tr>
+                        <tr><td className="py-1 ps-2">PT</td><td className="text-end py-1 pe-2">{ptV > 0 ? formatCurrency(ptV) : '0'}</td></tr>
+                        {professionalTaxV > 0 && <tr><td className="py-1 ps-2">Professional Tax</td><td className="text-end py-1 pe-2">{formatCurrency(professionalTaxV)}</td></tr>}
                         <tr><td className="py-1 ps-2">TDS</td><td className="text-end py-1 pe-2">0</td></tr>
                         {(selectedSlipAmounts.absentDays + selectedSlipAmounts.unpaidLeaveDays) > 0 && (
                           <tr style={{ backgroundColor: '#ffe0e0' }}>
@@ -1254,7 +1261,7 @@ const SalarySlip = () => {
                         )}
                         <tr style={{ backgroundColor: '#f2f2f2' }}>
                           <td className="fw-bold py-1 ps-2">Total Deductions</td>
-                          <td className="text-end fw-bold text-danger py-1 pe-2">{formatCurrency(pfV + ptV + dtV + absentDeduct + customDed)}</td>
+                          <td className="text-end fw-bold text-danger py-1 pe-2">{formatCurrency(pfV + ptV + professionalTaxV + dtV + absentDeduct + customDed)}</td>
                         </tr>
                       </>);
                     })()}

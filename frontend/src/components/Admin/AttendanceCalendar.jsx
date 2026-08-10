@@ -73,12 +73,15 @@ const Skeleton = ({ w = '100%', h = 16, r = 6, mb = 0 }) => (
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════════
-const AttendanceCalendar = ({ employee, onAttendanceSaved }) => {
+// initialMonth is 1-based (matches the rest of the app's month convention) — converted to
+// the internal 0-based selMonth here. Lets callers (e.g. the Payroll module) open the
+// calendar on the payroll cycle's month instead of always defaulting to today.
+const AttendanceCalendar = ({ employee, onAttendanceSaved, initialMonth, initialYear }) => {
   const { showNotification } = useNotification();
   const today = new Date();
 
-  const [selYear,  setSelYear]  = useState(today.getFullYear());
-  const [selMonth, setSelMonth] = useState(today.getMonth()); // 0-based
+  const [selYear,  setSelYear]  = useState(initialYear || today.getFullYear());
+  const [selMonth, setSelMonth] = useState(initialMonth ? initialMonth - 1 : today.getMonth()); // 0-based
 
   // attendanceMap: { 'YYYY-MM-DD': code }
   const [attendanceMap, setAttendanceMap] = useState({});

@@ -9,6 +9,7 @@ const {
     parseShiftTiming, calculateOvertime, recalculateLate, getEffectiveShiftTiming,
     toUTCMs, istStringToUTCISO,
 } = require('../controllers/attendanceController')._shared;
+const { isFlexibleShiftEnabled, getFlexibleShiftStatus } = require('../utils/flexibleShift');
 
 // Fixes a real bug in the old implementation: only literal role === 'admin' bypassed
 // hierarchy checks there — sub_admin/hr did not, despite needing full access.
@@ -66,8 +67,13 @@ async function recalculateAttendanceForApprovedRequest(attendanceId, requestType
         .from('attendance').select('*').eq('id', attendanceId).single();
     if (attErr || !attendance) throw new Error('Attendance record not found for recalculation');
 
-    const { data: employee } = await supabase
-        .from('employees').select('shift_timing').eq('employee_id', attendance.employee_id).maybeSingle();
+    let { data: employee, error: empErr } = await supabase
+        .from('employees').select('shift_timing, "isFlexibleShift"').eq('employee_id', attendance.employee_id).maybeSingle();
+    if (empErr && /isFlexibleShift|does not exist/i.test(empErr.message || '')) {
+        ({ data: employee } = await supabase
+            .from('employees').select('shift_timing').eq('employee_id', attendance.employee_id).maybeSingle());
+    }
+    const isFlexibleShift = isFlexibleShiftEnabled(employee || {});
 
     const shiftTimingStr = await getEffectiveShiftTiming(
         attendance.employee_id, attendance.attendance_date,
@@ -96,13 +102,21 @@ async function recalculateAttendanceForApprovedRequest(attendanceId, requestType
         const totalHours = totalMinutes / 60;
 
         const shiftObj = parseShiftTiming(shiftTimingStr);
-        const expectedWorkMinutes = (shiftObj.totalHours || 9) * 60;
-        // Same thresholds used elsewhere (clockOut/clockOutMissed/getTeamAttendanceReport),
-        // now shift-based instead of the old hardcoded 540/300 in approveRegularization.
-        const status = totalMinutes >= expectedWorkMinutes ? 'present' : (totalMinutes < 300 ? 'absent' : 'half_day');
-
-        const late = recalculateLate(clockInIST, clockInIST, shiftTimingStr, attendance.attendance_date);
-        const overtime = calculateOvertime(clockInIST, clockOutIST, shiftObj);
+        // Flexible-shift employees: ignore shift timing entirely, judge purely on hours worked,
+        // never late, no overtime (mirrors clockOut/getTeamAttendanceReport handling).
+        let status, late, overtime;
+        if (isFlexibleShift) {
+            status = getFlexibleShiftStatus(totalMinutes).status;
+            late = { is_late: false, late_minutes: 0, late_display: null };
+            overtime = { overtimeHours: 0, overtimeMinutes: 0, hasOvertime: false, overtimeAmount: 0 };
+        } else {
+            const expectedWorkMinutes = (shiftObj.totalHours || 9) * 60;
+            // Same thresholds used elsewhere (clockOut/clockOutMissed/getTeamAttendanceReport),
+            // now shift-based instead of the old hardcoded 540/300 in approveRegularization.
+            status = totalMinutes >= expectedWorkMinutes ? 'present' : (totalMinutes < 300 ? 'absent' : 'half_day');
+            late = recalculateLate(clockInIST, clockInIST, shiftTimingStr, attendance.attendance_date);
+            overtime = calculateOvertime(clockInIST, clockOutIST, shiftObj);
+        }
 
         Object.assign(update, {
             clock_in: istStringToUTCISO(clockInIST), clock_in_ist: clockInIST,

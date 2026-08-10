@@ -34,11 +34,12 @@ const AdminBroadcast      = lazy(() => import('./components/Admin/AdminBroadcast
 const EmployeeProfileView = lazy(() => import('./components/Admin/EmployeeProfileView'));
 const AdminRatings        = lazy(() => import('./components/Admin/AdminRatings'));
 const Teams               = lazy(() => import('./components/Admin/Teams'));
-const PayrollAdjustment   = lazy(() => import('./components/Admin/PayrollAdjustment'));
+const PayrollCenter       = lazy(() => import('./components/Admin/Payroll/PayrollCenter'));
 const DeductionManager    = lazy(() => import('./components/Admin/DeductionManager'));
 const FinanceExport       = lazy(() => import('./components/Admin/FinanceExport'));
 const ManagerTeam         = lazy(() => import('./components/Admin/ManagerTeam'));
 const AdminManagerTeams   = lazy(() => import('./components/Admin/AdminManagerTeams'));
+const EditSlip            = lazy(() => import('./components/Admin/EditSlip'));
 
 // Manager — lazy loaded
 const ManagerDashboard = lazy(() => import('./components/Manager/Dashboard'));
@@ -272,10 +273,10 @@ function AppContent() {
               </PrivateRoute>
             } />
 
-            {/* Payroll Adjustment */}
+            {/* Centralized Payroll module */}
             <Route path="/admin/payroll" element={
               <PrivateRoute allowedRoles={['admin', 'sub_admin', 'hr']}>
-                <PayrollAdjustment />
+                <PayrollCenter />
               </PrivateRoute>
             } />
 
@@ -283,6 +284,14 @@ function AppContent() {
             <Route path="/admin/deductions" element={
               <PrivateRoute allowedRoles={['admin', 'sub_admin', 'hr']}>
                 <DeductionManager />
+              </PrivateRoute>
+            } />
+
+            {/* Manual Salary Slip Generator — Admin ONLY, localStorage-only, never touches
+                the database/attendance/main Payroll module (see EditSlip.jsx header comment) */}
+            <Route path="/editslip" element={
+              <PrivateRoute allowedRoles={['admin']}>
+                <EditSlip />
               </PrivateRoute>
             } />
 

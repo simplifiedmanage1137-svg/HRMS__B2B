@@ -390,11 +390,18 @@ exports.autoCloseStaleSessions = async () => {
         console.log('🕐 Running auto-close stale sessions check...');
         const cutoffTime = new Date();
         cutoffTime.setHours(cutoffTime.getHours() - 24);
-        const { data: staleSessions, error: sessionError } = await supabase
+        let { data: staleSessions, error: sessionError } = await supabase
             .from('attendance_sessions')
-            .select('*, employees(shift_timing)')
+            .select('*, employees(shift_timing, "isFlexibleShift")')
             .eq('is_active', true)
             .lt('clock_in_time', cutoffTime.toISOString());
+        if (sessionError && /isFlexibleShift|does not exist/i.test(sessionError.message || '')) {
+            ({ data: staleSessions, error: sessionError } = await supabase
+                .from('attendance_sessions')
+                .select('*, employees(shift_timing)')
+                .eq('is_active', true)
+                .lt('clock_in_time', cutoffTime.toISOString()));
+        }
         if (sessionError) throw sessionError;
         let closedCount = 0;
         for (const session of staleSessions || []) {
@@ -407,20 +414,36 @@ exports.autoCloseStaleSessions = async () => {
             if (attendanceRecords && attendanceRecords.length > 0) {
                 const attendance = attendanceRecords[0];
                 const clockInTime = new Date(attendance.clock_in);
+                const isFlexibleShift = isFlexibleShiftEnabled(session.employees || {});
                 const shiftTiming = parseShiftTiming(session.employees?.shift_timing);
-                const shiftEndTime = new Date(clockInTime);
-                shiftEndTime.setHours(shiftTiming.endHour, shiftTiming.endMinute, 0, 0);
-                let autoClockOutTime = shiftEndTime;
-                if (autoClockOutTime > new Date()) {
+
+                let autoClockOutTime;
+                if (isFlexibleShift) {
+                    // No shift end time applies — this cron only ever fires for sessions open
+                    // 24h+, so just close at clock-in + 24h same as the no-shift-end fallback below.
                     autoClockOutTime = new Date(clockInTime);
                     autoClockOutTime.setHours(autoClockOutTime.getHours() + 24);
+                } else {
+                    const shiftEndTime = new Date(clockInTime);
+                    shiftEndTime.setHours(shiftTiming.endHour, shiftTiming.endMinute, 0, 0);
+                    autoClockOutTime = shiftEndTime;
+                    if (autoClockOutTime > new Date()) {
+                        autoClockOutTime = new Date(clockInTime);
+                        autoClockOutTime.setHours(autoClockOutTime.getHours() + 24);
+                    }
                 }
                 const totalMinutes = calculateTimeDifferenceInMinutes(clockInTime, autoClockOutTime);
                 const totalHours = totalMinutes / 60;
-                const expectedWorkMinutes = (shiftTiming.totalHours || 9) * 60;
-                let status = 'half_day';
-                if (totalMinutes >= expectedWorkMinutes) status = 'present';
-                else if (totalMinutes < 300) status = 'absent';
+
+                let status;
+                if (isFlexibleShift) {
+                    status = getFlexibleShiftStatus(totalMinutes).status;
+                } else {
+                    const expectedWorkMinutes = (shiftTiming.totalHours || 9) * 60;
+                    status = 'half_day';
+                    if (totalMinutes >= expectedWorkMinutes) status = 'present';
+                    else if (totalMinutes < 300) status = 'absent';
+                }
 
                 const clockOutIST = autoClockOutTime.toLocaleString('en-US', { timeZone: 'Asia/Kolkata', hour12: false });
 
@@ -942,7 +965,14 @@ exports.clockOut = async (req, res) => {
             attendanceRecord = crossMidnightRecords[0];
         }
         const employee = attendanceRecord.employees;
-        const isFlexibleShift = isFlexibleShiftEnabled(employee);
+        // Fetched separately (not via the employees!inner join above) so a not-yet-migrated
+        // isFlexibleShift column can't break the join itself — defaults to false on error.
+        const { data: flexRow, error: flexErr } = await supabase
+            .from('employees')
+            .select('"isFlexibleShift"')
+            .eq('employee_id', employee_id)
+            .maybeSingle();
+        const isFlexibleShift = flexErr ? false : isFlexibleShiftEnabled(flexRow || {});
         const queryTime = Date.now() - startTime;
         console.log(`✅ Query time: ${queryTime}ms`);
 
@@ -1330,7 +1360,9 @@ exports.getTodayAttendance = async (req, res) => {
                 formattedAttendance.first_name = formattedAttendance.employees.first_name;
                 formattedAttendance.last_name = formattedAttendance.employees.last_name;
                 formattedAttendance.shift_timing = formattedAttendance.employees.shift_timing;
-                formattedAttendance.isFlexibleShift = isFlexibleShiftEnabled(formattedAttendance.employees);
+                // Use the already-fetched full employee row (isFlexibleShift), not the joined
+                // partial select above which only carries name/shift_timing/comp_off_balance.
+                formattedAttendance.isFlexibleShift = isFlexibleShift;
                 delete formattedAttendance.employees;
             }
 
@@ -1532,12 +1564,22 @@ exports.getAttendanceReport = async (req, res) => {
         }
         let query = supabase
             .from('attendance')
-            .select('*, employees(first_name, last_name, department, shift_timing, comp_off_balance, profile_image)')
+            .select('*, employees(first_name, last_name, department, shift_timing, comp_off_balance, profile_image, "isFlexibleShift")')
             .gte('attendance_date', start)
             .lte('attendance_date', end);
         if (employee_id) query = query.eq('employee_id', employee_id);
         query = query.order('attendance_date', { ascending: false });
-        const { data: attendance, error: attendanceError } = await query;
+        let { data: attendance, error: attendanceError } = await query;
+        if (attendanceError && /isFlexibleShift|does not exist/i.test(attendanceError.message || '')) {
+            let fallbackQuery = supabase
+                .from('attendance')
+                .select('*, employees(first_name, last_name, department, shift_timing, comp_off_balance, profile_image)')
+                .gte('attendance_date', start)
+                .lte('attendance_date', end);
+            if (employee_id) fallbackQuery = fallbackQuery.eq('employee_id', employee_id);
+            fallbackQuery = fallbackQuery.order('attendance_date', { ascending: false });
+            ({ data: attendance, error: attendanceError } = await fallbackQuery);
+        }
         if (attendanceError) throw attendanceError;
 
         const dedupedAttendanceMap = {};
@@ -1628,6 +1670,8 @@ exports.getAttendanceReport = async (req, res) => {
                     late_minutes: record.late_minutes,
                     late_display: formatLateTime(record.late_minutes),
                 };
+            } else if (isFlexibleShiftEnabled(employee)) {
+                late = { is_late: false, late_minutes: 0, late_display: null };
             } else {
                 late = recalculateLate(record.clock_in_ist, record.clock_in, shiftTiming, record.attendance_date);
             }
@@ -1857,14 +1901,25 @@ exports.getEmployeeAttendanceReport = async (req, res) => {
         if (!start || !end) {
             return res.status(400).json({ success: false, message: 'Start and end dates are required' });
         }
-        const { data: attendance } = await supabase
+        let { data: attendance, error: attendanceQError } = await supabase
             .from('attendance')
-            .select('*, employees!inner(first_name, last_name, department, shift_timing, comp_off_balance, profile_image)')
+            .select('*, employees!inner(first_name, last_name, department, shift_timing, comp_off_balance, profile_image, "isFlexibleShift")')
             .eq('employee_id', employee_id)
             .gte('attendance_date', start)
             .lte('attendance_date', end)
             .order('attendance_date', { ascending: false })
             .order('clock_in', { ascending: false, nullsFirst: false });
+
+        if (attendanceQError && /isFlexibleShift|does not exist/i.test(attendanceQError.message || '')) {
+            ({ data: attendance } = await supabase
+                .from('attendance')
+                .select('*, employees!inner(first_name, last_name, department, shift_timing, comp_off_balance, profile_image)')
+                .eq('employee_id', employee_id)
+                .gte('attendance_date', start)
+                .lte('attendance_date', end)
+                .order('attendance_date', { ascending: false })
+                .order('clock_in', { ascending: false, nullsFirst: false }));
+        }
 
         // Deduplicate per date: prefer (1) real clock-in records over ghost import records,
         // then (2) higher total_minutes — admin-present import sets 540, old absent sets 0.
@@ -1918,6 +1973,8 @@ exports.getEmployeeAttendanceReport = async (req, res) => {
                     late_minutes: record.late_minutes,
                     late_display: formatLateTime(record.late_minutes),
                 };
+            } else if (isFlexibleShiftEnabled(employee)) {
+                late = { is_late: false, late_minutes: 0, late_display: null };
             } else {
                 late = recalculateLate(record.clock_in_ist, record.clock_in, shiftTiming, record.attendance_date);
             }
@@ -2131,7 +2188,7 @@ exports.updateHistoricalLateMarks = async (req, res) => {
         console.log('🚀 Starting historical late marks update via API...');
 
         // Get all attendance records with employee shift timing
-        const { data: attendanceRecords, error: attendanceError } = await supabase
+        let { data: attendanceRecords, error: attendanceError } = await supabase
             .from('attendance')
             .select(`
                 id,
@@ -2142,10 +2199,28 @@ exports.updateHistoricalLateMarks = async (req, res) => {
                 late_minutes,
                 late_display,
                 shift_time_used,
-                employees!inner(shift_timing)
+                employees!inner(shift_timing, "isFlexibleShift")
             `)
             .not('clock_in', 'is', null)
             .order('attendance_date', { ascending: false });
+
+        if (attendanceError && /isFlexibleShift|does not exist/i.test(attendanceError.message || '')) {
+            ({ data: attendanceRecords, error: attendanceError } = await supabase
+                .from('attendance')
+                .select(`
+                    id,
+                    employee_id,
+                    attendance_date,
+                    clock_in,
+                    clock_in_ist,
+                    late_minutes,
+                    late_display,
+                    shift_time_used,
+                    employees!inner(shift_timing)
+                `)
+                .not('clock_in', 'is', null)
+                .order('attendance_date', { ascending: false }));
+        }
 
         if (attendanceError) {
             throw attendanceError;
@@ -2239,9 +2314,12 @@ exports.updateHistoricalLateMarks = async (req, res) => {
                     0
                 );
 
+                // Flexible-shift employees never get a late mark — skip the shift-time diff entirely.
+                const isFlexibleShift = isFlexibleShiftEnabled(record.employees || {});
+
                 // Calculate late time
-                const diffMs = clockInTime - shiftStartTime;
-                const isLate = diffMs > 0; // Any delay is late
+                const diffMs = isFlexibleShift ? 0 : clockInTime - shiftStartTime;
+                const isLate = !isFlexibleShift && diffMs > 0; // Any delay is late
 
                 let lateMinutes = 0;
                 let lateDisplay = null;
@@ -2409,10 +2487,17 @@ exports.getTeamAttendanceReport = async (req, res) => {
         }
 
         // Get team member details
-        const { data: teamMembers, error: teamError } = await supabase
+        let { data: teamMembers, error: teamError } = await supabase
             .from('employees')
-            .select('employee_id, first_name, last_name, department, designation, joining_date, shift_timing, profile_image')
+            .select('employee_id, first_name, last_name, department, designation, joining_date, shift_timing, profile_image, "isFlexibleShift"')
             .in('employee_id', teamEmployeeIds);
+
+        if (teamError && /isFlexibleShift|does not exist/i.test(teamError.message || '')) {
+            ({ data: teamMembers, error: teamError } = await supabase
+                .from('employees')
+                .select('employee_id, first_name, last_name, department, designation, joining_date, shift_timing, profile_image')
+                .in('employee_id', teamEmployeeIds));
+        }
 
         if (teamError) throw teamError;
 
@@ -2552,6 +2637,7 @@ exports.getTeamAttendanceReport = async (req, res) => {
 
         // In getTeamAttendanceReport function - Update the status determination section
         for (const emp of targetEmployees) {
+            const isFlexibleShift = isFlexibleShiftEnabled(emp);
             for (const { date, isWeekend } of dateRange) {
                 const attendanceKey = `${emp.employee_id}-${date}`;
                 const attendance = attendanceMap[attendanceKey];
@@ -2579,7 +2665,8 @@ exports.getTeamAttendanceReport = async (req, res) => {
                     clockIn = attendance.clock_in_ist || attendance.clock_in;
                     clockOut = attendance.clock_out_ist || attendance.clock_out;
                     totalHours = parseFloat(attendance.total_hours) || 0;
-                    lateMinutes = parseFloat(attendance.late_minutes) || 0;
+                    // Flexible-shift employees never carry a late mark, regardless of what's stored.
+                    lateMinutes = isFlexibleShift ? 0 : (parseFloat(attendance.late_minutes) || 0);
                     isLate = lateMinutes > 0;
                     overtimeHours = attendance.overtime_hours || 0;
 
@@ -2593,9 +2680,10 @@ exports.getTeamAttendanceReport = async (req, res) => {
                         totalHours = totalMinutes / 60;
                     }
 
-                    // Get expected work hours from employee's shift timing
+                    // Get expected work hours from employee's shift timing — ignored entirely for
+                    // flexible-shift employees, who are always judged against a flat 9h/day.
                     const shiftTiming = parseShiftTiming(emp.shift_timing);
-                    const expectedWorkHours = shiftTiming.totalHours || 9;
+                    const expectedWorkHours = isFlexibleShift ? 9 : (shiftTiming.totalHours || 9);
                     const expectedWorkMinutes = expectedWorkHours * 60;
 
                     // ✅ UPDATED: Determine status based on actual working minutes vs expected
@@ -2764,11 +2852,19 @@ exports.fixOrphanedAttendance = async (req, res) => {
         console.log('🔧 Starting fixOrphanedAttendance for all employees...');
 
         // Get all attendance records with clock_out NULL
-        const { data: orphaned, error } = await supabase
+        let { data: orphaned, error } = await supabase
             .from('attendance')
-            .select('id, employee_id, attendance_date, clock_in, clock_in_ist, session_id, employees!inner(shift_timing)')
+            .select('id, employee_id, attendance_date, clock_in, clock_in_ist, session_id, employees!inner(shift_timing, "isFlexibleShift")')
             .not('clock_in', 'is', null)
             .is('clock_out', null);
+
+        if (error && /isFlexibleShift|does not exist/i.test(error.message || '')) {
+            ({ data: orphaned, error } = await supabase
+                .from('attendance')
+                .select('id, employee_id, attendance_date, clock_in, clock_in_ist, session_id, employees!inner(shift_timing)')
+                .not('clock_in', 'is', null)
+                .is('clock_out', null));
+        }
 
         if (error) throw error;
 
@@ -2817,6 +2913,8 @@ exports.fixOrphanedAttendance = async (req, res) => {
                 finalClockOutMs = ciMs + MISSING_CLOCKOUT_THRESHOLD_MS;
                 totalMinutes = MISSING_CLOCKOUT_THRESHOLD_MS / 60000;
                 fixStatus = 'missing';
+            } else if (isFlexibleShiftEnabled(record.employees || {})) {
+                fixStatus = getFlexibleShiftStatus(totalMinutes).status;
             } else {
                 const shiftT = parseShiftTiming(record.employees?.shift_timing);
                 const expMin = (shiftT.totalHours || 9) * 60;
