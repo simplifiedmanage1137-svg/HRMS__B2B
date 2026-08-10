@@ -227,7 +227,11 @@ export default function OnboardingFormPage() {
                 if (!d.success && !d.offer) { setOfferErr(d.message || 'Invalid link'); return; }
                 const o = d.offer;
                 if (!['pending', 'accepted'].includes(o.status)) {
-                    setOfferErr(`This offer cannot accept a form submission (status: ${o.status})`);
+                    // Already submitted/approved/rejected/expired — the root offer page
+                    // already renders the correct branded status for all of these, so
+                    // send the candidate there instead of showing a raw error here (this
+                    // is what a page refresh after submitting used to do).
+                    if (!cancelled) navigate(`/onboarding/${token}`, { replace: true });
                     return;
                 }
                 const parts = (o.employee_name || '').trim().split(/\s+/);
@@ -362,30 +366,63 @@ export default function OnboardingFormPage() {
         return data.publicUrl;
     };
 
+    // Single source of truth for "is this tab's required data filled in" — used both
+    // to gate the Next button (below) and as the final check before actually submitting,
+    // so the two can never drift into checking different things.
+    const validateTab = (key) => {
+        if (key === 'personal') {
+            if (!form.first_name?.trim()) return { msg: 'First Name is required.', tab: 'personal' };
+            if (!form.last_name?.trim())  return { msg: 'Last Name is required.', tab: 'personal' };
+            if (!form.email?.trim())      return { msg: 'Email Address is required.', tab: 'personal' };
+            if (!form.phone?.trim())      return { msg: 'Phone Number is required.', tab: 'personal' };
+            if (!form.dob)                return { msg: 'Date of Birth is required.', tab: 'personal' };
+            if (!form.blood_group)        return { msg: 'Blood Group is required.', tab: 'personal' };
+            if (!form.joining_date)       return { msg: 'Expected Joining Date is required.', tab: 'personal' };
+            if (!form.address?.trim())    return { msg: 'Residential Address is required.', tab: 'personal' };
+            return null;
+        }
+        if (key === 'bank') {
+            if (!form.bank_account_name?.trim()) return { msg: 'Account Holder Name is required.', tab: 'bank' };
+            if (!form.account_number?.trim())    return { msg: 'Account Number is required.', tab: 'bank' };
+            if (!form.ifsc_code?.trim())         return { msg: 'IFSC Code is required.', tab: 'bank' };
+            return null;
+        }
+        if (key === 'emergency') {
+            if (!form.emergency_contact?.trim()) return { msg: 'Emergency Contact Number is required.', tab: 'emergency' };
+            return null;
+        }
+        if (key === 'documents') {
+            const sizeErrField = Object.entries(fileSizeErrors).find(([, v]) => v);
+            if (sizeErrField) return { msg: fileSizeErrors[sizeErrField[0]], tab: 'documents' };
+            if (!files.passport_photo)  return { msg: 'Passport size photo is required — go to Documents tab.', tab: 'documents' };
+            if (!files.aadhar_card_doc) return { msg: 'Aadhar card is required — go to Documents tab.', tab: 'documents' };
+            if (!files.pan_card_doc)    return { msg: 'PAN card is required — go to Documents tab.', tab: 'documents' };
+            return null;
+        }
+        return null; // 'ids' tab has no required fields
+    };
+
+    // Only validates when moving FORWARD — going back, or jumping to an already-visited
+    // tab, never blocks (nothing new is being skipped).
+    const goToTab = (targetKey) => {
+        const curIdx = TABS.findIndex(t => t.key === tab);
+        const targetIdx = TABS.findIndex(t => t.key === targetKey);
+        if (targetIdx > curIdx) {
+            const err = validateTab(tab);
+            if (err) { setSubmitErr(err.msg); return; }
+        }
+        setSubmitErr('');
+        setTab(targetKey);
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSubmitErr('');
 
-        // Block if any file has a size error
-        const sizeErrField = Object.entries(fileSizeErrors).find(([, v]) => v);
-        if (sizeErrField) {
-            setSubmitErr(fileSizeErrors[sizeErrField[0]]);
-            setTab('documents');
-            return;
+        for (const t of TABS) {
+            const err = validateTab(t.key);
+            if (err) { setSubmitErr(err.msg); setTab(err.tab); return; }
         }
-
-        // Validate required personal-info fields (needed by IT/Marketing onboarding tickets)
-        if (!form.phone?.trim())        { setSubmitErr('Phone Number is required.'); setTab('personal'); return; }
-        if (!form.dob)                  { setSubmitErr('Date of Birth is required.'); setTab('personal'); return; }
-        if (!form.blood_group)          { setSubmitErr('Blood Group is required.'); setTab('personal'); return; }
-        if (!form.joining_date)         { setSubmitErr('Expected Joining Date is required.'); setTab('personal'); return; }
-        if (!form.address?.trim())      { setSubmitErr('Residential Address is required.'); setTab('personal'); return; }
-        if (!form.emergency_contact?.trim()) { setSubmitErr('Emergency Contact Number is required.'); setTab('emergency'); return; }
-
-        // Validate required documents
-        if (!files.passport_photo)  { setSubmitErr('Passport size photo is required — go to Documents tab.'); setTab('documents'); return; }
-        if (!files.aadhar_card_doc) { setSubmitErr('Aadhar card is required — go to Documents tab.'); setTab('documents'); return; }
-        if (!files.pan_card_doc)    { setSubmitErr('PAN card is required — go to Documents tab.'); setTab('documents'); return; }
 
         setSubmitting(true);
 
@@ -569,7 +606,7 @@ export default function OnboardingFormPage() {
                         })();
                         return (
                             <button
-                                key={t.key} type="button" onClick={() => setTab(t.key)}
+                                key={t.key} type="button" onClick={() => goToTab(t.key)}
                                 style={{
                                     display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px',
                                     border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 12,
@@ -696,7 +733,7 @@ export default function OnboardingFormPage() {
                             type="button"
                             onClick={() => {
                                 const idx = TABS.findIndex(t => t.key === tab);
-                                if (idx > 0) setTab(TABS[idx - 1].key);
+                                if (idx > 0) goToTab(TABS[idx - 1].key);
                             }}
                             disabled={tab === TABS[0].key}
                             style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', fontWeight: 600, color: '#374151', opacity: tab === TABS[0].key ? 0.4 : 1 }}
@@ -709,7 +746,7 @@ export default function OnboardingFormPage() {
                                 type="button"
                                 onClick={() => {
                                     const idx = TABS.findIndex(t => t.key === tab);
-                                    setTab(TABS[idx + 1].key);
+                                    goToTab(TABS[idx + 1].key);
                                 }}
                                 style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', cursor: 'pointer', fontWeight: 700 }}
                             >
