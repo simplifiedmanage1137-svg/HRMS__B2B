@@ -503,12 +503,25 @@ router.post('/:token/submit', async (req, res) => {
         const now = new Date();
         let credentials = null;
         try {
+            // Step 1 — create the employee account. This is the part that actually matters
+            // for "auto-approve" — everything after this is bookkeeping, so a failure here
+            // (and only here) should fall back to the old manual-review state.
             const { employee: emp, employeeId: newEmployeeId, tempPassword } =
                 await createEmployeeAccountFromSubmission(offer, submissionRow);
+            credentials = { employee_id: newEmployeeId, temp_password: tempPassword, email: emp.email };
 
+            // Step 2 — raise onboarding tickets. Never throws (see onboardingTickets.js),
+            // so a ticketing problem can't undo the account that was just created.
             await createOnboardingTickets(supabase, { employee: emp, actor: { employeeId: offer.generated_by } });
 
-            await supabase.from('employee_offer_links').update({
+            // Step 3 — mark the link approved + record the temp password for HR/Admin to
+            // view later. Try the full update first; if the migration in
+            // backend/scripts/add-onboarding-auto-approval-columns.sql hasn't been run yet
+            // (temp_password/created_employee_id/auto_approved don't exist as columns),
+            // retry with only the columns that have always existed — the employee account
+            // and tickets above are unaffected either way, and `credentials` was already
+            // captured above so the candidate still sees their login details.
+            const { error: linkUpdateErr } = await supabase.from('employee_offer_links').update({
                 status:               'approved',
                 submitted_at:         now.toISOString(),
                 approved_at:          now.toISOString(),
@@ -519,12 +532,26 @@ router.post('/:token/submit', async (req, res) => {
                 updated_at:           now.toISOString(),
             }).eq('token', req.params.token);
 
-            credentials = { employee_id: newEmployeeId, temp_password: tempPassword, email: emp.email };
+            if (linkUpdateErr) {
+                console.error('[onboarding] offer_links update with new columns failed, retrying without them:', linkUpdateErr);
+                const { error: fallbackErr } = await supabase.from('employee_offer_links').update({
+                    status:      'approved',
+                    submitted_at: now.toISOString(),
+                    approved_at: now.toISOString(),
+                    approved_by: null,
+                    updated_at:  now.toISOString(),
+                }).eq('token', req.params.token);
+                if (fallbackErr) console.error('[onboarding] offer_links fallback update also failed:', fallbackErr);
+            }
         } catch (autoApproveErr) {
-            // Submission itself already succeeded — fall back to the old manual-review
-            // state rather than losing the candidate's data if account creation fails
-            // (e.g. duplicate email already in `employees`).
-            console.error('[onboarding] auto-approve on submit failed:', autoApproveErr);
+            // Account creation itself failed (e.g. duplicate email already in `employees`)
+            // — fall back to the old manual-review state rather than losing the
+            // candidate's submitted data.
+            console.error('[onboarding] auto-approve on submit failed:', {
+                message: autoApproveErr?.message, details: autoApproveErr?.details,
+                hint: autoApproveErr?.hint, code: autoApproveErr?.code,
+            });
+            credentials = null;
             await supabase.from('employee_offer_links').update({
                 status: 'submitted',
                 submitted_at: now.toISOString(),
