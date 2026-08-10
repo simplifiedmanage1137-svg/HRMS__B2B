@@ -210,6 +210,8 @@ export default function OnboardingFormPage() {
     const [submitting, setSubmitting]         = useState(false);
     const [submitErr, setSubmitErr]           = useState('');
     const [done, setDone]                     = useState(false);
+    const [credentials, setCredentials]       = useState(null);
+    const [credsCopied, setCredsCopied]       = useState(false);
     const [uploadProgress, setUploadProgress] = useState('');
     const [draftReady, setDraftReady]         = useState(false);
     const [draftRestored, setDraftRestored]   = useState(false);
@@ -437,6 +439,9 @@ export default function OnboardingFormPage() {
             if (!d.success) throw new Error(d.message);
             clearDraftFromStorage(token);
             setIsDirty(false);
+            if (d.employee_id && d.temp_password) {
+                setCredentials({ employeeId: d.employee_id, tempPassword: d.temp_password, email: d.email });
+            }
             setDone(true);
         } catch (err) {
             console.error('[onboarding] submit error:', err);
@@ -469,17 +474,71 @@ export default function OnboardingFormPage() {
         </div>
     );
 
-    if (done) return (
-        <div style={pageStyle}>
-            <div style={{ ...cardStyle, textAlign: 'center' }}>
-                <CheckCircle size={60} color="#10b981" style={{ marginBottom: 16 }} />
-                <h4 style={{ fontWeight: 800, color: '#111827' }}>Onboarding Form Submitted!</h4>
-                <p style={{ color: '#6b7280', fontSize: 14, marginTop: 8, maxWidth: 380, margin: '8px auto 0' }}>
-                    Thank you! HR will review your information and documents, then create your employee account. You'll be contacted with your login credentials shortly.
-                </p>
+    if (done) {
+        const loginUrl = `${window.location.origin}/login`;
+        const copyCredentials = () => {
+            if (!credentials) return;
+            navigator.clipboard.writeText(
+                `Employee ID: ${credentials.employeeId}\nPassword: ${credentials.tempPassword}\nLogin: ${loginUrl}`
+            ).then(() => {
+                setCredsCopied(true);
+                setTimeout(() => setCredsCopied(false), 2000);
+            });
+        };
+
+        return (
+            <div style={pageStyle}>
+                <div style={{ ...cardStyle, textAlign: 'center', maxWidth: credentials ? 460 : 420 }}>
+                    <CheckCircle size={60} color="#10b981" style={{ marginBottom: 16 }} />
+                    <h4 style={{ fontWeight: 800, color: '#111827' }}>Onboarding Form Submitted!</h4>
+
+                    {credentials ? (
+                        <>
+                            <p style={{ color: '#6b7280', fontSize: 14, marginTop: 8, maxWidth: 380, margin: '8px auto 0' }}>
+                                Your employee account has been created. Here are your login credentials —
+                                please save them now, as the password won't be shown again here.
+                            </p>
+
+                            <div style={{ background: '#fefce8', border: '1px solid #fde68a', borderRadius: 12, padding: '18px 20px', marginTop: 18, textAlign: 'left' }}>
+                                <div style={{ marginBottom: 10 }}>
+                                    <div style={{ fontSize: 11, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700 }}>Employee ID</div>
+                                    <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', fontFamily: 'monospace' }}>{credentials.employeeId}</div>
+                                </div>
+                                <div style={{ marginBottom: 10 }}>
+                                    <div style={{ fontSize: 11, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700 }}>Email</div>
+                                    <div style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>{credentials.email}</div>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: 11, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700 }}>Temporary Password</div>
+                                    <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', fontFamily: 'monospace' }}>{credentials.tempPassword}</div>
+                                </div>
+                            </div>
+
+                            <div style={{ fontSize: 12, color: '#b45309', marginTop: 10, fontWeight: 600 }}>
+                                ⚠ Please save these credentials — you'll need them to log in.
+                            </div>
+
+                            <button onClick={copyCredentials} style={{ marginTop: 14, background: credsCopied ? '#dcfce7' : '#fff', color: credsCopied ? '#16a34a' : '#374151', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 18px', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+                                {credsCopied ? '✓ Copied!' : 'Copy Credentials'}
+                            </button>
+
+                            <a href={loginUrl} style={{ display: 'block', marginTop: 14, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 20px', cursor: 'pointer', fontWeight: 700, fontSize: 14, textDecoration: 'none' }}>
+                                Go to Login →
+                            </a>
+                            <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 8, wordBreak: 'break-all' }}>{loginUrl}</div>
+                            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 10 }}>
+                                You can change this password after logging in.
+                            </div>
+                        </>
+                    ) : (
+                        <p style={{ color: '#6b7280', fontSize: 14, marginTop: 8, maxWidth: 380, margin: '8px auto 0' }}>
+                            Thank you! HR will review your information and documents, then create your employee account. You'll be contacted with your login credentials shortly.
+                        </p>
+                    )}
+                </div>
             </div>
-        </div>
-    );
+        );
+    }
 
     const docsDone = DOC_FIELDS.filter(d => d.required && !files[d.key]).length === 0
         && !Object.values(fileSizeErrors).some(Boolean);

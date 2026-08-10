@@ -93,6 +93,22 @@ export default function OnboardingPage() {
             if (!d.success) throw new Error(d.message);
             navigate(`/onboarding/${token}/form`);
         } catch (err) {
+            // "Offer is already accepted/submitted/..." means someone already moved this
+            // link forward (e.g. a double-click, or revisiting after already accepting).
+            // Re-fetch the real current status instead of dead-ending on the raw error —
+            // if it's still safe to fill the form, just continue there.
+            if (/already (accepted|submitted|approved)/i.test(err.message || '')) {
+                try {
+                    const freshRes = await fetch(API_ENDPOINTS.ONBOARDING_BY_TOKEN(token));
+                    const freshData = await freshRes.json();
+                    const freshOffer = freshData.offer;
+                    if (freshOffer?.status === 'accepted') {
+                        navigate(`/onboarding/${token}/form`);
+                        return;
+                    }
+                    if (freshOffer) { setOffer(freshOffer); setShowAck(false); return; }
+                } catch { /* fall through to showing the original error */ }
+            }
             setAcceptErr(err.message);
             setAccepting(false);
         }

@@ -498,7 +498,10 @@ router.post('/:token/submit', async (req, res) => {
         // account right away, raises the onboarding tickets, and records the temp
         // password on the offer link so HR/Admin can view it in Offer Links until the
         // employee changes it on first login (see /auth/change-password clearing it).
+        // Credentials are also returned to the candidate directly below so they can log
+        // in right away instead of waiting to be contacted by HR.
         const now = new Date();
+        let credentials = null;
         try {
             const { employee: emp, employeeId: newEmployeeId, tempPassword } =
                 await createEmployeeAccountFromSubmission(offer, submissionRow);
@@ -515,6 +518,8 @@ router.post('/:token/submit', async (req, res) => {
                 created_employee_id:  newEmployeeId,
                 updated_at:           now.toISOString(),
             }).eq('token', req.params.token);
+
+            credentials = { employee_id: newEmployeeId, temp_password: tempPassword, email: emp.email };
         } catch (autoApproveErr) {
             // Submission itself already succeeded — fall back to the old manual-review
             // state rather than losing the candidate's data if account creation fails
@@ -527,7 +532,13 @@ router.post('/:token/submit', async (req, res) => {
             }).eq('token', req.params.token);
         }
 
-        return res.status(201).json({ success: true, message: 'Onboarding form submitted successfully' });
+        return res.status(201).json({
+            success: true,
+            message: credentials
+                ? 'Onboarding form submitted and your account has been created'
+                : 'Onboarding form submitted successfully',
+            ...credentials,
+        });
     } catch (err) {
         console.error('[onboarding] submit:', err);
         return res.status(500).json({ success: false, message: err.message });
