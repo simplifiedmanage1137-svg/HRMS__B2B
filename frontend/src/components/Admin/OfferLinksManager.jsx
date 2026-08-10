@@ -376,12 +376,10 @@ export default function OfferLinksManager() {
                                             {busy ? <Spinner size="sm" animation="border" style={{ width: 10, height: 10 }} /> : <XCircle size={11} />} Expire
                                         </button>
                                     )}
-                                    {['rejected', 'expired', 'approved'].includes(st) && (
-                                        <button onClick={e => doDelete(e, l)} disabled={busy}
-                                            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 9px', border: '1px solid #fee2e2', borderRadius: 6, background: '#fef2f2', cursor: 'pointer', fontSize: 11, color: '#ef4444' }}>
-                                            {busy ? <Spinner size="sm" animation="border" style={{ width: 10, height: 10 }} /> : <Trash2 size={11} />} Delete
-                                        </button>
-                                    )}
+                                    <button onClick={e => doDelete(e, l)} disabled={busy}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 9px', border: '1px solid #fee2e2', borderRadius: 6, background: '#fef2f2', cursor: 'pointer', fontSize: 11, color: '#ef4444' }}>
+                                        {busy ? <Spinner size="sm" animation="border" style={{ width: 10, height: 10 }} /> : <Trash2 size={11} />} Delete
+                                    </button>
                                     {st === 'submitted' && (
                                         <button onClick={e => { e.stopPropagation(); setApproveModal(l); setApproveResult(null); }}
                                             style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 9px', border: '1px solid #bbf7d0', borderRadius: 6, background: '#d1fae5', cursor: 'pointer', fontSize: 11, color: '#065f46', fontWeight: 600 }}>
@@ -456,6 +454,10 @@ export default function OfferLinksManager() {
                                         <UserPlus size={14} /> Approve & Create Account
                                     </button>
                                 )}
+                                <button onClick={e => doDelete(e, selected)} disabled={actioning === selected.id}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: '1px solid #fee2e2', borderRadius: 8, background: '#fef2f2', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#ef4444' }}>
+                                    {actioning === selected.id ? <Spinner size="sm" animation="border" style={{ width: 13, height: 13 }} /> : <Trash2 size={14} />} Delete
+                                </button>
                             </div>
                         </div>
 

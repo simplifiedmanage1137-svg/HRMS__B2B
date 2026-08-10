@@ -461,6 +461,19 @@ router.post('/:token/submit', async (req, res) => {
         if (!aadhar_card_doc)           return res.status(400).json({ success: false, message: 'Aadhar card document is required' });
         if (!pan_card_doc)              return res.status(400).json({ success: false, message: 'PAN card document is required' });
 
+        // An existing employee with this email is the #1 real-world reason auto-approval
+        // silently falls back to manual review (employees.email is unique) — catch it here
+        // with a clear message instead of letting it surface later as a confusing generic
+        // "HR will review" fallback with no explanation.
+        const { data: existingEmp } = await supabase.from('employees')
+            .select('employee_id').ilike('email', email.trim()).maybeSingle();
+        if (existingEmp) {
+            return res.status(409).json({
+                success: false,
+                message: 'An employee account with this email already exists. Please use a different email address, or contact HR if you believe this is a mistake.',
+            });
+        }
+
         // Shared shape: inserted as-is into employee_onboarding_submissions, and reused
         // directly (no re-fetch) by createEmployeeAccountFromSubmission below.
         const submissionRow = {
