@@ -237,7 +237,7 @@ const TeamAttendanceReport = () => {
                 'Clock In': formatTime(record.clock_in),
                 'Clock Out': formatTime(record.clock_out),
                 'Total Hours': record.total_hours,
-                'Status': record.status === 'present' ? 'Present' :
+                'Status': record.status === 'present' ? (record.present_reason ? `Present - ${record.present_reason}` : 'Present') :
                     record.status === 'half_day' ? 'Half Day' :
                         record.status === 'on_leave' ? 'On Leave' :
                             record.status === 'working' ? 'Working' :
@@ -597,7 +597,8 @@ const TeamAttendanceReport = () => {
                                     visibleAttendance.map((record, index) => {
                                         const statusKey = record.status || 'absent';
                                         const pillStyle = STATUS_PILL[statusKey] || STATUS_PILL.absent;
-                                        const statusLabel = statusKey === 'present' ? 'Present'
+                                        const statusLabel = statusKey === 'present'
+                                            ? (record.present_reason ? `Present — ${record.present_reason}` : 'Present')
                                             : statusKey === 'working' ? 'Working'
                                             : statusKey === 'half_day' ? 'Half Day'
                                             : statusKey === 'on_leave' ? 'On Leave'

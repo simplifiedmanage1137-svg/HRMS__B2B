@@ -196,10 +196,19 @@ const PayrollCenter = () => {
   // ── Export to Excel ──────────────────────────────────────────────────────────
   // Exports exactly the currently filtered/visible records (respecting Department /
   // TL Team / Manager Team / search filters above), merged with full employee fields
-  // (bank/PAN/joining-date) that the bulk payroll endpoint doesn't return, plus a
-  // day-by-day attendance grid (P/PL/A/HF/WO) for the pay cycle.
+  // (bank/PAN/joining-date/dob) that the bulk payroll endpoint doesn't return, plus a
+  // day-by-day attendance grid (P/PL/UL/A/HF/WO/HOL/BD) for the pay cycle and a per-cycle
+  // late-attendance count (Total/Free/Chargeable — count only, no deduction amount).
   // Day classification mirrors calculateAttendanceSummary in
-  // backend/controllers/salaryController.js so the codes agree with the payroll totals.
+  // backend/controllers/salaryController.js so the codes agree with the payroll totals;
+  // the late count reads the same attendance.late_minutes column and cycle window that
+  // calculateAttendanceSummary does, and LATE_FREE_COUNT mirrors
+  // backend/config/payrollCycle.js.
+  // 'Other Deduction (₹)' + 'Deduction Details' come from getBulkPayroll's live sum of
+  // salary_deductions (backend/controllers/salaryController.js getBulkPayroll) — every
+  // line item an employee has for the cycle, not just whatever was baked into the slip
+  // at generation time, so adding a deduction after generating a slip is reflected here
+  // immediately. 'Slip Status' flags when that means Total Payable is now stale.
   const exportToExcel = async () => {
     if (filteredRecords.length === 0) {
       showNotification('No records to export for the current filters.', 'warning');
@@ -240,12 +249,23 @@ const PayrollCenter = () => {
       });
 
       // P = Present, HF = Half Day, A = Absent, PL = Paid Leave, UL = Unpaid Leave,
-      // WO = Week Off (Sat/Sun), HOL = Company holiday marked on the attendance record.
-      const dayCodeFor = (employeeId, date, joiningDate) => {
+      // WO = Week Off (Sat/Sun), HOL = Company holiday marked on the attendance record,
+      // BD = Employee's birthday (always Present, day+month match against employees.dob —
+      // takes priority over Absent even with no punch, and over a plain Paid Leave code
+      // when the leave record itself is an approved Birthday leave).
+      const isBirthday = (dob, date) => {
+        if (!dob) return false;
+        const d = new Date(dob);
+        return d.getMonth() === date.getMonth() && d.getDate() === date.getDate();
+      };
+      const dayCodeFor = (employeeId, date, joiningDate, dob) => {
         if (joiningDate && date < joiningDate) return '';
         const dateStr = localDateStr(date);
         const leave = leaveByKey[`${employeeId}_${dateStr}`];
+        const birthday = isBirthday(dob, date);
+        if (leave?.leave_type === 'Birthday' || (birthday && !leave)) return 'BD';
         if (leave) return leave.leave_type === 'Unpaid' ? 'UL' : 'PL';
+        if (birthday) return 'BD';
         const dow = date.getDay();
         if (dow === 0 || dow === 6) return 'WO';
         const att = attendanceByKey[`${employeeId}_${dateStr}`];
@@ -263,6 +283,21 @@ const PayrollCenter = () => {
         }
         return 'A';
       };
+
+      // Late count per employee for the cycle — mirrors backend/config/payrollCycle.js
+      // LATE_FREE_COUNT and reads the exact same attendanceRows/late_minutes signal
+      // salaryController.calculateAttendanceSummary uses, so this can't disagree with
+      // payroll. Informational only — no deduction amount, HR applies that manually.
+      const LATE_FREE_COUNT = 3;
+      const cycleDateStrs = new Set(cycleDays.map(d => localDateStr(d)));
+      const lateCountByEmployee = {};
+      attendanceRows.forEach(rec => {
+        const dateStr = rec.attendance_date?.split('T')[0];
+        if (!rec.employee_id || !dateStr || !cycleDateStrs.has(dateStr)) return;
+        if (rec.is_late || Number(rec.late_minutes) > 0) {
+          lateCountByEmployee[rec.employee_id] = (lateCountByEmployee[rec.employee_id] || 0) + 1;
+        }
+      });
 
       const dayColumnLabels = cycleDays.map(d => `${String(d.getDate()).padStart(2, '0')}-${MONTHS[d.getMonth()].slice(0, 3)}`);
 
@@ -289,8 +324,10 @@ const PayrollCenter = () => {
         };
 
         cycleDays.forEach((d, di) => {
-          row[dayColumnLabels[di]] = dayCodeFor(r.employee_id, d, joiningDate);
+          row[dayColumnLabels[di]] = dayCodeFor(r.employee_id, d, joiningDate, emp.dob);
         });
+
+        const totalLate = lateCountByEmployee[r.employee_id] || 0;
 
         Object.assign(row, {
           'Working Days':           r.total_working_days ?? '',
@@ -298,6 +335,9 @@ const PayrollCenter = () => {
           'Half Days':              r.half_days ?? '',
           'Paid Leave Days':        r.paid_leave_days ?? '',
           'Unpaid Leave Days':      r.unpaid_leave_days ?? '',
+          'Total Late':             totalLate,
+          'Free Late':              Math.min(totalLate, LATE_FREE_COUNT),
+          'Chargeable Late':        Math.max(0, totalLate - LATE_FREE_COUNT),
           'Absent Days':            r.absent_days ?? '',
           'Monthly Salary (₹)':     Number(r.monthly_salary || 0).toFixed(2),
           'Earned Salary (₹)':      r.basic_salary != null ? Number(r.basic_salary).toFixed(2) : '',
@@ -306,8 +346,12 @@ const PayrollCenter = () => {
           'PT Amount (₹)':          r.pt_amount != null ? Number(r.pt_amount).toFixed(2) : '',
           'Professional Tax (₹)':   r.professional_tax_amount != null ? Number(r.professional_tax_amount).toFixed(2) : '',
           'Other Deduction (₹)':    Number(r.custom_deduction || 0).toFixed(2),
+          'Deduction Details':      (r.deduction_items && r.deduction_items.length)
+            ? r.deduction_items.map(d => `${d.reason || 'No reason'}: ₹${Number(d.amount || 0).toFixed(2)}`).join('; ')
+            : '',
           'Total Payable Amount (₹)': Number(payable || 0).toFixed(2),
-          'Slip Status':            r.has_slip ? (r.is_paid ? 'Paid' : 'Generated - Pending Payment') : 'Not Generated',
+          'Slip Status':            (r.has_slip ? (r.is_paid ? 'Paid' : 'Generated - Pending Payment') : 'Not Generated')
+            + (r.custom_deduction_stale ? ' — deductions changed since slip was generated, regenerate to update Total Payable' : ''),
           'Bank Account Number':    emp.account_number || '',
           'Bank Name':              emp.branch_name || '',
           'IFSC Code':              emp.ifsc_code || '',
@@ -329,6 +373,11 @@ const PayrollCenter = () => {
         ['UL', 'Unpaid Leave'],
         ['WO', 'Week Off (Saturday/Sunday)'],
         ['HOL', 'Company Holiday'],
+        ['BD', "Employee's Birthday (counted as Present)"],
+        [],
+        ['Total Late', 'Number of late clock-ins in this pay cycle'],
+        ['Free Late', `First ${LATE_FREE_COUNT} late occurrences per cycle — no deduction`],
+        ['Chargeable Late', 'Late occurrences beyond the free allowance — HR decides the deduction manually'],
       ]);
 
       const wb = XLSX.utils.book_new();

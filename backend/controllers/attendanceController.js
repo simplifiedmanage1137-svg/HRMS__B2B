@@ -1700,6 +1700,7 @@ exports.getAttendanceReport = async (req, res) => {
                 shift_time_used: shiftTiming,
                 is_holiday: record.is_holiday,
                 holiday_name: record.holiday_name,
+                attendance_type: record.attendance_type || null,
                 comp_off_awarded: record.comp_off_awarded,
                 comp_off_days: record.comp_off_days,
                 is_regularized: record.is_regularized || false,
@@ -2657,10 +2658,19 @@ exports.getTeamAttendanceReport = async (req, res) => {
                     status = 'weekend';
                     statusDisplay = 'W';
                     statusColor = 'secondary';
-                } else if (leave) {
+                } else if (leave && leave.type === 'Unpaid') {
                     status = 'on_leave';
                     statusDisplay = 'L';
                     statusColor = 'purple';
+                } else if (leave) {
+                    // Approved Paid Leave (Annual/Sick/Personal/Maternity/Paternity/Bereavement),
+                    // Birthday Leave, or Comp-Off — company-approved leave shows Present, never
+                    // Absent/on_leave, regardless of whether the employee clocked in that day.
+                    status = 'present';
+                    statusDisplay = leave.type === 'Birthday' ? 'BL' : leave.type === 'Comp-Off' ? 'CO' : 'PL';
+                    statusColor = 'success';
+                    employeeStats[emp.employee_id].total_present++;
+                    employeeStats[emp.employee_id].working_days_count++;
                 } else if (attendance) {
                     clockIn = attendance.clock_in_ist || attendance.clock_in;
                     clockOut = attendance.clock_out_ist || attendance.clock_out;
@@ -2774,6 +2784,11 @@ exports.getTeamAttendanceReport = async (req, res) => {
                     overtime_hours: overtimeHours,
                     is_weekend: isWeekend,
                     leave_type: leave?.type || null,
+                    // Populated only when `status: 'present'` is due to approved leave —
+                    // frontend renders "Present — {present_reason}" for these days.
+                    present_reason: (leave && leave.type !== 'Unpaid')
+                        ? (leave.type === 'Birthday' ? 'Birthday Leave' : leave.type === 'Comp-Off' ? 'Comp-Off' : 'Paid Leave')
+                        : null,
                     total_break_minutes: teamBreakMinutesMap[attendanceKey] || 0
                 });
             }
@@ -3382,7 +3397,7 @@ exports.getImportHistory = async (req, res) => {
 // ── Admin Mark Attendance (with Paid Leave / Comp Off balance management) ─────
 // POST /api/attendance/admin/mark
 // Body: { employee_id, attendance_date, status_code }
-//   status_code: 'present' | 'absent' | 'half_day' | 'week_off' | 'holiday' | 'leave' | 'paid_leave' | 'comp_off'
+//   status_code: 'present' | 'absent' | 'half_day' | 'week_off' | 'holiday' | 'leave' | 'paid_leave' | 'comp_off' | 'birthday_leave'
 exports.adminMarkAttendance = async (req, res) => {
     try {
         const { employee_id, attendance_date, status_code } = req.body;
@@ -3391,7 +3406,7 @@ exports.adminMarkAttendance = async (req, res) => {
             return res.status(400).json({ success: false, message: 'employee_id, attendance_date, and status_code are required' });
         }
 
-        const ADMIN_MARK_VALID_CODES = ['present', 'absent', 'half_day', 'week_off', 'holiday', 'leave', 'paid_leave', 'comp_off'];
+        const ADMIN_MARK_VALID_CODES = ['present', 'absent', 'half_day', 'week_off', 'holiday', 'leave', 'paid_leave', 'comp_off', 'birthday_leave'];
         if (!ADMIN_MARK_VALID_CODES.includes(status_code)) {
             return res.status(400).json({ success: false, message: `Invalid status_code. Must be one of: ${ADMIN_MARK_VALID_CODES.join(', ')}` });
         }
@@ -3407,6 +3422,7 @@ exports.adminMarkAttendance = async (req, res) => {
             leave:     { dbStatus: 'absent',   isHoliday: false, holidayName: 'Leave',    attType: null },
             paid_leave:{ dbStatus: 'present',  isHoliday: false, holidayName: null,       attType: 'paid_leave' },
             comp_off:  { dbStatus: 'present',  isHoliday: false, holidayName: null,       attType: 'comp_off' },
+            birthday_leave: { dbStatus: 'present', isHoliday: false, holidayName: null,   attType: 'birthday_leave' },
         };
         const resolved = typeMap[status_code];
 

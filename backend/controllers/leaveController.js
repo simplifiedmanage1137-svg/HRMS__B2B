@@ -1,69 +1,15 @@
 const supabase = require('../config/supabase');
 const { sendLeaveStatusEmail } = require('../services/emailService');
-
-// Replace the getCompletedMonthsInCurrentYear function with this simplified version:
-
-function getCompletedMonthsInCurrentYear(joiningDate, currentDate = new Date()) {
-    const today = new Date(currentDate);
-    const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth(); // 0-11 (April = 3)
-    const join = new Date(joiningDate);
-    
-    if (join.getFullYear() > currentYear) {
-        return 0;
-    }
-    
-    let completedMonths = 0;
-    
-    if (join.getFullYear() === currentYear) {
-        // Joined this year
-        const joinMonth = join.getMonth();
-        // Count months from joining month to previous month
-        for (let month = joinMonth; month < currentMonth; month++) {
-            completedMonths++;
-        }
-    } else {
-        // Joined previous year or earlier
-        // Count months from January to previous month
-        for (let month = 0; month < currentMonth; month++) {
-            completedMonths++;
-        }
-    }
-    
-    return Math.max(0, completedMonths);
-}
-
-function calculateCurrentYearAccruedLeaves(joiningDate, currentDate = new Date()) {
-    const completedMonths = getCompletedMonthsInCurrentYear(joiningDate, currentDate);
-    return completedMonths * 1.5;
-}
-
-function getTotalMonthsFromJoining(joiningDate, currentDate = new Date()) {
-    const join = new Date(joiningDate);
-    const today = new Date(currentDate);
-    
-    if (today < join) return 0;
-    
-    let totalMonths = (today.getFullYear() - join.getFullYear()) * 12 + 
-                      (today.getMonth() - join.getMonth());
-    
-    if (today.getDate() < join.getDate()) {
-        totalMonths = Math.max(0, totalMonths - 1);
-    }
-    
-    return totalMonths;
-}
-
-function isProbationComplete(joiningDate, currentDate = new Date()) {
-    const totalMonths = getTotalMonthsFromJoining(joiningDate, currentDate);
-    return totalMonths >= 6;
-}
-
-function getEligibleFromDate(joiningDate) {
-    const eligibleDate = new Date(joiningDate);
-    eligibleDate.setMonth(eligibleDate.getMonth() + 6);
-    return eligibleDate.toISOString().split('T')[0];
-}
+const {
+    PAID_LEAVE_ELIGIBILITY_MONTHS,
+    MONTHLY_ACCRUAL_RATE,
+    getTotalMonthsFromJoining,
+    isProbationComplete,
+    getEligibleFromDate,
+    getCompletedMonthsInCurrentYear,
+    calculateCurrentYearAccruedLeaves,
+} = require('../config/leavePolicy');
+const { syncAttendanceForApprovedLeave, revertAttendanceForLeave } = require('../services/leaveAttendanceSync');
 
 // Helper: check if designation is team leader/manager level
 const isTeamLeaderDesignation = (designation) => {
@@ -199,7 +145,7 @@ exports.getLeaveBalance = async (req, res) => {
             probation_info: {
                 is_active: !isProbComplete,
                 months_completed: totalMonthsFromJoining,
-                months_remaining: Math.max(0, 6 - totalMonthsFromJoining),
+                months_remaining: Math.max(0, PAID_LEAVE_ELIGIBILITY_MONTHS - totalMonthsFromJoining),
                 eligible_from_date: eligibleFromDateStr,
                 accrued_but_unusable: !isProbComplete ? currentYearAccrual : 0
             }
@@ -306,15 +252,13 @@ exports.applyLeave = async (req, res) => {
         } else {
             const joiningDate = new Date(employee.joining_date);
             const today = new Date();
-            let totalMonths = (today.getFullYear() - joiningDate.getFullYear()) * 12 +
-                              (today.getMonth() - joiningDate.getMonth());
-            if (today.getDate() < joiningDate.getDate()) totalMonths = Math.max(0, totalMonths - 1);
-            const isProbComplete = totalMonths >= 6;
+            const totalMonths = getTotalMonthsFromJoining(joiningDate, today);
+            const isProbComplete = isProbationComplete(joiningDate, today);
 
             if (!isProbComplete && leave_type !== 'Unpaid' && leave_type !== 'Comp-Off') {
                 return res.status(400).json({
                     success: false,
-                    message: `During probation (${totalMonths}/6 months), only Unpaid or Comp-Off leave allowed.`
+                    message: `During probation (${totalMonths}/${PAID_LEAVE_ELIGIBILITY_MONTHS} months), only Unpaid or Comp-Off leave allowed.`
                 });
             }
 
@@ -346,6 +290,13 @@ exports.applyLeave = async (req, res) => {
         const istDate = new Date(istMs);
         const createdAtIST = `${istDate.getUTCFullYear()}-${String(istDate.getUTCMonth()+1).padStart(2,'0')}-${String(istDate.getUTCDate()).padStart(2,'0')} ${String(istDate.getUTCHours()).padStart(2,'0')}:${String(istDate.getUTCMinutes()).padStart(2,'0')}:${String(istDate.getUTCSeconds()).padStart(2,'0')}`;
 
+        // Birthday Leave is a company-provided benefit, not subject to manager judgement —
+        // it's auto-approved the moment it's submitted instead of sitting as pending.
+        const isBirthday = leave_type === 'Birthday';
+        const statusFields = isBirthday
+            ? { status: 'approved', approved_by: 'SYSTEM', approved_date: nowUTC.toISOString().split('T')[0] }
+            : { status: 'pending' };
+
         const { data: leaveData, error: leaveError } = await supabase
             .from('leaves')
             .insert([{
@@ -358,13 +309,14 @@ exports.applyLeave = async (req, res) => {
                 reason,
                 days_count: days_count || 1,
                 reporting_manager: reporting_manager.trim(),
-                status: 'pending',
+                ...statusFields,
                 applied_date: nowUTC.toISOString().split('T')[0],
                 created_at: createdAtIST,
                 updated_at: createdAtIST
             }])
             .select();
 
+        let insertedLeave;
         if (leaveError) {
             // If employee_name column doesn't exist, retry without it
             if (leaveError.message && leaveError.message.includes('employee_name')) {
@@ -376,18 +328,29 @@ exports.applyLeave = async (req, res) => {
                         start_date, end_date: end_date || start_date,
                         reason, days_count: days_count || 1,
                         reporting_manager: reporting_manager.trim(),
-                        status: 'pending',
+                        ...statusFields,
                         applied_date: nowUTC.toISOString().split('T')[0],
                         created_at: createdAtIST, updated_at: createdAtIST
                     }])
                     .select();
                 if (leaveError2) throw leaveError2;
-                return res.json({ success: true, message: 'Leave request submitted successfully!', leave: leaveData2[0] });
+                insertedLeave = leaveData2[0];
+            } else {
+                throw leaveError;
             }
-            throw leaveError;
+        } else {
+            insertedLeave = leaveData[0];
         }
 
-        res.json({ success: true, message: 'Leave request submitted successfully!', leave: leaveData[0] });
+        if (isBirthday) {
+            await syncAttendanceForApprovedLeave(insertedLeave);
+        }
+
+        res.json({
+            success: true,
+            message: isBirthday ? 'Birthday leave approved automatically!' : 'Leave request submitted successfully!',
+            leave: insertedLeave
+        });
 
     } catch (error) {
         console.error('❌ Error applying leave:', error);
@@ -596,6 +559,14 @@ exports.updateLeaveStatus = async (req, res) => {
                     }).eq('employee_id', leave.employee_id).eq('leave_year', leaveYear);
                 }
             }
+
+            // Approved Paid/Birthday/Comp-Off leave days must show Present, not Absent —
+            // write the attendance placeholder now that approval is final.
+            await syncAttendanceForApprovedLeave(updatedLeave[0]);
+        } else if ((status === 'rejected' || status === 'cancelled') && leave.status === 'approved') {
+            // A previously-approved leave is being reversed — undo the Present
+            // placeholder so the day gets recalculated instead of staying stuck as leave.
+            await revertAttendanceForLeave(leave);
         }
 
         res.json({ success: true, message: `Leave ${status} successfully`, leave: updatedLeave[0] });
@@ -668,13 +639,7 @@ exports.getLeaveTypes = async (req, res) => {
                     const joiningDate = new Date(employee.joining_date);
                     const today = new Date();
 
-                    let totalMonths = (today.getFullYear() - joiningDate.getFullYear()) * 12 +
-                                      (today.getMonth() - joiningDate.getMonth());
-                    if (today.getDate() < joiningDate.getDate()) {
-                        totalMonths = Math.max(0, totalMonths - 1);
-                    }
-
-                    if (totalMonths >= 6) {
+                    if (isProbationComplete(joiningDate, today)) {
                         availableTypes.push(
                             { value: 'Annual', label: 'Annual Leave', icon: '🌴' },
                             { value: 'Sick', label: 'Sick Leave', icon: '🤒' },
@@ -863,7 +828,7 @@ exports.yearlyReset = async (req, res) => {
                     }
                 }
                 
-                const accrualAmount = accruedMonths * 1.5;
+                const accrualAmount = accruedMonths * MONTHLY_ACCRUAL_RATE;
                 
                 const { data: existing } = await supabase
                     .from('leave_balance')

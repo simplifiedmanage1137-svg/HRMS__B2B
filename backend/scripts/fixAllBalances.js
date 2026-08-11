@@ -1,4 +1,5 @@
 const supabase = require('../config/supabase');
+const { MONTHLY_ACCRUAL_RATE } = require('../config/leavePolicy');
 
 async function fixAllBalances() {
     try {
@@ -67,7 +68,7 @@ async function fixAllBalances() {
                     }
                 }
 
-                const expectedAccrued = completedMonths * 1.5;
+                const expectedAccrued = completedMonths * MONTHLY_ACCRUAL_RATE;
 
                 console.log(`\n📋 Processing: ${emp.employee_id} (${emp.first_name} ${emp.last_name})`);
                 console.log(`   Joining: ${emp.joining_date}, Completed months: ${completedMonths}, Expected accrued: ${expectedAccrued}`);

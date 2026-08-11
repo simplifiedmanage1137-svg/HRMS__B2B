@@ -1,5 +1,6 @@
 const supabase = require('../config/supabase');
 const LeaveYearlyService = require('../services/leaveYearlyService');
+const { PAID_LEAVE_ELIGIBILITY_MONTHS, MONTHLY_ACCRUAL_RATE } = require('../config/leavePolicy');
 
 async function verifyLeaveBalance(employeeId) {
     console.log('\n' + '='.repeat(70));
@@ -28,8 +29,8 @@ async function verifyLeaveBalance(employeeId) {
         const monthsCompleted = LeaveYearlyService.calculateCompletedMonthsFromJoining(joiningDate, today);
 
         // Calculate expected leaves (accrued from month 1)
-        const expectedAccrued = monthsCompleted * 1.5;
-        const isEligibleToApply = monthsCompleted >= 6; // Need 6 complete months
+        const expectedAccrued = monthsCompleted * MONTHLY_ACCRUAL_RATE;
+        const isEligibleToApply = monthsCompleted >= PAID_LEAVE_ELIGIBILITY_MONTHS;
 
         // Get used leaves (approved)
         const { data: usedLeaves, error: usedError } = await supabase
@@ -74,11 +75,11 @@ async function verifyLeaveBalance(employeeId) {
         console.log('\n📊 CALCULATION (Accrual from Month 1):');
         console.log(`   Total months since joining: ${totalMonths}`);
         console.log(`   Months for accrual calculation: ${monthsForAccrual}`);
-        console.log(`   Expected accrued leaves: ${expectedAccrued.toFixed(1)} (${monthsForAccrual} × 1.5)`);
+        console.log(`   Expected accrued leaves: ${expectedAccrued.toFixed(1)} (${monthsForAccrual} × ${MONTHLY_ACCRUAL_RATE})`);
         console.log(`   Used leaves (approved): ${used.toFixed(1)}`);
         console.log(`   Pending leaves: ${pending.toFixed(1)}`);
         console.log(`   Expected available: ${expectedAvailable.toFixed(1)}`);
-        console.log(`   Eligible to apply: ${isEligibleToApply ? '✅ YES' : '❌ NO (need 6 months)'}`);
+        console.log(`   Eligible to apply: ${isEligibleToApply ? '✅ YES' : `❌ NO (need ${PAID_LEAVE_ELIGIBILITY_MONTHS} months)`}`);
         
         console.log('\n💾 DATABASE RECORD:');
         if (balance) {

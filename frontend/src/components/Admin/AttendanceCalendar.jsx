@@ -26,6 +26,7 @@ const STATUSES = [
   { code: 'leave',      label: 'Leave',                 short: 'L',  color: '#7c3aed', bg: '#ede9fe', dbStatus: 'absent',   isHoliday: false, holidayName: 'Leave', attType: null },
   { code: 'paid_leave', label: 'Present (Paid Leave)',  short: 'PL', color: '#0891b2', bg: '#cffafe', dbStatus: 'present',  isHoliday: false, holidayName: null,   attType: 'paid_leave', requiresBalance: 'paidLeave' },
   { code: 'comp_off',   label: 'Present (Comp Off)',    short: 'CO', color: '#c026d3', bg: '#fae8ff', dbStatus: 'present',  isHoliday: false, holidayName: null,   attType: 'comp_off',   requiresBalance: 'compOff' },
+  { code: 'birthday_leave', label: 'Present (Birthday Leave)', short: 'BL', color: '#ca8a04', bg: '#fef9c3', dbStatus: 'present', isHoliday: false, holidayName: null, attType: 'birthday_leave' },
 ];
 
 // Resolve a DB record → internal code
@@ -36,6 +37,7 @@ const resolveCode = (rec) => {
   const hn = (rec.holiday_name || '').toLowerCase();
   if (type === 'paid_leave') return 'paid_leave';
   if (type === 'comp_off') return 'comp_off';
+  if (type === 'birthday_leave') return 'birthday_leave';
   if (s === 'present') return 'present';
   if (s === 'half_day') return 'half_day';
   if (hn.includes('week off') || hn.includes('weekly off')) return 'week_off';

@@ -668,6 +668,17 @@ const AttendanceReports = () => {
               statusIcon  = mapped.statusIcon;
             }
 
+            // Present because of an approved Paid/Birthday/Comp-Off leave (written by
+            // leaveAttendanceSync on approval) — label it distinctly instead of a bare "Present".
+            const attType = dayAttendance.attendance_type;
+            const presentReason = attType === 'paid_leave' ? 'Paid Leave'
+                                 : attType === 'birthday_leave' ? 'Birthday Leave'
+                                 : attType === 'comp_off' ? 'Comp-Off'
+                                 : null;
+            if (status === 'present' && presentReason) {
+              leaveType = presentReason;
+            }
+
             // Build tooltip — show clock times if available, otherwise use DB hours
             if (clockIn && clockOut) {
               tooltip = `In: ${formatShortTime(clockIn)} | Out: ${formatShortTime(clockOut)} | Hrs: ${dbHours}h`;
@@ -675,7 +686,7 @@ const AttendanceReports = () => {
               tooltip = `In: ${formatShortTime(clockIn)} | No clock out`;
             } else {
               const h = dbHours ? ` (${dbHours}h)` : '';
-              tooltip = status === 'present'  ? `Present${h}`
+              tooltip = status === 'present'  ? (presentReason ? `Present — ${presentReason}` : `Present${h}`)
                       : status === 'absent'   ? 'Absent'
                       : status === 'half_day' ? `Half Day${h}`
                       : status === 'on_leave' ? 'On Leave'
@@ -703,10 +714,19 @@ const AttendanceReports = () => {
           tooltip = `Holiday: ${dayHoliday.name}`;
         }
         else if (dayLeave) {
-          status = 'on_leave';
-          statusBadge = 'purple';
-          statusIcon = 'L';
-          tooltip = `On Leave: ${dayLeave.type}`;
+          if (dayLeave.type === 'Unpaid') {
+            status = 'on_leave';
+            statusBadge = 'purple';
+            statusIcon = 'L';
+            tooltip = `On Leave: ${dayLeave.type}`;
+          } else {
+            // Approved Paid/Birthday/Comp-Off leave with no attendance row yet — still Present.
+            const reason = dayLeave.type === 'Birthday' ? 'Birthday Leave' : dayLeave.type === 'Comp-Off' ? 'Comp-Off' : 'Paid Leave';
+            status = 'present';
+            statusBadge = 'success';
+            statusIcon = '✓';
+            tooltip = `Present — ${reason}`;
+          }
           leaveType = dayLeave.type;
         }
 
@@ -819,6 +839,9 @@ const AttendanceReports = () => {
       // Status counting logic
       if (record.status === 'present') {
         perEmployee[record.employee_id].present++;
+        if (record.leave_type) {
+          perEmployee[record.employee_id].leave_types.push(record.leave_type);
+        }
       } else if (record.status === 'half_day') {
         perEmployee[record.employee_id].half_day++;
       } else if (record.status === 'absent') {
@@ -982,8 +1005,12 @@ const AttendanceReports = () => {
           'Holiday Name': record.holiday_name || '-',
           'Comp-Off Earned': record.comp_off_awarded ? 'Yes' : 'No',
           'Comp-Off Days': record.comp_off_days || 0,
-          'Status': record.status === 'present' ? 'Present' :
-            record.status === 'half_day' ? 'Half Day' :
+          'Status': record.status === 'present'
+            ? (record.attendance_type === 'paid_leave' ? 'Present - Paid Leave'
+               : record.attendance_type === 'birthday_leave' ? 'Present - Birthday Leave'
+               : record.attendance_type === 'comp_off' ? 'Present - Comp-Off'
+               : 'Present')
+            : record.status === 'half_day' ? 'Half Day' :
               record.status === 'working' ? 'Working' :
                 record.status === 'on_leave' ? 'On Leave' :
                   record.status === 'holiday' ? 'Holiday' :
@@ -1134,6 +1161,14 @@ const AttendanceReports = () => {
         <Badge bg="info" className="px-2 py-1 text-nowrap">Working</Badge>;
     }
     if (record.status === 'present') {
+      const presentReason = record.attendance_type === 'paid_leave' ? 'Paid Leave'
+                           : record.attendance_type === 'birthday_leave' ? 'Birthday Leave'
+                           : record.attendance_type === 'comp_off' ? 'Comp-Off'
+                           : record.leave_type && record.leave_type !== 'Unpaid' ? (record.leave_type === 'Birthday' ? 'Birthday Leave' : 'Paid Leave')
+                           : null;
+      if (presentReason) {
+        return <Badge bg="success" className="px-2 py-1 text-nowrap">Present — {presentReason}</Badge>;
+      }
       return record.is_late ?
         <Badge bg="warning" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#fd7e14' }}>
           Present (Late {lateDisplay})
@@ -1694,7 +1729,12 @@ const AttendanceReports = () => {
                     const srNo = index + 1;
                     const statusKey = record.status || 'absent';
                     const pillStyle = STATUS_PILL[statusKey] || STATUS_PILL.absent;
-                    const statusLabel = statusKey === 'present' ? 'Present'
+                    const presentReason = record.attendance_type === 'paid_leave' ? 'Paid Leave'
+                      : record.attendance_type === 'birthday_leave' ? 'Birthday Leave'
+                      : record.attendance_type === 'comp_off' ? 'Comp-Off'
+                      : null;
+                    const statusLabel = statusKey === 'present'
+                      ? (presentReason ? `Present — ${presentReason}` : 'Present')
                       : statusKey === 'working' ? 'Working'
                       : statusKey === 'half_day' ? 'Half Day'
                       : statusKey === 'on_leave' ? 'On Leave'

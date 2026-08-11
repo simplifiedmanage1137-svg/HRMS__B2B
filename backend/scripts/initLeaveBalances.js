@@ -1,5 +1,6 @@
 const supabase = require('../config/supabase');
 const LeaveYearlyService = require('../services/leaveYearlyService');
+const { PAID_LEAVE_ELIGIBILITY_MONTHS, MONTHLY_ACCRUAL_RATE } = require('../config/leavePolicy');
 
 async function initializeLeaveBalances() {
     console.log('='.repeat(70));
@@ -43,11 +44,11 @@ async function initializeLeaveBalances() {
 
                 console.log(`   Months completed since joining: ${monthsDiff}`);
 
-                // Calculate accrued leaves (1.5 per month after 6 months)
+                // Calculate accrued leaves (MONTHLY_ACCRUAL_RATE per month after probation)
                 let totalAccrued = 0;
-                if (monthsDiff >= 6) {
-                    const eligibleMonths = monthsDiff - 5; // Months after 6-month probation
-                    totalAccrued = eligibleMonths * 1.5;
+                if (monthsDiff >= PAID_LEAVE_ELIGIBILITY_MONTHS) {
+                    const eligibleMonths = monthsDiff - (PAID_LEAVE_ELIGIBILITY_MONTHS - 1); // Months after probation
+                    totalAccrued = eligibleMonths * MONTHLY_ACCRUAL_RATE;
                 }
 
                 // Get used leaves from approved leaves

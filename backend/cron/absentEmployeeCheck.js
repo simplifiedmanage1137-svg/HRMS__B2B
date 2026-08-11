@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const supabase = require('../config/supabase');
+const { syncAttendanceForApprovedLeave } = require('../services/leaveAttendanceSync');
 
 // Helper function to get IST date string
 const getISTDateString = () => {
@@ -16,56 +17,144 @@ const isWeekendOrHoliday = (date) => {
     return dayOfWeek === 0 || dayOfWeek === 6;
 };
 
+const isBirthdayToday = (dob, todayStr) => {
+    if (!dob) return false;
+    const d = new Date(dob);
+    const today = new Date(todayStr);
+    return d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
+};
+
+// Auto-creates + auto-approves a Birthday Leave record for an employee whose birthday is
+// today, if they haven't already applied for/received one this year — mirrors the
+// auto-approve behavior in leaveController.applyLeave's Birthday branch so an employee
+// never has to remember to apply to get credit for it.
+const ensureBirthdayLeave = async (employee, todayStr) => {
+    const leaveYear = new Date(todayStr).getFullYear();
+    const { data: existing } = await supabase
+        .from('leaves')
+        .select('id')
+        .eq('employee_id', employee.employee_id)
+        .eq('leave_type', 'Birthday')
+        .gte('start_date', `${leaveYear}-01-01`)
+        .lte('start_date', `${leaveYear}-12-31`)
+        .in('status', ['pending', 'approved'])
+        .maybeSingle();
+
+    if (existing) return null;
+
+    const nowIso = new Date().toISOString();
+    const { data: created, error } = await supabase
+        .from('leaves')
+        .insert([{
+            employee_id: employee.employee_id,
+            employee_name: `${employee.first_name} ${employee.last_name}`,
+            leave_type: 'Birthday',
+            leave_duration: 'Full Day',
+            start_date: todayStr,
+            end_date: todayStr,
+            reason: 'Company Birthday Leave',
+            days_count: 1,
+            status: 'approved',
+            applied_date: todayStr,
+            approved_date: todayStr,
+            approved_by: 'SYSTEM',
+            remarks: 'System generated — automatic Birthday Leave',
+            created_at: nowIso,
+            updated_at: nowIso
+        }])
+        .select()
+        .maybeSingle();
+
+    if (error) {
+        console.error(`❌ Error auto-creating Birthday leave for ${employee.employee_id}:`, error.message);
+        return null;
+    }
+    return created;
+};
+
 // Function to mark absent employees and create leave records
 const markAbsentEmployeesAsLeave = async () => {
     try {
         console.log('🔄 Starting daily absent employee check...');
-        
+
         const today = getISTDateString();
         console.log(`📅 Processing date: ${today}`);
-        
+
         // Skip weekends
         if (isWeekendOrHoliday(today)) {
             console.log('📅 Skipping weekend/holiday');
             return { success: true, message: 'Skipped weekend/holiday' };
         }
-        
+
         // Get all active employees
         const { data: employees, error: empError } = await supabase
             .from('employees')
-            .select('employee_id, first_name, last_name, joining_date')
+            .select('employee_id, first_name, last_name, joining_date, dob')
             .eq('is_active', true);
-            
+
         if (empError) {
             console.error('❌ Error fetching employees:', empError);
             return { success: false, error: empError.message };
         }
-        
+
         console.log(`👥 Found ${employees.length} active employees`);
-        
+
+        // Batch-fetch every leave (pending or approved) that covers today, across all
+        // employees, so an approved/pending Paid or Birthday leave is never clobbered by
+        // this cron marking the day Absent + auto-inserting an Unpaid leave underneath it.
+        const { data: todaysLeaves } = await supabase
+            .from('leaves')
+            .select('employee_id, status, leave_type')
+            .lte('start_date', today)
+            .gte('end_date', today)
+            .in('status', ['pending', 'approved']);
+        const leaveByEmployee = {};
+        (todaysLeaves || []).forEach(l => { leaveByEmployee[l.employee_id] = l; });
+
         let absentCount = 0;
         let leaveCreatedCount = 0;
         let skippedCount = 0;
-        
+        let birthdayLeaveCount = 0;
+
         for (const employee of employees) {
             try {
+                // Birthday leave is recognized regardless of whether the employee already
+                // has an attendance/leave record today — it just shouldn't double-apply.
+                if (isBirthdayToday(employee.dob, today)) {
+                    const createdBirthdayLeave = await ensureBirthdayLeave(employee, today);
+                    if (createdBirthdayLeave) {
+                        await syncAttendanceForApprovedLeave(createdBirthdayLeave);
+                        birthdayLeaveCount++;
+                        console.log(`🎂 ${employee.employee_id} — auto-created Birthday leave for ${today}`);
+                        continue;
+                    }
+                }
+
+                // An approved or pending leave already covers today — approved leaves already
+                // got their attendance row written at approval time (leaveAttendanceSync), and
+                // a pending one must not be silently overridden by an auto-generated Unpaid leave.
+                if (leaveByEmployee[employee.employee_id]) {
+                    skippedCount++;
+                    continue;
+                }
+
                 // Check if employee has attendance record for today
                 const { data: attendance, error: attError } = await supabase
                     .from('attendance')
-                    .select('id, status, clock_in')
+                    .select('id, status, clock_in, attendance_type')
                     .eq('employee_id', employee.employee_id)
                     .eq('attendance_date', today)
                     .maybeSingle();
-                    
+
                 if (attError) {
                     console.error(`❌ Error checking attendance for ${employee.employee_id}:`, attError);
                     continue;
                 }
-                
+
                 // If no attendance record exists, employee is absent
                 if (!attendance) {
                     console.log(`❌ ${employee.employee_id} (${employee.first_name} ${employee.last_name}) - No attendance record`);
-                    
+
                     // Create attendance record with absent status
                     const { error: insertAttError } = await supabase
                         .from('attendance')
@@ -78,14 +167,14 @@ const markAbsentEmployeesAsLeave = async () => {
                             late_minutes: 0,
                             created_at: new Date().toISOString()
                         }]);
-                        
+
                     if (insertAttError) {
                         console.error(`❌ Error creating attendance record for ${employee.employee_id}:`, insertAttError);
                         continue;
                     }
-                    
+
                     absentCount++;
-                    
+
                     // Check if employee already has a leave record for today
                     const { data: existingLeave, error: leaveCheckError } = await supabase
                         .from('leaves')
@@ -94,12 +183,12 @@ const markAbsentEmployeesAsLeave = async () => {
                         .eq('start_date', today)
                         .eq('end_date', today)
                         .maybeSingle();
-                        
+
                     if (leaveCheckError) {
                         console.error(`❌ Error checking existing leave for ${employee.employee_id}:`, leaveCheckError);
                         continue;
                     }
-                    
+
                     // If no leave record exists, create one
                     if (!existingLeave) {
                         // IST timestamp for created_at
@@ -108,7 +197,7 @@ const markAbsentEmployeesAsLeave = async () => {
                         const istMs = nowUTC.getTime() + IST_OFFSET_MS;
                         const istDate = new Date(istMs);
                         const createdAtIST = `${istDate.getUTCFullYear()}-${String(istDate.getUTCMonth()+1).padStart(2,'0')}-${String(istDate.getUTCDate()).padStart(2,'0')} ${String(istDate.getUTCHours()).padStart(2,'0')}:${String(istDate.getUTCMinutes()).padStart(2,'0')}:${String(istDate.getUTCSeconds()).padStart(2,'0')}`;
-                        
+
                         const { error: leaveInsertError } = await supabase
                             .from('leaves')
                             .insert([{
@@ -128,7 +217,7 @@ const markAbsentEmployeesAsLeave = async () => {
                                 created_at: createdAtIST,
                                 updated_at: createdAtIST
                             }]);
-                            
+
                         if (leaveInsertError) {
                             console.error(`❌ Error creating leave record for ${employee.employee_id}:`, leaveInsertError);
                         } else {
@@ -139,29 +228,31 @@ const markAbsentEmployeesAsLeave = async () => {
                         console.log(`ℹ️ Leave record already exists for ${employee.employee_id}`);
                         skippedCount++;
                     }
-                    
-                } else if (attendance && !attendance.clock_in) {
-                    // Attendance record exists but no clock_in (should not happen, but handle it)
+
+                } else if (!attendance.clock_in && !attendance.attendance_type) {
+                    // Attendance record exists but no clock_in and it isn't a leave-driven
+                    // placeholder (paid_leave/comp_off/birthday_leave rows also have no
+                    // clock_in by design — those must never be flipped to absent here).
                     console.log(`⚠️ ${employee.employee_id} - Attendance record exists but no clock_in`);
-                    
+
                     // Update status to absent
                     const { error: updateError } = await supabase
                         .from('attendance')
                         .update({ status: 'absent' })
                         .eq('id', attendance.id);
-                        
+
                     if (updateError) {
                         console.error(`❌ Error updating attendance status for ${employee.employee_id}:`, updateError);
                     } else {
                         absentCount++;
                     }
                 }
-                
+
             } catch (employeeError) {
                 console.error(`❌ Error processing employee ${employee.employee_id}:`, employeeError);
             }
         }
-        
+
         const result = {
             success: true,
             date: today,
@@ -169,12 +260,13 @@ const markAbsentEmployeesAsLeave = async () => {
             absentCount,
             leaveCreatedCount,
             skippedCount,
-            message: `Processed ${employees.length} employees. ${absentCount} marked absent, ${leaveCreatedCount} leave records created, ${skippedCount} skipped.`
+            birthdayLeaveCount,
+            message: `Processed ${employees.length} employees. ${absentCount} marked absent, ${leaveCreatedCount} leave records created, ${birthdayLeaveCount} birthday leaves auto-created, ${skippedCount} skipped.`
         };
-        
+
         console.log('✅ Daily absent check completed:', result);
         return result;
-        
+
     } catch (error) {
         console.error('❌ Error in markAbsentEmployeesAsLeave:', error);
         return { success: false, error: error.message };
@@ -191,7 +283,7 @@ const scheduleAbsentCheck = () => {
         scheduled: true,
         timezone: "Asia/Kolkata"
     });
-    
+
     console.log('📅 Absent employee check scheduled for 11:59 PM IST daily');
 };
 

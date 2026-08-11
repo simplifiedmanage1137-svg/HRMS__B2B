@@ -1,5 +1,6 @@
 // scripts/fixLeaveBalances.js - Updated
 const supabase = require('../config/supabase');
+const { PAID_LEAVE_ELIGIBILITY_MONTHS, MONTHLY_ACCRUAL_RATE } = require('../config/leavePolicy');
 
 async function fixLeaveBalances() {
     console.log('='.repeat(70));
@@ -61,9 +62,9 @@ async function fixLeaveBalances() {
                 
                 // Calculate total accrued (only after probation)
                 let totalAccrued = 0;
-                if (monthsCompleted >= 6) {
-                    const monthsAfterProbation = monthsCompleted - 6;
-                    totalAccrued = monthsAfterProbation * 1.5;
+                if (monthsCompleted >= PAID_LEAVE_ELIGIBILITY_MONTHS) {
+                    const monthsAfterProbation = monthsCompleted - PAID_LEAVE_ELIGIBILITY_MONTHS;
+                    totalAccrued = monthsAfterProbation * MONTHLY_ACCRUAL_RATE;
                 }
                 
                 // Get used leaves

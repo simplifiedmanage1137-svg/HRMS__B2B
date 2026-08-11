@@ -1,4 +1,5 @@
 const supabase = require('../config/supabase');
+const { MONTHLY_ACCRUAL_RATE } = require('../config/leavePolicy');
 
 async function resetAllBalances() {
     console.log('='.repeat(70));
@@ -118,7 +119,7 @@ async function resetAllBalances() {
                     }
                 }
                 
-                const accrued = completedMonths * 1.5;
+                const accrued = completedMonths * MONTHLY_ACCRUAL_RATE;
 
                 // Insert new balance
                 const { error: insertError } = await supabase

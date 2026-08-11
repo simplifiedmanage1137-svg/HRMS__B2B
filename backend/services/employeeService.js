@@ -1,4 +1,5 @@
 const supabase = require('../config/supabase');
+const { PAID_LEAVE_ELIGIBILITY_MONTHS } = require('../config/leavePolicy');
 
 class EmployeeService {
     
@@ -72,8 +73,8 @@ class EmployeeService {
             const joiningDate = employee.joining_date;
             const monthsCompleted = this.calculateMonthsBetween(joiningDate);
             
-            // Determine if employee can apply for leave (after 6 months)
-            const canApplyLeave = monthsCompleted >= 6;
+            // Determine if employee can apply for leave (after probation period)
+            const canApplyLeave = monthsCompleted >= PAID_LEAVE_ELIGIBILITY_MONTHS;
 
             // Update the employee record
             const { error: updateError } = await supabase
@@ -128,7 +129,7 @@ class EmployeeService {
             for (const emp of employees || []) {
                 try {
                     const monthsCompleted = this.calculateMonthsBetween(emp.joining_date);
-                    const canApplyLeave = monthsCompleted >= 6;
+                    const canApplyLeave = monthsCompleted >= PAID_LEAVE_ELIGIBILITY_MONTHS;
                     
                     const { error: updateError } = await supabase
                         .from('employees')
@@ -181,7 +182,7 @@ class EmployeeService {
     static async initializeNewEmployee(employeeId, joiningDate) {
         try {
             const monthsCompleted = this.calculateMonthsBetween(joiningDate);
-            const canApplyLeave = monthsCompleted >= 6;
+            const canApplyLeave = monthsCompleted >= PAID_LEAVE_ELIGIBILITY_MONTHS;
             
             const { error } = await supabase
                 .from('employees')
@@ -210,7 +211,7 @@ class EmployeeService {
     }
 
     /**
-     * Get employees eligible for leave (completed 6 months)
+     * Get employees eligible for leave (completed probation period)
      * @returns {Promise<Array>} List of eligible employees
      */
 
@@ -219,7 +220,7 @@ class EmployeeService {
             const { data: employees, error } = await supabase
                 .from('employees')
                 .select('employee_id, first_name, last_name, joining_date, joining_month_count')
-                .gte('joining_month_count', 6);
+                .gte('joining_month_count', PAID_LEAVE_ELIGIBILITY_MONTHS);
 
             if (error) throw error;
 
@@ -325,7 +326,7 @@ class EmployeeService {
 
             if (error) throw error;
 
-            return employee ? employee.joining_month_count >= 6 : false;
+            return employee ? employee.joining_month_count >= PAID_LEAVE_ELIGIBILITY_MONTHS : false;
         } catch (error) {
             console.error(`❌ Error checking leave eligibility for ${employeeId}:`, error);
             return false;

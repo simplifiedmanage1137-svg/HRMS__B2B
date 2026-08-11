@@ -1,4 +1,5 @@
 const supabase = require('../config/supabase');
+const { PAID_LEAVE_ELIGIBILITY_MONTHS, MONTHLY_ACCRUAL_RATE } = require('../config/leavePolicy');
 
 class LeaveAccrualService {
     
@@ -39,18 +40,18 @@ class LeaveAccrualService {
                 };
             }
 
-            // Get all employees who have completed 6 months
-            const sixMonthsAgo = new Date();
-            sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+            // Get all employees who have completed the probation period
+            const probationCutoff = new Date();
+            probationCutoff.setMonth(probationCutoff.getMonth() - PAID_LEAVE_ELIGIBILITY_MONTHS);
 
             const { data: employees, error: empError } = await supabase
                 .from('employees')
                 .select('employee_id, joining_date, first_name, last_name')
-                .lte('joining_date', sixMonthsAgo.toISOString().split('T')[0]);
+                .lte('joining_date', probationCutoff.toISOString().split('T')[0]);
 
             if (empError) throw empError;
 
-            console.log(`📊 Found ${employees?.length || 0} eligible employees (joined before ${sixMonthsAgo.toISOString().split('T')[0]})`);
+            console.log(`📊 Found ${employees?.length || 0} eligible employees (joined before ${probationCutoff.toISOString().split('T')[0]})`);
 
             const results = {
                 total: employees?.length || 0,
@@ -104,18 +105,18 @@ class LeaveAccrualService {
                             .insert([{
                                 employee_id: emp.employee_id,
                                 leave_year: currentYear,
-                                total_accrued: 1.5,
+                                total_accrued: MONTHLY_ACCRUAL_RATE,
                                 total_used: 0,
                                 total_pending: 0,
-                                current_balance: 1.5,
+                                current_balance: MONTHLY_ACCRUAL_RATE,
                                 last_updated: today.toISOString()
                             }]);
 
                         if (createError) throw createError;
                     } else {
                         // Update existing balance
-                        const newAccrued = (parseFloat(balance.total_accrued) || 0) + 1.5;
-                        const newCurrent = (parseFloat(balance.current_balance) || 0) + 1.5;
+                        const newAccrued = (parseFloat(balance.total_accrued) || 0) + MONTHLY_ACCRUAL_RATE;
+                        const newCurrent = (parseFloat(balance.current_balance) || 0) + MONTHLY_ACCRUAL_RATE;
 
                         const { error: updateError } = await supabase
                             .from('leave_balance')
@@ -138,7 +139,7 @@ class LeaveAccrualService {
                             leave_year: currentYear,
                             transaction_date: today.toISOString().split('T')[0],
                             transaction_type: 'accrual',
-                            amount: 1.5,
+                            amount: MONTHLY_ACCRUAL_RATE,
                             description: `Monthly leave accrual for ${monthName} ${currentYear}`
                         }]);
 
@@ -149,11 +150,11 @@ class LeaveAccrualService {
                         employee_id: emp.employee_id,
                         name: `${emp.first_name} ${emp.last_name}`,
                         status: 'success',
-                        amount: 1.5,
+                        amount: MONTHLY_ACCRUAL_RATE,
                         month: monthName
                     });
 
-                    console.log(`   ✅ Added 1.5 leaves for ${monthName}`);
+                    console.log(`   ✅ Added ${MONTHLY_ACCRUAL_RATE} leaves for ${monthName}`);
 
                     // Create notification
                     try {
@@ -162,7 +163,7 @@ class LeaveAccrualService {
                             .insert([{
                                 employee_id: emp.employee_id,
                                 title: 'Leave Accrual',
-                                message: `1.5 leaves have been added to your account for ${monthName} ${currentYear}.`,
+                                message: `${MONTHLY_ACCRUAL_RATE} leaves have been added to your account for ${monthName} ${currentYear}.`,
                                 type: 'leave_accrual',
                                 created_at: today.toISOString()
                             }]);
@@ -238,13 +239,13 @@ class LeaveAccrualService {
 
             console.log(`📊 Months passed since joining: ${monthsPassed}`);
             
-            // Calculate accrued leaves (only after 6 months)
+            // Calculate accrued leaves (only after probation)
             let accruedLeaves = 0;
             let eligibleMonths = 0;
-            
-            if (monthsPassed >= 6) {
-                eligibleMonths = monthsPassed - 5; // Months after 6-month probation
-                accruedLeaves = eligibleMonths * 1.5;
+
+            if (monthsPassed >= PAID_LEAVE_ELIGIBILITY_MONTHS) {
+                eligibleMonths = monthsPassed - (PAID_LEAVE_ELIGIBILITY_MONTHS - 1); // Months after probation
+                accruedLeaves = eligibleMonths * MONTHLY_ACCRUAL_RATE;
             }
 
             console.log(`📊 Eligible months: ${eligibleMonths}, Accrued leaves: ${accruedLeaves}`);
@@ -290,14 +291,14 @@ class LeaveAccrualService {
                 
                 for (let i = 0; i < eligibleMonths; i++) {
                     const accrualDate = new Date(joinDate);
-                    accrualDate.setMonth(joinDate.getMonth() + 6 + i);
-                    
+                    accrualDate.setMonth(joinDate.getMonth() + (PAID_LEAVE_ELIGIBILITY_MONTHS - 1) + i);
+
                     transactions.push({
                         employee_id,
                         leave_year: accrualDate.getFullYear(),
                         transaction_date: accrualDate.toISOString().split('T')[0],
                         transaction_type: 'accrual',
-                        amount: 1.5,
+                        amount: MONTHLY_ACCRUAL_RATE,
                         description: `Monthly leave accrual for ${accrualDate.toLocaleString('default', { month: 'long' })} ${accrualDate.getFullYear()}`
                     });
                 }

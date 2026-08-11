@@ -10,6 +10,7 @@ const {
     toUTCMs, istStringToUTCISO,
 } = require('../controllers/attendanceController')._shared;
 const { isFlexibleShiftEnabled, getFlexibleShiftStatus } = require('../utils/flexibleShift');
+const { CYCLE_START_DAY } = require('../config/payrollCycle');
 
 // Fixes a real bug in the old implementation: only literal role === 'admin' bypassed
 // hierarchy checks there — sub_admin/hr did not, despite needing full access.
@@ -147,10 +148,11 @@ async function recalculateAttendanceForApprovedRequest(attendanceId, requestType
 }
 
 // ── 5. Payroll cycle / lock check ──────────────────────────────────────────────
-// Cycle = 26th of (month-1) → 25th of (month), mirroring salaryController.getCycleDates.
+// Cycle = CYCLE_START_DAY of (month-1) → CYCLE_START_DAY-1 of (month) — shared with
+// salaryController.getCycleDates via backend/config/payrollCycle.js.
 function getPayrollCycleForDate(dateStr) {
     const [y, m, d] = String(dateStr).substring(0, 10).split('-').map(Number);
-    if (d <= 25) return { month: m, year: y };
+    if (d <= CYCLE_START_DAY - 1) return { month: m, year: y };
     return m === 12 ? { month: 1, year: y + 1 } : { month: m + 1, year: y };
 }
 

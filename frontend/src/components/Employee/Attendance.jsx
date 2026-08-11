@@ -17,7 +17,8 @@ import {
   FaMoon,
   FaHistory,
   FaRegClock,
-  FaArrowLeft
+  FaArrowLeft,
+  FaBirthdayCake
 } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';
@@ -93,6 +94,7 @@ const Attendance = () => {
   const [heartbeatInterval, setHeartbeatInterval] = useState(null);
   const [showExitWarning, setShowExitWarning] = useState(false);
   const [hasClockedOutToday, setHasClockedOutToday] = useState(false);
+  const [employeeDob, setEmployeeDob] = useState(null);
   const [attendanceHistory, setAttendanceHistory] = useState([]);
   const [isSessionValid, setIsSessionValid] = useState(false);
   const [hasIncompleteRecord, setHasIncompleteRecord] = useState(false);
@@ -392,6 +394,16 @@ const Attendance = () => {
     const isWeekend = record.dayOfWeek === 0 || record.dayOfWeek === 6;
     if (record.isWeeklyOff || (isWeekend && !record.clock_in)) {
       return statusPill('weekend', 'W-Off', <FaMoon size={10} />);
+    }
+
+    // Approved Paid/Birthday/Comp-Off leave — written as a Present placeholder with no
+    // clock_in by leaveAttendanceSync on approval. Must show Present, not "Not Clocked".
+    if (!record.clock_in && record.status === 'present' && record.attendance_type) {
+      const presentReason = record.attendance_type === 'paid_leave' ? 'Paid Leave'
+        : record.attendance_type === 'birthday_leave' ? 'Birthday Leave'
+        : record.attendance_type === 'comp_off' ? 'Comp-Off'
+        : null;
+      return statusPill('present', presentReason ? `Present — ${presentReason}` : 'Present', <FaCheckCircle size={10} />);
     }
 
     if (!record.clock_in) {
@@ -1013,7 +1025,8 @@ const Attendance = () => {
           original_status: displayStatus,
           late_minutes: lateMinutes,
           late_display: lateDisplay,
-          is_regularized: existingRecord.is_regularized || false
+          is_regularized: existingRecord.is_regularized || false,
+          attendance_type: existingRecord.attendance_type || null
         });
 
       } else {
@@ -1282,7 +1295,8 @@ const Attendance = () => {
               current_hours_display: currentHoursDisplay,
               status: existingRecord.is_regularized ? 'present' : displayStatus,
               original_status: displayStatus, late_minutes: lateMinutes,
-              late_display: lateDisplay, is_regularized: existingRecord.is_regularized || false
+              late_display: lateDisplay, is_regularized: existingRecord.is_regularized || false,
+              attendance_type: existingRecord.attendance_type || null
             });
           } else {
             result.push({
@@ -1956,6 +1970,21 @@ const Attendance = () => {
   };
   // In Attendance.jsx - Update the initialization useEffect
 
+  // Fetch date of birth once, purely for the birthday highlight in the attendance table below.
+  useEffect(() => {
+    if (!user?.employeeId) return;
+    axios.get(API_ENDPOINTS.EMPLOYEE_PROFILE(user.employeeId))
+      .then(res => setEmployeeDob(res.data?.dob || null))
+      .catch(() => setEmployeeDob(null));
+  }, [user?.employeeId]);
+
+  const isBirthdayDate = (dateStr) => {
+    if (!employeeDob || !dateStr) return false;
+    const dob = new Date(employeeDob);
+    const d = new Date(dateStr);
+    return dob.getMonth() === d.getMonth() && dob.getDate() === d.getDate();
+  };
+
   useEffect(() => {
     if (!user?.employeeId) return;
 
@@ -2416,12 +2445,25 @@ const Attendance = () => {
                             r => r.status === 'pending' && String(r.attendance_id) === String(record.id)
                           );
                           const canRegularize = !record.isWeeklyOff && !isToday && !record.is_regularized;
+                          const isBirthday = isBirthdayDate(record.date);
 
                           return (
-                            <tr key={index} className={`da-row da-row-enter ${record.isToday ? 'fw-bold' : ''}`} style={{ borderBottom: `1px solid ${DA.border}` }}>
+                            <tr
+                              key={index}
+                              className={`da-row da-row-enter ${record.isToday ? 'fw-bold' : ''}`}
+                              style={{
+                                borderBottom: `1px solid ${DA.border}`,
+                                ...(isBirthday ? { background: 'linear-gradient(90deg, rgba(236,72,153,.10), rgba(250,204,21,.10))' } : {})
+                              }}
+                            >
                               <td className="small">
                                 <div>
                                   <span className="fw-semibold">{formatShortDate(record.date)}</span>
+                                  {isBirthday && (
+                                    <Badge bg="warning" text="dark" className="ms-1" pill title="Your Birthday">
+                                      <FaBirthdayCake size={9} className="me-1" />Birthday
+                                    </Badge>
+                                  )}
                                   {record.isToday && <Badge bg="primary" className="ms-1" pill>Today</Badge>}
                                   {record.is_regularized && <Badge bg="info" className="ms-1" pill>Reg</Badge>}
                                 </div>

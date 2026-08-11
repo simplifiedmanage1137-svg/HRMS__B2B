@@ -203,19 +203,28 @@ export default function DeductionManager() {
     });
   }, [filteredEmployees, modalEmployeeSearch]);
 
+  // An employee can have several deduction line items in the same month (e.g. a late
+  // fine + a damage charge) — group all of them per employee instead of keeping only one,
+  // otherwise the amount/reason shown here (and the Total Deduction Amount stat below)
+  // silently drops every deduction but the last one loaded for that employee.
   const deductionMap = useMemo(() => {
     const map = new Map();
     deductions.forEach(d => {
-      map.set(d.employee_id, d);
+      const list = map.get(d.employee_id) || [];
+      list.push(d);
+      map.set(d.employee_id, list);
     });
     return map;
   }, [deductions]);
 
   const filteredRows = useMemo(() => {
     return filteredEmployees.map(emp => {
-      const deduction = deductionMap.get(emp.employee_id);
-      const amount = deduction ? Number(deduction.amount || 0) : 0;
-      const status = deduction ? 'Deduction Exists' : 'No Deduction';
+      const empDeductions = deductionMap.get(emp.employee_id) || [];
+      const amount = empDeductions.reduce((sum, d) => sum + Number(d.amount || 0), 0);
+      const status = empDeductions.length > 0 ? 'Deduction Exists' : 'No Deduction';
+      const latest = empDeductions.reduce((a, b) => (
+        new Date(b.created_at || b.deduction_date || 0) > new Date(a?.created_at || a?.deduction_date || 0) ? b : a
+      ), empDeductions[0]);
       return {
         employee_id: emp.employee_id,
         name: buildName(emp),
@@ -223,11 +232,13 @@ export default function DeductionManager() {
         designation: emp.designation || '—',
         amount,
         status,
-        deduction_date: deduction?.deduction_date || null,
-        reason: deduction?.reason || 'No additional deduction applied this month.',
-        added_by: deduction?.added_by || deduction?.created_by || deduction?.admin_name || 'Admin',
-        created_at: deduction?.created_at || deduction?.deduction_date || null,
-        deduction,
+        deduction_date: latest?.deduction_date || null,
+        reason: empDeductions.length > 1
+          ? empDeductions.map(d => `${d.reason || 'No reason'}: ${fmtCurrency(d.amount)}`).join('; ')
+          : (latest?.reason || 'No additional deduction applied this month.'),
+        added_by: latest?.added_by || latest?.created_by || latest?.admin_name || 'Admin',
+        created_at: latest?.created_at || latest?.deduction_date || null,
+        deductions: empDeductions,
         employee: emp,
       };
     }).filter(row => {
@@ -623,28 +634,33 @@ export default function DeductionManager() {
 
             <Card className="border-0 shadow-sm mb-3" style={{ borderRadius: 16 }}>
               <Card.Body>
-                <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-semibold"><FaClock /> Deduction history</div>
+                <div className="d-flex align-items-center justify-content-between mb-3">
+                  <div className="d-flex align-items-center gap-2 text-primary fw-semibold"><FaClock /> Deduction history</div>
+                  {selectedRow.deductions?.length > 1 && (
+                    <Badge bg="secondary">{selectedRow.deductions.length} line items</Badge>
+                  )}
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {selectedRow.deduction ? (
-                    <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: '10px 12px' }}>
-                      <div className="fw-semibold">{fmtMonthLabel(filterMonth)} {filterYear}</div>
-                      <div className="small text-muted mt-1">{selectedRow.reason}</div>
-                      <div className="small text-muted mt-2">Recorded on {fmtDate(selectedRow.created_at)}</div>
-                    </div>
+                  {selectedRow.deductions?.length > 0 ? (
+                    selectedRow.deductions.map(d => (
+                      <div key={d.id} style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: '10px 12px' }}>
+                        <div className="d-flex justify-content-between align-items-start">
+                          <div>
+                            <div className="fw-semibold">{fmtMonthLabel(filterMonth)} {filterYear}</div>
+                            <div className="small text-muted mt-1">{d.reason || 'No reason provided'}</div>
+                            <div className="small text-muted mt-2">Recorded on {fmtDate(d.created_at || d.deduction_date)}</div>
+                          </div>
+                          <div className="text-end">
+                            <div className="fw-bold text-danger mb-2">{fmtCurrency(d.amount)}</div>
+                            <Button variant="outline-danger" size="sm" onClick={() => handleDelete(d.id)}><FaTrash className="me-1" /> Remove</Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
                   ) : (
                     <div className="text-muted small">No deduction history is available for this employee for the selected month.</div>
                   )}
                 </div>
-              </Card.Body>
-            </Card>
-
-            <Card className="border-0 shadow-sm" style={{ borderRadius: 16 }}>
-              <Card.Body>
-                <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-semibold"><FaCheckCircle /> Admin notes</div>
-                <div className="small text-muted" style={{ lineHeight: 1.7 }}>{selectedRow.reason || 'No admin notes were provided for this deduction.'}</div>
-                {selectedRow.deduction && (
-                  <Button variant="outline-danger" size="sm" className="mt-3" onClick={() => handleDelete(selectedRow.deduction.id)}><FaTrash className="me-1" /> Remove deduction</Button>
-                )}
               </Card.Body>
             </Card>
           </div>

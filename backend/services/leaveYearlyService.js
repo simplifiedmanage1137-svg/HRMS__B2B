@@ -1,4 +1,5 @@
 const supabase = require('../config/supabase');
+const { PAID_LEAVE_ELIGIBILITY_MONTHS, MONTHLY_ACCRUAL_RATE } = require('../config/leavePolicy');
 
 class LeaveYearlyService {
     
@@ -57,18 +58,18 @@ class LeaveYearlyService {
             completedMonths = Math.max(0, completedMonths - 1);
         }
         
-        // Only count months AFTER probation (6 months)
-        if (completedMonths <= 6) {
+        // Only count months AFTER probation
+        if (completedMonths <= PAID_LEAVE_ELIGIBILITY_MONTHS) {
             return [];
         }
-        
-        const monthsAfterProbation = completedMonths - 6;
+
+        const monthsAfterProbation = completedMonths - PAID_LEAVE_ELIGIBILITY_MONTHS;
         const monthsToAccrue = [];
-        
+
         // Calculate which months should be accrued
         for (let i = 0; i < monthsAfterProbation; i++) {
             const accrualDate = new Date(join);
-            accrualDate.setMonth(join.getMonth() + 6 + i);
+            accrualDate.setMonth(join.getMonth() + PAID_LEAVE_ELIGIBILITY_MONTHS + i);
             
             // Only accrue if month is complete (we're past its last day)
             const lastDayOfAccrualMonth = new Date(accrualDate.getFullYear(), accrualDate.getMonth() + 1, 0);
@@ -151,9 +152,9 @@ class LeaveYearlyService {
                     const monthsCompleted = this.calculateCompletedMonthsFromJoining(joiningDate, new Date(newYear, 0, 1));
                     
                     let initialAccrued = 0;
-                    if (monthsCompleted >= 6) {
-                        const monthsAfterProbation = monthsCompleted - 6;
-                        initialAccrued = monthsAfterProbation * 1.5;
+                    if (monthsCompleted >= PAID_LEAVE_ELIGIBILITY_MONTHS) {
+                        const monthsAfterProbation = monthsCompleted - PAID_LEAVE_ELIGIBILITY_MONTHS;
+                        initialAccrued = monthsAfterProbation * MONTHLY_ACCRUAL_RATE;
                     }
                     
                     await supabase
@@ -239,14 +240,14 @@ class LeaveYearlyService {
                     const joiningDate = new Date(emp.joining_date);
                     const monthsCompleted = this.calculateCompletedMonthsFromJoining(joiningDate, today);
                     
-                    // Only accrue if employee has completed probation (6 months)
-                    if (monthsCompleted < 6) {
+                    // Only accrue if employee has completed probation
+                    if (monthsCompleted < PAID_LEAVE_ELIGIBILITY_MONTHS) {
                         results.skipped++;
                         results.details.push({
                             employee_id: emp.employee_id,
                             name: `${emp.first_name} ${emp.last_name}`,
                             status: 'skipped',
-                            reason: `Still in probation (${monthsCompleted}/6 months)`
+                            reason: `Still in probation (${monthsCompleted}/${PAID_LEAVE_ELIGIBILITY_MONTHS} months)`
                         });
                         continue;
                     }
@@ -283,7 +284,7 @@ class LeaveYearlyService {
                     
                     if (balanceError) throw balanceError;
                     
-                    const accrualAmount = 1.5;
+                    const accrualAmount = MONTHLY_ACCRUAL_RATE;
                     
                     if (!balance) {
                         // Create new balance

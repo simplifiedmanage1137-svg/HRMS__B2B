@@ -1,8 +1,7 @@
 // services/compOffService.js
 const supabase = require('../config/supabase');
 const { holidays } = require('../data/holidays');
-
-const COMP_OFF_EXPIRY_DAYS = 45;
+const { COMP_OFF_EXPIRY_DAYS } = require('../config/leavePolicy');
 
 class CompOffService {
 

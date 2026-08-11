@@ -78,6 +78,10 @@ import RegularizationPanel from '../Common/RegularizationPanel';
 import * as XLSX from 'xlsx';
 // import HistoricalLateMarksUpdater from './HistoricalLateMarksUpdater';
 
+// Mirrors backend/config/leavePolicy.js PAID_LEAVE_ELIGIBILITY_MONTHS — display-only,
+// the backend remains the authority on actual eligibility.
+const PAID_LEAVE_ELIGIBILITY_MONTHS = 3;
+
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -610,7 +614,7 @@ const AdminDashboard = () => {
               used: parseFloat(balanceRes.data.used) || 0,
               pending: parseFloat(balanceRes.data.pending) || 0,
               comp_off_balance: parseFloat(balanceRes.data.comp_off_balance) || 0,
-              months_completed: balanceRes.data.months_completed_in_year || balanceRes.data.months_completed || 0,
+              months_completed: balanceRes.data.total_months_from_joining || 0,
               total_months_from_joining: balanceRes.data.total_months_from_joining || 0,
               is_probation_complete: balanceRes.data.is_probation_complete || false,
               is_eligible: balanceRes.data.is_eligible || false
@@ -2048,7 +2052,7 @@ const AdminDashboard = () => {
                               const monthsCompleted = emp.leaveBalance?.months_completed || 0;
                               const isProbationComplete = emp.leaveBalance?.is_probation_complete || false;
                               const displayAvailable = isProbationComplete ? available : totalAccrued;
-                              const isProbation = !isProbationComplete && monthsCompleted < 6;
+                              const isProbation = !isProbationComplete && monthsCompleted < PAID_LEAVE_ELIGIBILITY_MONTHS;
 
                               return (
                                 <tr key={emp.id} className={isProbation ? 'table-light' : ''}>
@@ -2063,7 +2067,7 @@ const AdminDashboard = () => {
                                   <td className="small text-danger">{used.toFixed(1)}</td>
                                   <td className="small"><Badge bg={displayAvailable <= 0 ? 'danger' : displayAvailable < 3 ? 'warning' : 'success'} pill className="px-2 py-1">{displayAvailable.toFixed(1)}</Badge></td>
                                   <td className="small">{displayAvailable <= 0 ? <Badge bg="danger" pill>No Leaves</Badge> : displayAvailable < 3 ? <Badge bg="warning" pill>Low</Badge> : <Badge bg="success" pill>Good</Badge>}</td>
-                                  <td className="small d-none d-lg-table-cell">{isProbation ? <Badge bg="info" pill>{monthsCompleted}/6 months</Badge> : <Badge bg="success" pill>Completed</Badge>}</td>
+                                  <td className="small d-none d-lg-table-cell">{isProbation ? <Badge bg="info" pill>{monthsCompleted}/{PAID_LEAVE_ELIGIBILITY_MONTHS} months</Badge> : <Badge bg="success" pill>Completed</Badge>}</td>
                                 </tr>
                               );
                             })

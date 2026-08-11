@@ -2,6 +2,7 @@ const supabase = require('../config/supabase');
 const { isDateHoliday, getHolidayName } = require('../data/holidays');
 const { getDeductionTotal } = require('./deductionController');
 const { toUTCMs } = require('./attendanceController')._shared;
+const { getCycleDates, parseLocalDate, LATE_FREE_COUNT } = require('../config/payrollCycle');
 
 const FIXED_WORKING_DAYS = 22;
 // Helper function to get month name
@@ -10,34 +11,6 @@ function getMonthName(monthNumber) {
         'July', 'August', 'September', 'October', 'November', 'December'];
     return months[monthNumber - 1] || 'Unknown';
 }
-
-// Get cycle dates (26th of previous month to 25th of current month)
-const getCycleDates = (month, year) => {
-    const startMonth = month - 1;
-    const startYear = startMonth === 0 ? year - 1 : year;
-    const actualStartMonth = startMonth === 0 ? 12 : startMonth;
-
-    const pad = (n) => String(n).padStart(2, '0');
-    const startDateStr = `${startYear}-${pad(actualStartMonth)}-26`;
-    const endDateStr = `${year}-${pad(month)}-25`;
-
-    return {
-        startDate: parseLocalDate(startDateStr),
-        endDate: parseLocalDate(endDateStr),
-        startDateStr,
-        endDateStr,
-        startMonth: actualStartMonth,
-        startYear: startYear,
-        endMonth: month,
-        endYear: year
-    };
-};
-
-// Parse date string YYYY-MM-DD as local date (avoid UTC shift)
-const parseLocalDate = (dateStr) => {
-    const [y, m, d] = dateStr.split('-').map(Number);
-    return new Date(y, m - 1, d);
-};
 
 // Calculate working days in cycle (Monday to Friday only)
 const calculateWorkingDaysInCycle = (startDate, endDate, joiningDate = null) => {
@@ -328,7 +301,10 @@ const calculateAttendanceSummary = (attendanceRecords, leaves, startDateStr, end
         totalOvertimeHours,
         totalOvertimeAmount,
         lateDays,
-        totalLateMinutes
+        totalLateMinutes,
+        // Informational only (no deduction applied) — first LATE_FREE_COUNT lates per cycle are free.
+        freeLateDays: Math.min(lateDays, LATE_FREE_COUNT),
+        chargeableLateDays: Math.max(0, lateDays - LATE_FREE_COUNT)
     };
 };
 
@@ -1217,19 +1193,36 @@ exports.getBulkPayroll = async (req, res) => {
             return data || [];
         };
 
-        const [employees, { data: slips, error: slipErr }] = await Promise.all([
+        const [employees, { data: slips, error: slipErr }, { data: deductionRows, error: dedErr }] = await Promise.all([
             fetchEmployees(),
             supabase
                 .from('salary_slips')
                 .select('*')
                 .eq('month', parseInt(month))
                 .eq('year',  parseInt(year)),
+            supabase
+                .from('salary_deductions')
+                .select('*')
+                .eq('month', parseInt(month))
+                .eq('year',  parseInt(year)),
         ]);
 
         if (slipErr) throw slipErr;
+        if (dedErr) throw dedErr;
 
         const slipMap = {};
         (slips || []).forEach(s => { slipMap[s.employee_id] = s; });
+
+        // Deductions are stored as one row per line item (an employee can have several —
+        // e.g. a late fine + a damage charge in the same cycle). Group + sum them here so
+        // both Payroll Preview and the Excel export always show the true current total —
+        // a generated slip only snapshots custom_deduction at generation time, so trusting
+        // that alone goes stale the moment a deduction is added/edited/deleted afterward.
+        const deductionsByEmployee = {};
+        (deductionRows || []).forEach(d => {
+            if (!deductionsByEmployee[d.employee_id]) deductionsByEmployee[d.employee_id] = [];
+            deductionsByEmployee[d.employee_id].push(d);
+        });
 
         const cycle = getCycleDates(parseInt(month), parseInt(year));
         const defaultWD = calculateWorkingDaysInCycle(cycle.startDate, cycle.endDate);
@@ -1260,6 +1253,10 @@ exports.getBulkPayroll = async (req, res) => {
             const totalWorkingDays = slip?.total_working_days || defaultWD;
             const shiftHours      = slip?.shift_hours || parseShiftHours(emp.shift_timing) || 8;
             const attendance      = attendanceByEmployee[emp.employee_id];
+            const deductionItems  = deductionsByEmployee[emp.employee_id] || [];
+            const liveCustomDeduction = parseFloat(
+                deductionItems.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0).toFixed(2)
+            );
 
             let adj;
             if (slip?.salary_earned != null) {
@@ -1294,7 +1291,13 @@ exports.getBulkPayroll = async (req, res) => {
                 basic_salary:       slip?.basic_salary != null ? parseFloat(slip.basic_salary) : null,
                 overtime_amount:    slip?.overtime_amount != null ? parseFloat(slip.overtime_amount) : 0,
                 dt_deduction:       slip?.dt != null ? parseFloat(slip.dt) : null,
-                custom_deduction:   slip?.custom_deduction != null ? parseFloat(slip.custom_deduction) : 0,
+                // Live sum from salary_deductions, not the slip's generation-time snapshot —
+                // stays accurate even if a deduction was added/edited after the slip was made.
+                custom_deduction:   liveCustomDeduction,
+                custom_deduction_stale: slip?.custom_deduction != null && parseFloat(slip.custom_deduction) !== liveCustomDeduction,
+                deduction_items:    deductionItems.map(d => ({
+                    id: d.id, amount: parseFloat(d.amount || 0), reason: d.reason || '', deduction_date: d.deduction_date || null
+                })),
                 cycle_start_date:   slip?.cycle_start_date || null,
                 cycle_end_date:     slip?.cycle_end_date || null,
                 generated_date:     slip?.generated_date || null,

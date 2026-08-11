@@ -49,6 +49,10 @@ const TYPE_META = {
   Birthday:    { emoji: '🎂', bg: '#FEF9C3', color: '#854D0E' },
 };
 
+// Mirrors backend/config/leavePolicy.js PAID_LEAVE_ELIGIBILITY_MONTHS — display-only,
+// the backend remains the authority on actual eligibility (is_eligible / eligible_from_date).
+const PAID_LEAVE_ELIGIBILITY_MONTHS = 3;
+
 const STATUS_META = {
   pending:  { bg: 'rgba(245,158,11,.14)', color: '#b45309' },
   approved: { bg: 'rgba(16,185,129,.14)', color: '#047857' },
@@ -107,7 +111,6 @@ const ApplyLeave = () => {
   const [employeeDetails, setEmployeeDetails] = useState({
     joining_date: '',
     reporting_manager: '',
-    months_completed: 0,
     dob: ''
   });
   const [formData, setFormData] = useState({
@@ -254,31 +257,12 @@ const ApplyLeave = () => {
     try {
       const response = await axios.get(API_ENDPOINTS.EMPLOYEE_PROFILE(user.employeeId));
 
-      const joiningDate = new Date(response.data.joining_date);
-      const today = new Date();
-
-      const calculateMonthsFromJoining = (joinDateVal, currentDate = new Date()) => {
-        const join = new Date(joinDateVal);
-        const now = new Date(currentDate);
-
-        if (now < join) return 0;
-
-        let totalMonths = (now.getFullYear() - join.getFullYear()) * 12 +
-          (now.getMonth() - join.getMonth());
-
-        if (now.getDate() < join.getDate()) {
-          totalMonths = Math.max(0, totalMonths - 1);
-        }
-
-        return totalMonths;
-      };
-
-      const monthsCompleted = calculateMonthsFromJoining(joiningDate, today);
-
+      // Eligibility month-math lives only on the backend (leaveController.getLeaveBalance) —
+      // this component trusts leaveBalance.months_completed / is_eligible instead of
+      // re-deriving it here.
       setEmployeeDetails({
         joining_date: response.data.joining_date,
         reporting_manager: response.data.reporting_manager || '',
-        months_completed: monthsCompleted,
         dob: response.data.dob || ''
       });
 
@@ -294,8 +278,7 @@ const ApplyLeave = () => {
       console.error('Error fetching employee details:', error);
       setEmployeeDetails({
         joining_date: '',
-        reporting_manager: '',
-        months_completed: 0
+        reporting_manager: ''
       });
     }
   };
@@ -319,7 +302,7 @@ const ApplyLeave = () => {
         completed_months_in_year: response.data.accrual_info?.months_this_year || 0,
         message: response.data.message || '',
         is_eligible: isProbationComplete,
-        months_completed: response.data.months_completed || 0,
+        months_completed: response.data.total_months_from_joining || 0,
         is_probation_complete: isProbationComplete,
         eligible_from_date: response.data.eligible_from_date || ''
       });
@@ -579,7 +562,7 @@ const ApplyLeave = () => {
   };
 
   const calculateProgressToEligibility = () => {
-    return Math.min(100, (leaveBalance.months_completed / 6) * 100);
+    return Math.min(100, (leaveBalance.months_completed / PAID_LEAVE_ELIGIBILITY_MONTHS) * 100);
   };
 
   if (loading) {
@@ -682,7 +665,7 @@ const ApplyLeave = () => {
                     <FaUsers size={13} />
                   </div>
                   <div className="fw-semibold small mt-2">
-                    During Probation <span className="text-muted fw-normal">(First 6 months)</span>
+                    During Probation <span className="text-muted fw-normal">(First {PAID_LEAVE_ELIGIBILITY_MONTHS} months)</span>
                   </div>
                   <ul className="al-policy-list">
                     <li>Comp-Off and Unpaid Leave available</li>
@@ -694,11 +677,11 @@ const ApplyLeave = () => {
                     <FaUserCircle size={13} />
                   </div>
                   <div className="fw-semibold small mt-2">
-                    After Probation <span className="text-muted fw-normal">(6+ months)</span>
+                    After Probation <span className="text-muted fw-normal">({PAID_LEAVE_ELIGIBILITY_MONTHS}+ months)</span>
                   </div>
                   <ul className="al-policy-list">
                     <li>All leave types become available</li>
-                    <li>Annual leaves: 1.5 days/month (18 days/year)</li>
+                    <li>Annual leaves: 2 days/month (24 days/year)</li>
                   </ul>
                 </Col>
               </Row>
@@ -744,7 +727,7 @@ const ApplyLeave = () => {
                         {leaveBalance.comp_off_balance > 0 && (
                           <> You have <strong>{leaveBalance.comp_off_balance} Comp-Off days</strong> available from working on holidays.</>
                         )}
-                        {' '}After completing 6 months (from {leaveBalance.eligible_from_date || 'N/A'}), all leave types will be available.
+                        {' '}After completing {PAID_LEAVE_ELIGIBILITY_MONTHS} months (from {leaveBalance.eligible_from_date || 'N/A'}), all leave types will be available.
                       </p>
                     </div>
                   </div>
@@ -772,7 +755,7 @@ const ApplyLeave = () => {
                 <div className="mb-4">
                   <div className="d-flex justify-content-between mb-1 small">
                     <span className="text-muted">Progress to eligibility:</span>
-                    <span className="fw-semibold">{leaveBalance.months_completed} / 6 months</span>
+                    <span className="fw-semibold">{leaveBalance.months_completed} / {PAID_LEAVE_ELIGIBILITY_MONTHS} months</span>
                   </div>
                   <ProgressBar
                     now={calculateProgressToEligibility()}
@@ -1119,7 +1102,7 @@ const ApplyLeave = () => {
                     </span>
                     <div className="mt-2 small text-muted">
                       <FaInfoCircle className="me-1" size={10} />
-                      You have earned {leaveBalance.total_accrued} leaves, but can only use them after completing 6 months.
+                      You have earned {leaveBalance.total_accrued} leaves, but can only use them after completing {PAID_LEAVE_ELIGIBILITY_MONTHS} months.
                     </div>
                   </>
                 )}
@@ -1202,7 +1185,7 @@ const ApplyLeave = () => {
                   <strong>Joining Date:</strong> {formatJoiningDate(employeeDetails.joining_date)}
                 </p>
                 <p className="mb-1">
-                  <strong>Months Completed:</strong> {leaveBalance.months_completed} / 6
+                  <strong>Months Completed:</strong> {leaveBalance.months_completed} / {PAID_LEAVE_ELIGIBILITY_MONTHS}
                 </p>
                 {!leaveBalance.is_eligible ? (
                   <p className="mb-0" style={{ color: AL.primary }}>
@@ -1238,17 +1221,17 @@ const ApplyLeave = () => {
               </ul>
             </li>
             <li className="mt-2">
-              <strong>During Probation (First 6 months):</strong>
+              <strong>During Probation (First {PAID_LEAVE_ELIGIBILITY_MONTHS} months):</strong>
               <ul className="ps-3 mt-1">
                 <li>Comp-Off and Unpaid Leave available</li>
                 <li>Regular leaves accrue but cannot be used</li>
               </ul>
             </li>
             <li className="mt-2">
-              <strong>After Probation (6+ months):</strong>
+              <strong>After Probation ({PAID_LEAVE_ELIGIBILITY_MONTHS}+ months):</strong>
               <ul className="ps-3 mt-1">
                 <li>All leave types become available</li>
-                <li>Annual leaves: 1.5 days/month (18 days/year)</li>
+                <li>Annual leaves: 2 days/month (24 days/year)</li>
               </ul>
             </li>
             <li className="mt-2">Submit at least 3 days in advance</li>
