@@ -28,6 +28,7 @@ import { useMobileDevice } from '../../hooks/useMobileDevice';
 import {
   DA, STATUS_PILL, DA_TH_STYLE, DA_CARD_STYLE, DA_GRADIENT_BAR, ATTENDANCE_TABLE_CSS,
 } from '../Common/attendanceTheme';
+import BreakWidget from '../Common/BreakWidget';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -95,6 +96,7 @@ const Attendance = () => {
   const [showExitWarning, setShowExitWarning] = useState(false);
   const [hasClockedOutToday, setHasClockedOutToday] = useState(false);
   const [employeeDob, setEmployeeDob] = useState(null);
+  const [employeeDepartment, setEmployeeDepartment] = useState('');
   const [attendanceHistory, setAttendanceHistory] = useState([]);
   const [isSessionValid, setIsSessionValid] = useState(false);
   const [hasIncompleteRecord, setHasIncompleteRecord] = useState(false);
@@ -1879,17 +1881,20 @@ const Attendance = () => {
 
       return (
         <div className="text-center">
-          <Button
-            onClick={handleClockOut}
-            disabled={loading}
-            style={{ background: DA.warning, borderColor: DA.warning, borderRadius: 12, padding: '10px 22px', fontWeight: 700, color: '#fff' }}
-          >
-            {loading ? (
-              <><Spinner size="sm" animation="border" className="me-2" />Processing...</>
-            ) : (
-              <><FaSignOutAlt className="me-2" />Clock Out</>
-            )}
-          </Button>
+          <div className="d-inline-flex align-items-center gap-2 flex-wrap justify-content-center">
+            <Button
+              onClick={handleClockOut}
+              disabled={loading}
+              style={{ background: DA.warning, borderColor: DA.warning, borderRadius: 12, padding: '10px 22px', fontWeight: 700, color: '#fff' }}
+            >
+              {loading ? (
+                <><Spinner size="sm" animation="border" className="me-2" />Processing...</>
+              ) : (
+                <><FaSignOutAlt className="me-2" />Clock Out</>
+              )}
+            </Button>
+            <BreakWidget mode="inline-button" isClockedIn={true} isClockedOut={false} unlimitedBreaks={unlimitedBreaks} />
+          </div>
         </div>
       );
     }
@@ -1898,17 +1903,20 @@ const Attendance = () => {
     if (isClockedOut || hasClockedOutToday) {
       return (
         <div className="text-center">
-          <Button
-            onClick={handleClockIn}
-            disabled={loading}
-            style={{ background: DA.primaryGreen, borderColor: DA.primaryGreen, borderRadius: 12, padding: '10px 22px', fontWeight: 700, color: '#fff' }}
-          >
-            {loading ? (
-              <><Spinner size="sm" animation="border" className="me-2" />Processing...</>
-            ) : (
-              <><FaMapMarkerAlt className="me-2" />Clock In</>
-            )}
-          </Button>
+          <div className="d-inline-flex align-items-center gap-2 flex-wrap justify-content-center">
+            <Button
+              onClick={handleClockIn}
+              disabled={loading}
+              style={{ background: DA.primaryGreen, borderColor: DA.primaryGreen, borderRadius: 12, padding: '10px 22px', fontWeight: 700, color: '#fff' }}
+            >
+              {loading ? (
+                <><Spinner size="sm" animation="border" className="me-2" />Processing...</>
+              ) : (
+                <><FaMapMarkerAlt className="me-2" />Clock In</>
+              )}
+            </Button>
+            <BreakWidget mode="inline-button" isClockedIn={false} isClockedOut={true} unlimitedBreaks={unlimitedBreaks} />
+          </div>
           {isClockedOut && (
             <small className="text-success d-block mt-2">
               You have already clocked out today. You can clock in again for next shift.
@@ -1955,28 +1963,33 @@ const Attendance = () => {
 
     // ✅ DEFAULT: Clock In button
     return (
-      <Button
-        onClick={handleClockIn}
-        disabled={loading}
-        style={{ background: DA.primaryGreen, borderColor: DA.primaryGreen, borderRadius: 12, padding: '10px 22px', fontWeight: 700, color: '#fff' }}
-      >
-        {loading ? (
-          <><Spinner size="sm" animation="border" className="me-2" />Processing...</>
-        ) : (
-          <><FaMapMarkerAlt className="me-2" />Clock In</>
-        )}
-      </Button>
+      <div className="d-inline-flex align-items-center gap-2 flex-wrap justify-content-center">
+        <Button
+          onClick={handleClockIn}
+          disabled={loading}
+          style={{ background: DA.primaryGreen, borderColor: DA.primaryGreen, borderRadius: 12, padding: '10px 22px', fontWeight: 700, color: '#fff' }}
+        >
+          {loading ? (
+            <><Spinner size="sm" animation="border" className="me-2" />Processing...</>
+          ) : (
+            <><FaMapMarkerAlt className="me-2" />Clock In</>
+          )}
+        </Button>
+        <BreakWidget mode="inline-button" isClockedIn={false} isClockedOut={false} unlimitedBreaks={unlimitedBreaks} />
+      </div>
     );
   };
   // In Attendance.jsx - Update the initialization useEffect
 
-  // Fetch date of birth once, purely for the birthday highlight in the attendance table below.
+  // Fetch date of birth (birthday highlight in the table below) and department (drives the
+  // Sales unlimited-breaks rule the same way Dashboard.jsx's AttendanceCard does) once.
   useEffect(() => {
     if (!user?.employeeId) return;
     axios.get(API_ENDPOINTS.EMPLOYEE_PROFILE(user.employeeId))
-      .then(res => setEmployeeDob(res.data?.dob || null))
-      .catch(() => setEmployeeDob(null));
+      .then(res => { setEmployeeDob(res.data?.dob || null); setEmployeeDepartment(res.data?.department || ''); })
+      .catch(() => { setEmployeeDob(null); setEmployeeDepartment(''); });
   }, [user?.employeeId]);
+  const unlimitedBreaks = employeeDepartment.trim().toLowerCase() === 'sales';
 
   const isBirthdayDate = (dateStr) => {
     if (!employeeDob || !dateStr) return false;

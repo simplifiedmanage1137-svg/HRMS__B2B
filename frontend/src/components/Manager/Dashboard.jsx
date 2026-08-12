@@ -143,6 +143,16 @@ const ManagerDashboard = () => {
   const [clockLoading, setClockLoading] = useState(false);
   const [clockMessage, setClockMessage] = useState({ type: '', text: '' });
   const [showClockOutConfirm, setShowClockOutConfirm] = useState(false);
+  // Same 3s "just clocked in" guard used on the Employee dashboard — prevents an accidental
+  // immediate double-click clock-out right after clocking in.
+  const [canClockOut, setCanClockOut] = useState(false);
+  useEffect(() => {
+    setCanClockOut(false);
+    const isClockedIn = (!!attendance?.clock_in || !!activeSession) && !attendance?.clock_out;
+    if (!isClockedIn) return;
+    const timer = setTimeout(() => setCanClockOut(true), 3000);
+    return () => clearTimeout(timer);
+  }, [attendance?.clock_in, attendance?.clock_out, !!activeSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const STORAGE_KEY = `attendance_session_${user?.employeeId}`;
   const saveSession = (s) => localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
@@ -402,8 +412,7 @@ const ManagerDashboard = () => {
         onClockIn={handleClockIn}
         onRequestClockOut={() => setShowClockOutConfirm(true)}
         clockLoading={clockLoading}
-        readOnly={true}
-        readOnlyMessage="Clock in/out from the Attendance page"
+        canClockOut={canClockOut}
         unlimitedBreaks={(user?.department || '').trim().toLowerCase() === 'sales'}
         footerExtra={
           <div style={{ display: 'flex', gap: 2 }}>
