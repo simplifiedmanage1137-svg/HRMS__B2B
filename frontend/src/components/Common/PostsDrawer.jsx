@@ -7,6 +7,8 @@ import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
 import Avatar from './Avatar';
+import PollWidget from './PollWidget';
+import PollDetailsDrawer from './PollDetailsDrawer';
 import { QA } from './quickAccessTheme';
 
 const REACTIONS = [
@@ -47,6 +49,7 @@ function Composer({ onPosted }) {
   const [postType, setPostType] = useState('post'); // 'post' | 'poll' | 'praise'
   const [category, setCategory] = useState('');
   const [pollOptions, setPollOptions] = useState(['', '']);
+  const [pollSettings, setPollSettings] = useState({ allowVoteChange: true, showResultsBeforeVoting: false, showVoterNames: false });
   const [praisedName, setPraisedName] = useState('');
   const [files, setFiles] = useState([]);
   const [previews, setPreviews] = useState([]);
@@ -95,6 +98,7 @@ function Composer({ onPosted }) {
 
   const reset = () => {
     setContent(''); setPostType('post'); setCategory(''); setPollOptions(['', '']);
+    setPollSettings({ allowVoteChange: true, showResultsBeforeVoting: false, showVoterNames: false });
     setPraisedName(''); setFiles([]); setPreviews([]); setError('');
     setTaggedEmps([]); setTagInput(''); setShowTagDD(false);
   };
@@ -119,6 +123,7 @@ function Composer({ onPosted }) {
         mentioned_employees: taggedEmps.map(e => ({ employee_id: e.employee_id, name: `${e.first_name} ${e.last_name}`.trim() })),
         media_urls,
         poll_options: postType === 'poll' ? pollOptions.filter(o => o.trim()) : undefined,
+        poll_settings: postType === 'poll' ? pollSettings : undefined,
         praised_employee_name: postType === 'praise' ? praisedName.trim() : undefined,
       });
       if (res.data?.success) {
@@ -203,6 +208,22 @@ function Composer({ onPosted }) {
               + Add option
             </button>
           )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4, padding: '8px 10px', background: '#f9fafb', borderRadius: 10 }}>
+            {[
+              ['allowVoteChange', 'Allow employees to change their vote'],
+              ['showResultsBeforeVoting', 'Show results before voting'],
+              ['showVoterNames', 'Let employees see who voted for what'],
+            ].map(([key, label]) => (
+              <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, color: QA.textMuted, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={pollSettings[key]}
+                  onChange={e => setPollSettings(prev => ({ ...prev, [key]: e.target.checked }))}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
         </div>
       )}
 
@@ -360,7 +381,7 @@ function CommentThread({ postId, initialFirstComment, onCountChange }) {
   );
 }
 
-function FeedPost({ post, viewer, following, onToggleFollow, onReact, onDelete }) {
+function FeedPost({ post, viewer, following, onToggleFollow, onReact, onDelete, onVote, onViewPollDetails }) {
   const [showComments, setShowComments] = useState(false);
   const [commentCount, setCommentCount] = useState(post.comment_count);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -373,7 +394,7 @@ function FeedPost({ post, viewer, following, onToggleFollow, onReact, onDelete }
   return (
     <div style={{ borderBottom: '8px solid #f8fafc', padding: '14px 16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Avatar id={post.employee_id} firstName={post.author_name?.split(' ')[0]} lastName={post.author_name?.split(' ')[1]} size={40} />
+        <Avatar photo={post.author_photo} id={post.employee_id} firstName={post.author_name?.split(' ')[0]} lastName={post.author_name?.split(' ')[1]} size={40} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: QA.textDark }}>{post.author_name}</span>
@@ -425,13 +446,7 @@ function FeedPost({ post, viewer, following, onToggleFollow, onReact, onDelete }
 
       {post.content && <div style={{ fontSize: 13, color: QA.textDark, marginTop: 8, lineHeight: 1.5 }}>{post.content}</div>}
 
-      {post.post_type === 'poll' && (post.poll_options || []).length > 0 && (
-        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {post.poll_options.map((opt, i) => (
-            <div key={i} style={{ padding: '7px 12px', borderRadius: 10, background: QA.primaryLight, color: QA.primary, fontSize: 12, fontWeight: 600 }}>{opt}</div>
-          ))}
-        </div>
-      )}
+      <PollWidget post={post} onVote={(index) => onVote(post.id, index)} onViewDetails={() => onViewPollDetails(post.id)} />
 
       {media.length > 0 && !isProfileUpdate && (
         media.length === 1 ? (
@@ -492,6 +507,7 @@ export default function PostsDrawer({ show, onClose }) {
   const [sortOrder, setSortOrder] = useState('latest');
   const [filterTab, setFilterTab] = useState('all');
   const [search, setSearch] = useState('');
+  const [pollDrawerPostId, setPollDrawerPostId] = useState(null);
 
   const fetchPosts = () => {
     axios.get(API_ENDPOINTS.POSTS)
@@ -520,6 +536,36 @@ export default function PostsDrawer({ show, onClose }) {
       await axios.post(API_ENDPOINTS.POST_REACT(postId), { type });
     } catch {
       fetchPosts();
+    }
+  };
+
+  // Optimistic update, then reconcile with the server's authoritative (never client-trusted)
+  // counts/percentages — mirrors the reaction-toggle pattern just above.
+  const voteOnPoll = async (postId, optionIndex) => {
+    const prevPosts = posts;
+    setPosts(prev => prev.map(p => {
+      if (p.id !== postId || !p.poll) return p;
+      const wasVoted = p.poll.my_vote;
+      const options = p.poll.options.map(o => {
+        let count = o.count;
+        if (p.poll.results_visible && count !== null) {
+          if (o.index === optionIndex) count = count + 1;
+          if (o.index === wasVoted && wasVoted !== optionIndex) count = Math.max(0, count - 1);
+        }
+        return { ...o, count };
+      });
+      const total = wasVoted === null || wasVoted === undefined ? p.poll.total_votes + 1 : p.poll.total_votes;
+      const withPct = options.map(o => ({ ...o, percentage: p.poll.results_visible && total > 0 ? Math.round((o.count / total) * 100) : o.percentage }));
+      return { ...p, poll: { ...p.poll, my_vote: optionIndex, total_votes: total, options: withPct } };
+    }));
+    try {
+      const res = await axios.post(API_ENDPOINTS.POST_VOTE(postId), { option_index: optionIndex });
+      if (res.data?.success) {
+        setPosts(prev => prev.map(p => p.id === postId ? { ...p, poll: res.data.poll } : p));
+      }
+    } catch (err) {
+      setPosts(prevPosts); // revert optimistic update
+      alert(err.response?.data?.message || 'Failed to record your vote');
     }
   };
 
@@ -636,12 +682,15 @@ export default function PostsDrawer({ show, onClose }) {
             ) : (
               visible.map(p => (
                 <FeedPost key={p.id} post={p} viewer={user || {}} following={following}
-                  onToggleFollow={toggleFollow} onReact={toggleReact} onDelete={deletePost} />
+                  onToggleFollow={toggleFollow} onReact={toggleReact} onDelete={deletePost}
+                  onVote={voteOnPoll} onViewPollDetails={setPollDrawerPostId} />
               ))
             )}
           </div>
         </div>
       </div>
+
+      <PollDetailsDrawer show={!!pollDrawerPostId} onHide={() => setPollDrawerPostId(null)} postId={pollDrawerPostId} />
     </>
   );
 }

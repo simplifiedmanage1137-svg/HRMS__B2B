@@ -273,6 +273,9 @@ export const API_ENDPOINTS = {
   POST_UPLOAD_IMAGE: ep('/api/posts/upload-image'),
   POST_FOLLOW:     (employeeId) => ep(`/api/posts/follow/${employeeId}`),
   POST_FOLLOWING:  ep('/api/posts/following'),
+  POST_VOTE:        (id) => ep(`/api/posts/${id}/vote`),
+  POST_POLL_VOTERS: (id) => ep(`/api/posts/${id}/poll-voters`),
+  POST_POLL_STATUS: (id) => ep(`/api/posts/${id}/poll-status`),
 
   // Deductions
   DEDUCTIONS:                ep('/api/deductions'),

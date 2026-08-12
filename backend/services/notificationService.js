@@ -218,6 +218,134 @@ class NotificationService {
             return [];
         }
     }
+
+    // Send support-ticket lifecycle notifications
+    // action: 'created' | 'comment_from_employee' | 'comment_from_team' |
+    //         'in_progress' | 'resolved' | 'reopened' | 'closed'
+    async sendTicketNotifications(ticket, action, { actorEmployeeId = null, actorName = 'Someone' } = {}) {
+        try {
+            const notifications = [];
+            const ticketRef = ticket.ticket_number || ticket.id;
+            const priorityLabel = (ticket.priority || 'medium').toUpperCase();
+
+            const getTeamRecipients = async () => {
+                const [{ data: deptEmps }, { data: overseers }] = await Promise.all([
+                    supabase.from('employees')
+                        .select('employee_id')
+                        .eq('department', ticket.department)
+                        .eq('is_active', true),
+                    supabase.from('employees')
+                        .select('employee_id')
+                        .in('role', ['admin', 'sub_admin', 'hr'])
+                        .eq('is_active', true),
+                ]);
+                const ids = new Set([
+                    ...(deptEmps || []).map(e => e.employee_id),
+                    ...(overseers || []).map(e => e.employee_id),
+                ]);
+                if (actorEmployeeId) ids.delete(actorEmployeeId);
+                return [...ids];
+            };
+
+            if (action === 'created') {
+                // Team/department-wide visibility notification (everyone in the department +
+                // admin/sub_admin/hr) — separate from, not a substitute for, the specific
+                // assignee notification below. A team member who isn't the assignee still just
+                // gets "New Ticket", never "assigned to you".
+                const recipients = await getTeamRecipients();
+                recipients.forEach(id => notifications.push({
+                    employee_id: id,
+                    title: `New Ticket: ${ticket.department}`,
+                    message: `${actorName} raised "${ticket.subject}" (${ticketRef}) — Priority: ${priorityLabel}`,
+                    type: 'ticket_created',
+                    reference_id: ticket.id,
+                    metadata: { ticket_id: ticket.id, ticket_number: ticket.ticket_number, department: ticket.department, priority: ticket.priority },
+                }));
+                // Distinct "assigned to you" notification for the specifically @mentioned
+                // person, if one was selected — this is what actually tells them the ticket
+                // is theirs to work, as opposed to just being visible to the whole team.
+                if (ticket.assigned_to && ticket.assigned_to !== actorEmployeeId) {
+                    notifications.push({
+                        employee_id: ticket.assigned_to,
+                        title: 'Ticket Assigned To You',
+                        message: `${actorName} assigned "${ticket.subject}" (${ticketRef}) to you — Priority: ${priorityLabel}`,
+                        type: 'ticket_assigned',
+                        reference_id: ticket.id,
+                        metadata: { ticket_id: ticket.id, ticket_number: ticket.ticket_number, department: ticket.department, priority: ticket.priority },
+                    });
+                }
+            } else if (action === 'comment_from_employee') {
+                const recipients = await getTeamRecipients();
+                recipients.forEach(id => notifications.push({
+                    employee_id: id,
+                    title: 'New Reply on Ticket',
+                    message: `${actorName} replied to "${ticket.subject}" (${ticketRef})`,
+                    type: 'ticket_comment',
+                    reference_id: ticket.id,
+                    metadata: { ticket_id: ticket.id, ticket_number: ticket.ticket_number, department: ticket.department },
+                }));
+            } else if (action === 'comment_from_team') {
+                if (ticket.raised_by && ticket.raised_by !== actorEmployeeId) {
+                    notifications.push({
+                        employee_id: ticket.raised_by,
+                        title: 'New Reply on Your Ticket',
+                        message: `${actorName} replied to "${ticket.subject}" (${ticketRef})`,
+                        type: 'ticket_comment',
+                        reference_id: ticket.id,
+                        metadata: { ticket_id: ticket.id, ticket_number: ticket.ticket_number },
+                    });
+                }
+            } else if (action === 'in_progress') {
+                if (ticket.raised_by && ticket.raised_by !== actorEmployeeId) {
+                    notifications.push({
+                        employee_id: ticket.raised_by,
+                        title: 'Ticket In Progress',
+                        message: `Your ticket "${ticket.subject}" (${ticketRef}) is now being processed.`,
+                        type: 'ticket_status',
+                        reference_id: ticket.id,
+                        metadata: { ticket_id: ticket.id, ticket_number: ticket.ticket_number, status: 'in_progress' },
+                    });
+                }
+            } else if (action === 'resolved') {
+                if (ticket.raised_by && ticket.raised_by !== actorEmployeeId) {
+                    notifications.push({
+                        employee_id: ticket.raised_by,
+                        title: 'Ticket Resolved — Please Confirm',
+                        message: `Your ticket "${ticket.subject}" (${ticketRef}) has been marked resolved. Please confirm or reopen it.`,
+                        type: 'ticket_status',
+                        reference_id: ticket.id,
+                        metadata: { ticket_id: ticket.id, ticket_number: ticket.ticket_number, status: 'resolved_pending' },
+                    });
+                }
+            } else if (action === 'reopened') {
+                const recipients = await getTeamRecipients();
+                recipients.forEach(id => notifications.push({
+                    employee_id: id,
+                    title: 'Ticket Reopened',
+                    message: `${actorName} reopened "${ticket.subject}" (${ticketRef}).`,
+                    type: 'ticket_status',
+                    reference_id: ticket.id,
+                    metadata: { ticket_id: ticket.id, ticket_number: ticket.ticket_number, status: 'reopened', department: ticket.department },
+                }));
+            } else if (action === 'closed') {
+                if (ticket.assigned_to && ticket.assigned_to !== actorEmployeeId) {
+                    notifications.push({
+                        employee_id: ticket.assigned_to,
+                        title: 'Ticket Closed',
+                        message: `"${ticket.subject}" (${ticketRef}) was confirmed resolved and closed by ${actorName}.`,
+                        type: 'ticket_status',
+                        reference_id: ticket.id,
+                        metadata: { ticket_id: ticket.id, ticket_number: ticket.ticket_number, status: 'closed' },
+                    });
+                }
+            }
+
+            return await this.createBulkNotifications(notifications);
+        } catch (error) {
+            console.error('❌ Error sending ticket notifications:', error);
+            return [];
+        }
+    }
 }
 
 module.exports = new NotificationService();

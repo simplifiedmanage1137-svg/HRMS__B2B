@@ -72,6 +72,7 @@ import AdminRatings from './AdminRatings';
 import BreakWidget from '../Common/BreakWidget';
 import TicketBadge from '../Common/TicketBadge';
 import DashboardQuickAccess from '../Common/DashboardQuickAccess';
+import TicketSummaryWidget from '../Common/TicketSummaryWidget';
 import WelcomeBanner from '../Common/WelcomeBanner';
 import TeamBreakDashboard from '../Common/TeamBreakDashboard';
 import RegularizationPanel from '../Common/RegularizationPanel';
@@ -955,6 +956,8 @@ const AdminDashboard = () => {
         readOnly={!['admin', 'sub_admin', 'hr'].includes(user?.role)}
         unlimitedBreaks={(user?.department || '').trim().toLowerCase() === 'sales'}
       />
+
+      <TicketSummaryWidget />
 
       {/* Tab Navigation */}
       <div className="mb-4 admin-dash-tabnav">

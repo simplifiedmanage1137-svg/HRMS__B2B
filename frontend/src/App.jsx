@@ -430,6 +430,13 @@ function AppContent() {
                 <TicketList />
               </PrivateRoute>
             } />
+            {/* Deep link to a specific ticket (e.g. from a notification) — same component,
+                TicketList reads the :id param and opens that ticket's detail modal. */}
+            <Route path="/tickets/:id" element={
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'employee', 'hr']}>
+                <TicketList />
+              </PrivateRoute>
+            } />
 
             {/* Redirect for any unknown routes */}
             <Route path="*" element={<Navigate to="/" replace />} />

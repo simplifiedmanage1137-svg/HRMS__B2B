@@ -5,7 +5,7 @@
 // "Validate Payroll" pass that surfaces missing config as warnings before anyone generates.
 import React, { useState, useRef, useMemo } from 'react';
 import { Spinner } from 'react-bootstrap';
-import { FaSave, FaCheckCircle, FaExclamationCircle, FaExclamationTriangle, FaSearch } from 'react-icons/fa';
+import { FaSave, FaCheckCircle, FaExclamationCircle, FaExclamationTriangle, FaSearch, FaUserSlash } from 'react-icons/fa';
 import axios from '../../../config/axios';
 import API_ENDPOINTS from '../../../config/api';
 import { useNotification } from '../../../context/NotificationContext';
@@ -35,6 +35,26 @@ const DiffBadge = ({ value }) => {
   return <span style={{ fontWeight: 700, fontSize: 11, color: n > 0 ? '#16a34a' : '#dc2626' }}>{n > 0 ? '+' : ''}{fmt(n)}</span>;
 };
 
+// Instant single-employee exclude/include — a quicker alternative to the checkbox+bulk-button
+// flow when you only need to flip one person at a time.
+const ToggleSwitch = ({ checked, onChange, busy }) => (
+  <button
+    onClick={onChange}
+    disabled={busy}
+    title={checked ? 'Excluded from payroll — click to re-include' : 'Click to exclude from payroll'}
+    style={{
+      width: 38, height: 20, borderRadius: 999, border: 'none', position: 'relative', flexShrink: 0,
+      background: checked ? '#dc2626' : '#cbd5e1', cursor: busy ? 'not-allowed' : 'pointer',
+      transition: 'background 0.18s ease', padding: 0, opacity: busy ? 0.6 : 1,
+    }}
+  >
+    <span style={{
+      position: 'absolute', top: 2, left: checked ? 20 : 2, width: 16, height: 16, borderRadius: '50%',
+      background: '#fff', transition: 'left 0.18s ease', boxShadow: '0 1px 2px rgba(0,0,0,0.35)',
+    }} />
+  </button>
+);
+
 const PayrollPreviewTab = ({ month, year, cycleLabel, records, refetch }) => {
   const { showNotification } = useNotification();
   const [edits, setEdits] = useState({});
@@ -44,6 +64,12 @@ const PayrollPreviewTab = ({ month, year, cycleLabel, records, refetch }) => {
   const [warningsOpen, setWarningsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const debounceRef = useRef({});
+
+  // Multi-select bulk exclude — reuses the same exclude_from_payroll flag/endpoint the
+  // Excluded Employees tab already uses one-at-a-time (see ExcludedEmployeesTab.jsx).
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkExcluding, setBulkExcluding] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
 
   const visibleRecords = records
     .filter(r => !search.trim() ||
@@ -97,6 +123,61 @@ const PayrollPreviewTab = ({ month, year, cycleLabel, records, refetch }) => {
     }
     showNotification(`Saved ${dirtyIds.length} record(s) successfully`, 'success');
     refetch();
+  };
+
+  // Only not-yet-excluded rows are selectable — bulk action here is one-directional
+  // (exclude), matching what was asked; un-excluding stays a one-at-a-time action in the
+  // Excluded Employees tab.
+  const selectableRecords = visibleRecords.filter(r => !r.exclude_from_payroll);
+  const allSelected = selectableRecords.length > 0 && selectableRecords.every(r => selectedIds.has(r.employee_id));
+
+  const toggleSelect = (employeeId) => setSelectedIds(prev => {
+    const next = new Set(prev);
+    next.has(employeeId) ? next.delete(employeeId) : next.add(employeeId);
+    return next;
+  });
+
+  const toggleSelectAll = () => setSelectedIds(prev => {
+    const next = new Set(prev);
+    if (allSelected) selectableRecords.forEach(r => next.delete(r.employee_id));
+    else selectableRecords.forEach(r => next.add(r.employee_id));
+    return next;
+  });
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleBulkExclude = async () => {
+    const targets = records.filter(r => selectedIds.has(r.employee_id));
+    if (targets.length === 0) return;
+    if (!window.confirm(`Exclude ${targets.length} employee(s) from payroll? They will no longer appear in the payroll Excel export.`)) return;
+    setBulkExcluding(true);
+    try {
+      const results = await Promise.allSettled(
+        targets.map(rec => axios.put(API_ENDPOINTS.EMPLOYEE_BY_ID(rec.id), { exclude_from_payroll: true }))
+      );
+      const ok = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.length - ok;
+      showNotification(`${ok} employee(s) excluded from payroll${failed ? `, ${failed} failed` : ''}.`, failed ? 'warning' : 'success');
+      clearSelection();
+      refetch();
+    } finally {
+      setBulkExcluding(false);
+    }
+  };
+
+  const handleToggleExclude = async (rec) => {
+    const nextValue = !rec.exclude_from_payroll;
+    setTogglingId(rec.employee_id);
+    try {
+      await axios.put(API_ENDPOINTS.EMPLOYEE_BY_ID(rec.id), { exclude_from_payroll: nextValue });
+      showNotification(`${rec.first_name} ${rec.last_name} ${nextValue ? 'excluded from' : 're-included in'} payroll`, 'success');
+      setSelectedIds(prev => { const n = new Set(prev); n.delete(rec.employee_id); return n; });
+      refetch();
+    } catch (err) {
+      showNotification(err.response?.data?.message || 'Failed to update exclusion', 'danger');
+    } finally {
+      setTogglingId(null);
+    }
   };
 
   // ── Validate Payroll ─────────────────────────────────────────────────────────
@@ -157,6 +238,27 @@ const PayrollPreviewTab = ({ month, year, cycleLabel, records, refetch }) => {
             style={{ width: '100%', padding: '9px 12px 9px 30px', fontSize: 12, borderRadius: 10, border: '1px solid #e2e8f0', outline: 'none', background: '#fff' }}
           />
         </div>
+        <div className="d-flex align-items-center gap-2">
+          {selectedIds.size > 0 && (
+            <button onClick={clearSelection} style={{ padding: '7px 12px', fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', color: '#475569', fontWeight: 600, cursor: 'pointer' }}>
+              Clear ({selectedIds.size})
+            </button>
+          )}
+          <button
+            onClick={handleBulkExclude}
+            disabled={bulkExcluding || selectedIds.size === 0}
+            title={selectedIds.size === 0 ? 'Check employees in the table below to exclude them from payroll' : undefined}
+            style={{
+              padding: '7px 14px', fontSize: 12, borderRadius: 8, border: 'none', fontWeight: 700,
+              background: selectedIds.size > 0 ? '#dc2626' : '#e2e8f0', color: selectedIds.size > 0 ? '#fff' : '#94a3b8',
+              cursor: (bulkExcluding || selectedIds.size === 0) ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', gap: 6, opacity: bulkExcluding ? 0.7 : 1,
+            }}
+          >
+            {bulkExcluding ? <Spinner animation="border" size="sm" style={{ width: 11, height: 11 }} /> : <FaUserSlash size={11} />}
+            {bulkExcluding ? 'Excluding…' : `Exclude Selected${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
+          </button>
+        </div>
         <button
           onClick={handleSaveAll}
           disabled={dirtyCount === 0}
@@ -179,7 +281,17 @@ const PayrollPreviewTab = ({ month, year, cycleLabel, records, refetch }) => {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ background: '#1e3a5f', color: '#fff' }}>
-                  {['Employee', 'Code', 'Salary', 'Present', 'Absent', 'Half Day', 'Salary Earned', 'Shift Hrs', 'PF', 'PT', 'Prof. Tax', 'Difference', 'Deduction', 'Final Payable', 'Status', 'Action'].map(h => (
+                  <th style={{ padding: '11px 10px', width: 30 }}>
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      disabled={selectableRecords.length === 0}
+                      onChange={toggleSelectAll}
+                      title="Select all (excludable) employees on this page"
+                      style={{ cursor: selectableRecords.length ? 'pointer' : 'not-allowed' }}
+                    />
+                  </th>
+                  {['Exclude', 'Employee', 'Code', 'Salary', 'Present', 'Absent', 'Half Day', 'Salary Earned', 'Shift Hrs', 'PF', 'PT', 'Prof. Tax', 'Difference', 'Deduction', 'Final Payable', 'Status', 'Action'].map(h => (
                     <th key={h} style={{ padding: '11px 10px', fontWeight: 600, textAlign: 'left', fontSize: 11, letterSpacing: 0.3, whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
@@ -193,7 +305,24 @@ const PayrollPreviewTab = ({ month, year, cycleLabel, records, refetch }) => {
                   const earnedNum = row.salaryEarned === '' ? rec.monthly_salary : Number(row.salaryEarned);
                   const isInvalid = isNaN(earnedNum) || earnedNum < 0;
                   return (
-                    <tr key={rec.employee_id} style={{ borderBottom: '1px solid #f1f5f9', background: rec.exclude_from_payroll ? '#f8fafc' : isDirty ? '#fffbeb' : idx % 2 === 0 ? '#fff' : '#fafafa', opacity: rec.exclude_from_payroll ? 0.55 : 1 }}>
+                    <tr key={rec.employee_id} style={{ borderBottom: '1px solid #f1f5f9', background: selectedIds.has(rec.employee_id) ? '#fef2f2' : rec.exclude_from_payroll ? '#f8fafc' : isDirty ? '#fffbeb' : idx % 2 === 0 ? '#fff' : '#fafafa', opacity: rec.exclude_from_payroll ? 0.55 : 1 }}>
+                      <td style={{ padding: '10px 10px' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(rec.employee_id)}
+                          disabled={rec.exclude_from_payroll}
+                          onChange={() => toggleSelect(rec.employee_id)}
+                          title={rec.exclude_from_payroll ? 'Already excluded from payroll' : 'Select for bulk exclude'}
+                          style={{ cursor: rec.exclude_from_payroll ? 'not-allowed' : 'pointer' }}
+                        />
+                      </td>
+                      <td style={{ padding: '10px 10px' }}>
+                        <ToggleSwitch
+                          checked={!!rec.exclude_from_payroll}
+                          busy={togglingId === rec.employee_id}
+                          onChange={() => handleToggleExclude(rec)}
+                        />
+                      </td>
                       <td style={{ padding: '10px 10px', fontWeight: 600, color: '#1e293b' }}>
                         {rec.first_name} {rec.last_name}
                         {rec.exclude_from_payroll && <div style={{ fontSize: 9, color: '#dc2626', fontWeight: 700 }}>EXCLUDED</div>}

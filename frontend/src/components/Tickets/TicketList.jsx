@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Modal, Spinner } from 'react-bootstrap';
+import { Modal, Spinner, Offcanvas } from 'react-bootstrap';
+import { useParams } from 'react-router-dom';
 import {
   FaPlus, FaSearch, FaFileAlt, FaClock, FaHourglassHalf, FaSyncAlt, FaCheckCircle,
-  FaCalendarAlt, FaEllipsisV, FaCopy, FaCheck, FaChevronLeft, FaChevronRight, FaTicketAlt,
+  FaCalendarAlt, FaEllipsisV, FaCopy, FaCheck, FaChevronLeft, FaChevronRight, FaTicketAlt, FaLock,
+  FaComment, FaExchangeAlt, FaLockOpen, FaTimes, FaExclamationTriangle, FaPaperPlane,
+  FaBuilding, FaEnvelope, FaUser, FaUserCheck, FaLink,
 } from 'react-icons/fa';
 import { useAuth } from '../../context/AuthContext';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
+import { getTicketAge } from '../../utils/ticketAge';
 
 // ─── Page design tokens ───────────────────────────────────────────────────────
 const TK = {
@@ -130,25 +134,59 @@ const StatusBadge = ({ status }) => {
   );
 };
 
+// ─── AgeBadge ────────────────────────────────────────────────────────────────
+// Always shows the actual duration as text (not just a color), per design intent.
+const AgeBadge = ({ ticket, compact = false }) => {
+  const age = getTicketAge(ticket);
+  return (
+    <span
+      title={age.label}
+      style={{
+        fontSize: 11, fontWeight: 700, borderRadius: 99,
+        padding: compact ? '2px 8px' : '3px 10px',
+        background: age.bg, color: age.color, whiteSpace: 'nowrap',
+      }}
+    >
+      {compact ? age.shortLabel : age.label}
+    </span>
+  );
+};
+
 // ─── TicketForm (modal) ───────────────────────────────────────────────────────
 
-function TicketForm({ show, onHide, onCreated, userEmail, userName }) {
+function TicketForm({ show, onHide, onCreated, userEmail, userName, userEmployeeId }) {
   const [dept,        setDept]        = useState('');
   const [issueType,   setIssueType]   = useState('');
   const [subject,     setSubject]     = useState('');
   const [description, setDescription] = useState('');
   const [priority,    setPriority]    = useState('medium');
   const [tagInput,    setTagInput]    = useState('');
+  // "Assign To" is a single specific person — NOT the department TL by default. Kept as a
+  // 1-item array (instead of a lone object) purely so the existing tagged_employees payload
+  // shape/backward-compat stays intact; addTag replaces rather than appends.
   const [taggedEmps,  setTaggedEmps]  = useState([]);
   const [deptEmps,    setDeptEmps]    = useState([]);
   const [showTagDD,   setShowTagDD]   = useState(false);
+  const [allEmployees, setAllEmployees] = useState([]);
+  const [raisedFor,   setRaisedFor]   = useState(null); // employee object; null = "myself"
+  const [raisedForInput, setRaisedForInput] = useState('');
+  const [showRaisedForDD, setShowRaisedForDD] = useState(false);
   const [attachment,  setAttachment]  = useState(null);
   const [attName,     setAttName]     = useState('');
   const [submitting,  setSubmitting]  = useState(false);
   const [error,       setError]       = useState('');
   const tagRef = useRef(null);
+  const raisedForRef = useRef(null);
 
-  // Load dept employees when dept changes
+  // Load the full employee directory once (for "Raised For" — can be anyone, any department)
+  useEffect(() => {
+    if (!show) return;
+    axios.get(API_ENDPOINTS.EMPLOYEES)
+      .then(r => setAllEmployees(Array.isArray(r.data) ? r.data : (r.data?.data || [])))
+      .catch(() => setAllEmployees([]));
+  }, [show]);
+
+  // Load dept employees when dept changes (still used to scope the "Assign To" @-search)
   useEffect(() => {
     if (!dept) { setDeptEmps([]); setTaggedEmps([]); return; }
     axios.get(API_ENDPOINTS.TICKET_DEPT_EMPLOYEES(dept))
@@ -158,9 +196,12 @@ function TicketForm({ show, onHide, onCreated, userEmail, userName }) {
     setTaggedEmps([]);
   }, [dept]);
 
-  // Close dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
-    const h = e => { if (tagRef.current && !tagRef.current.contains(e.target)) setShowTagDD(false); };
+    const h = e => {
+      if (tagRef.current && !tagRef.current.contains(e.target)) setShowTagDD(false);
+      if (raisedForRef.current && !raisedForRef.current.contains(e.target)) setShowRaisedForDD(false);
+    };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
@@ -171,10 +212,10 @@ function TicketForm({ show, onHide, onCreated, userEmail, userName }) {
     setShowTagDD(v.includes('@'));
   };
 
+  // Single-select: choosing a new person replaces whoever was previously selected — this
+  // is "Assign To", not a multi-person watch/CC list.
   const addTag = emp => {
-    if (!taggedEmps.find(t => t.employee_id === emp.employee_id)) {
-      setTaggedEmps(p => [...p, emp]);
-    }
+    setTaggedEmps([emp]);
     setTagInput('');
     setShowTagDD(false);
   };
@@ -192,13 +233,19 @@ function TicketForm({ show, onHide, onCreated, userEmail, userName }) {
 
   const tagSearch = tagInput.replace('@', '').toLowerCase();
   const filteredDeptEmps = deptEmps.filter(e =>
-    !taggedEmps.find(t => t.employee_id === e.employee_id) &&
     (`${e.first_name} ${e.last_name}`.toLowerCase().includes(tagSearch) || e.email?.toLowerCase().includes(tagSearch))
   );
+
+  const raisedForSearch = raisedForInput.toLowerCase();
+  const filteredRaisedForEmps = allEmployees.filter(e =>
+    e.employee_id !== userEmployeeId &&
+    (`${e.first_name} ${e.last_name}`.toLowerCase().includes(raisedForSearch) || e.email?.toLowerCase().includes(raisedForSearch))
+  ).slice(0, 8);
 
   const reset = () => {
     setDept(''); setIssueType(''); setSubject(''); setDescription('');
     setPriority('medium'); setTagInput(''); setTaggedEmps([]); setDeptEmps([]);
+    setRaisedFor(null); setRaisedForInput(''); setShowRaisedForDD(false);
     setAttachment(null); setAttName(''); setError('');
   };
 
@@ -217,6 +264,8 @@ function TicketForm({ show, onHide, onCreated, userEmail, userName }) {
         subject:           subject.trim(),
         description:       description.trim(),
         priority,
+        raised_for:        raisedFor?.employee_id || null, // null = raising it for myself
+        assigned_to:       taggedEmps[0]?.employee_id || null, // null = department team queue
         tagged_employees:  taggedEmps.map(e => ({ employee_id: e.employee_id, name: `${e.first_name} ${e.last_name}`, email: e.email })),
         attachment_url:    attachment || null,
         attachment_name:   attName || null,
@@ -248,6 +297,47 @@ function TicketForm({ show, onHide, onCreated, userEmail, userName }) {
           <div style={{ marginBottom: 16 }}>
             <label style={labelStyle}>Your Email <span style={{ color: '#9ca3af', fontWeight: 400 }}>(auto-filled)</span></label>
             <input value={userEmail} disabled style={{ ...inputStyle, background: '#f9fafb', color: '#6b7280', cursor: 'not-allowed' }} />
+          </div>
+
+          {/* Raised For — who the ticket is actually about (defaults to the raiser themselves) */}
+          <div style={{ marginBottom: 16 }} ref={raisedForRef}>
+            <label style={labelStyle}>Raise Ticket For <span style={{ color: '#9ca3af', fontWeight: 400 }}>(defaults to you)</span></label>
+            {raisedFor ? (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '7px 12px' }}>
+                <div style={{ width: 24, height: 24, borderRadius: '50%', background: avatarColor(`${raisedFor.first_name} ${raisedFor.last_name}`), color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {(raisedFor.first_name?.[0] || '?').toUpperCase()}
+                </div>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#1d4ed8' }}>{raisedFor.first_name} {raisedFor.last_name}</span>
+                <button type="button" onClick={() => setRaisedFor(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1d4ed8', padding: 0, lineHeight: 1, fontSize: 15 }}>×</button>
+              </div>
+            ) : (
+              <div style={{ position: 'relative' }}>
+                <input
+                  value={raisedForInput}
+                  onChange={e => { setRaisedForInput(e.target.value); setShowRaisedForDD(true); }}
+                  onFocus={() => setShowRaisedForDD(true)}
+                  placeholder="Search a colleague, or leave blank to raise it for yourself"
+                  style={inputStyle}
+                />
+                {showRaisedForDD && raisedForInput && filteredRaisedForEmps.length > 0 && (
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 100, maxHeight: 200, overflowY: 'auto' }}>
+                    {filteredRaisedForEmps.map(emp => (
+                      <div key={emp.employee_id} onMouseDown={() => { setRaisedFor(emp); setRaisedForInput(''); setShowRaisedForDD(false); }} style={{ padding: '9px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'}
+                        onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+                        <div style={{ width: 26, height: 26, borderRadius: '50%', background: avatarColor(`${emp.first_name} ${emp.last_name}`), color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {(emp.first_name?.[0] || '?').toUpperCase()}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 600, color: '#111827' }}>{emp.first_name} {emp.last_name}</div>
+                          <div style={{ fontSize: 11, color: '#9ca3af' }}>{emp.department || ''}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
@@ -298,44 +388,43 @@ function TicketForm({ show, onHide, onCreated, userEmail, userName }) {
             <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Describe your issue in detail..." rows={4} style={{ ...inputStyle, resize: 'vertical', minHeight: 100 }} required />
           </div>
 
-          {/* Tag Employees */}
+          {/* Assign To — the specific person who should handle this ticket (optional).
+              Leaving this empty sends the ticket to the department's team queue instead of
+              silently routing it to a manager/TL — that auto-routing was the bug being fixed. */}
           {dept && (
             <div style={{ marginBottom: 16 }} ref={tagRef}>
-              <label style={labelStyle}>Tag Employees <span style={{ color: '#9ca3af', fontWeight: 400 }}>(type @ to search {dept} team)</span></label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  value={tagInput}
-                  onChange={handleTagInput}
-                  onFocus={() => tagInput.includes('@') && setShowTagDD(true)}
-                  placeholder={`Type @ to tag ${dept} employees`}
-                  style={inputStyle}
-                />
-                {showTagDD && filteredDeptEmps.length > 0 && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 100, maxHeight: 180, overflowY: 'auto' }}>
-                    {filteredDeptEmps.map(emp => (
-                      <div key={emp.employee_id} onMouseDown={() => addTag(emp)} style={{ padding: '9px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}
-                        onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'}
-                        onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
-                        <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#6366f1', color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          {(emp.first_name?.[0] || '?').toUpperCase()}
+              <label style={labelStyle}>Assign To <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional — type @ to search the {dept} team, or leave blank for the {dept} team queue)</span></label>
+              {taggedEmps.length > 0 ? (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#ede9fe', color: '#6d28d9', borderRadius: 99, padding: '5px 12px 5px 8px', fontSize: 13, fontWeight: 600 }}>
+                  @{taggedEmps[0].first_name} {taggedEmps[0].last_name}
+                  <button type="button" onClick={() => removeTag(taggedEmps[0].employee_id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6d28d9', padding: 0, lineHeight: 1, fontSize: 15 }}>×</button>
+                </div>
+              ) : (
+                <div style={{ position: 'relative' }}>
+                  <input
+                    value={tagInput}
+                    onChange={handleTagInput}
+                    onFocus={() => tagInput.includes('@') && setShowTagDD(true)}
+                    placeholder={`Type @ to assign to a ${dept} team member`}
+                    style={inputStyle}
+                  />
+                  {showTagDD && filteredDeptEmps.length > 0 && (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 100, maxHeight: 180, overflowY: 'auto' }}>
+                      {filteredDeptEmps.map(emp => (
+                        <div key={emp.employee_id} onMouseDown={() => addTag(emp)} style={{ padding: '9px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'}
+                          onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+                          <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#6366f1', color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            {(emp.first_name?.[0] || '?').toUpperCase()}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 600, color: '#111827' }}>{emp.first_name} {emp.last_name}</div>
+                            <div style={{ fontSize: 11, color: '#9ca3af' }}>{emp.email}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div style={{ fontWeight: 600, color: '#111827' }}>{emp.first_name} {emp.last_name}</div>
-                          <div style={{ fontSize: 11, color: '#9ca3af' }}>{emp.email}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {taggedEmps.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                  {taggedEmps.map(emp => (
-                    <span key={emp.employee_id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#ede9fe', color: '#6d28d9', borderRadius: 99, padding: '3px 10px 3px 8px', fontSize: 12, fontWeight: 600 }}>
-                      @{emp.first_name} {emp.last_name}
-                      <button type="button" onClick={() => removeTag(emp.employee_id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6d28d9', padding: 0, lineHeight: 1, fontSize: 14 }}>×</button>
-                    </span>
-                  ))}
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -368,13 +457,125 @@ function TicketForm({ show, onHide, onCreated, userEmail, userName }) {
   );
 }
 
-// ─── TicketDetail (modal) ─────────────────────────────────────────────────────
+// ─── Ticket drawer — mobile/tablet/desktop widths, backdrop dimming+blur, slide timing.
+// Only this drawer is styled here (backdropClassName/className below are scoped to it),
+// so these rules can't leak onto any other Offcanvas in the app (none exist yet).
+const TICKET_DRAWER_CSS = `
+  .ticket-drawer.offcanvas.offcanvas-end {
+    width: 680px;
+    transition: transform 280ms ease-in-out;
+  }
+  @media (max-width: 1024px) and (min-width: 577px) {
+    .ticket-drawer.offcanvas.offcanvas-end { width: 85vw; }
+  }
+  @media (max-width: 576px) {
+    .ticket-drawer.offcanvas.offcanvas-end { width: 100vw; }
+  }
+  .ticket-drawer-backdrop.offcanvas-backdrop {
+    transition: opacity 280ms ease-in-out;
+  }
+  .ticket-drawer-backdrop.offcanvas-backdrop.show {
+    opacity: 0.18 !important;
+    backdrop-filter: blur(2px);
+  }
+  .ticket-drawer .offcanvas-body { padding: 0; overflow: hidden; }
+  .td-fade-in { animation: tdFadeIn 180ms ease; }
+  @keyframes tdFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .td-hover-lift { transition: transform 120ms ease, box-shadow 120ms ease; }
+  .td-hover-lift:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+`;
+
+const ACTION_HISTORY_META = {
+  created: { icon: FaTicketAlt, color: '#3b82f6' },
+  comment: { icon: FaComment, color: '#6366f1' },
+  status_changed: { icon: FaExchangeAlt, color: '#f59e0b' },
+  resolved: { icon: FaCheckCircle, color: '#8b5cf6' },
+  closed: { icon: FaLock, color: '#10b981' },
+  reopened: { icon: FaLockOpen, color: '#ef4444' },
+};
+
+const drawerBtnBase = { border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', padding: '10px 16px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'opacity 120ms ease, transform 120ms ease' };
+const DRAWER_BTN = {
+  primary: { ...drawerBtnBase, background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' },
+  success: { ...drawerBtnBase, background: '#10b981', color: '#fff' },
+  danger:  { ...drawerBtnBase, background: '#fff', color: '#dc2626', border: '1.5px solid #fecaca' },
+  ghost:   { ...drawerBtnBase, background: '#f3f4f6', color: '#374151' },
+};
+
+// Auto-growing textarea — no fixed row count, expands to fit content up to a max height.
+function AutoGrowTextarea({ value, onChange, style, minRows = 2, maxHeight = 160, ...rest }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
+  }, [value, maxHeight]);
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      rows={minRows}
+      style={{ ...inputStyle, resize: 'none', overflow: 'auto', maxHeight, ...style }}
+      {...rest}
+    />
+  );
+}
+
+// Compact "Copy Ticket Link" menu — the header's three-dot action menu.
+function DrawerKebabMenu({ ticket }) {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    if (open) document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+  const copyLink = () => {
+    navigator.clipboard?.writeText(`${window.location.origin}/tickets/${ticket.id}`);
+    setCopied(true);
+    setTimeout(() => { setCopied(false); setOpen(false); }, 900);
+  };
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        aria-label="More actions"
+        aria-haspopup="true"
+        aria-expanded={open}
+        style={{ background: 'rgba(255,255,255,0.12)', border: 'none', color: '#fff', width: 32, height: 32, borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      >
+        <FaEllipsisV size={13} />
+      </button>
+      {open && (
+        <div role="menu" style={{ position: 'absolute', top: 38, right: 0, background: '#fff', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', minWidth: 190, zIndex: 10, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
+          <button role="menuitem" onClick={copyLink} style={{ width: '100%', textAlign: 'left', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12.5, color: '#374151', display: 'flex', alignItems: 'center', gap: 9 }}>
+            <FaLink size={11} color={copied ? TK.success : '#6b7280'} /> {copied ? 'Link copied!' : 'Copy Ticket Link'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const QuickInfoCard = ({ icon: Icon, label, value, mono }) => (
+  <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 12, padding: '10px 12px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+      {Icon && <Icon size={10} color="#9ca3af" />}
+      <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
+    </div>
+    <div style={{ fontSize: 12.5, color: '#111827', fontWeight: 600, fontFamily: mono ? 'monospace' : undefined, wordBreak: 'break-word' }}>{value || '—'}</div>
+  </div>
+);
 
 function TicketDetail({ ticketId, show, onHide, onUpdated, userRole, userEmployeeId }) {
   const [ticket,      setTicket]      = useState(null);
   const [history,     setHistory]     = useState([]);
   const [loading,     setLoading]     = useState(false);
   const [comment,     setComment]     = useState('');
+  const [isInternalNote, setIsInternalNote] = useState(false);
   const [resolveNote, setResolveNote] = useState('');
   const [declineNote, setDeclineNote] = useState('');
   const [acting,      setActing]      = useState('');
@@ -412,18 +613,25 @@ function TicketDetail({ ticketId, show, onHide, onUpdated, userRole, userEmploye
 
   useEffect(() => { if (show && ticketId) fetch(); }, [show, ticketId, fetch]);
 
+  // Reset transient compose/action state whenever a different ticket is opened, so stale
+  // "unsaved comment" text from a previous ticket can't leak in or block closing this one.
+  useEffect(() => {
+    setComment(''); setIsInternalNote(false); setResolveNote(''); setDeclineNote('');
+    setShowResolve(false); setShowDecline(false);
+  }, [ticketId]);
+
   const act = async (type, payload = {}) => {
     setActing(type);
     try {
       const map = {
-        comment:     () => axios.post(API_ENDPOINTS.TICKET_COMMENT(ticketId), { message: comment }),
+        comment:     () => axios.post(API_ENDPOINTS.TICKET_COMMENT(ticketId), { message: comment, is_internal: isInternalNote }),
         inprogress:  () => axios.patch(API_ENDPOINTS.TICKET_IN_PROGRESS(ticketId)),
         resolve:     () => axios.patch(API_ENDPOINTS.TICKET_RESOLVE(ticketId), { resolve_note: resolveNote }),
         accept:      () => axios.patch(API_ENDPOINTS.TICKET_ACCEPT(ticketId)),
         decline:     () => axios.patch(API_ENDPOINTS.TICKET_DECLINE(ticketId), { reason: declineNote }),
       };
       await map[type]();
-      setComment(''); setResolveNote(''); setDeclineNote('');
+      setComment(''); setIsInternalNote(false); setResolveNote(''); setDeclineNote('');
       setShowResolve(false); setShowDecline(false);
       await fetch();
       onUpdated();
@@ -431,65 +639,110 @@ function TicketDetail({ ticketId, show, onHide, onUpdated, userRole, userEmploye
     finally { setActing(''); }
   };
 
-  const t = ticket;
-  const isRaiser   = t?.raised_by === userEmployeeId;
-  const canResolve  = ROLES_CAN_RESOLVE.includes(userRole);
-  const actionable  = t?.status !== 'closed';
-
-  const ACTION_HISTORY_LABELS = {
-    created: { icon: '🎫', color: '#3b82f6' },
-    comment: { icon: '💬', color: '#6366f1' },
-    status_changed: { icon: '🔄', color: '#f59e0b' },
-    resolved: { icon: '✅', color: '#8b5cf6' },
-    closed: { icon: '🔒', color: '#10b981' },
-    reopened: { icon: '🔓', color: '#ef4444' },
+  const requestClose = () => {
+    if (comment.trim() && !window.confirm('You have an unsaved comment. Close without posting it?')) return;
+    onHide();
   };
 
+  const t = ticket;
+  const isRaiser   = t?.raised_by === userEmployeeId;
+  const canResolve = ROLES_CAN_RESOLVE.includes(userRole);
+  const actionable = t?.status !== 'closed';
+  const age        = t ? getTicketAge(t) : null;
+  const slaMeta     = age && ({
+    green:  { label: 'Within SLA',      color: '#10b981', bg: '#ecfdf5', icon: FaCheckCircle },
+    amber:  { label: 'Within SLA',      color: '#10b981', bg: '#ecfdf5', icon: FaCheckCircle },
+    orange: { label: 'Approaching SLA', color: '#f97316', bg: '#fff7ed', icon: FaExclamationTriangle },
+    red:    { label: 'SLA Overdue',     color: '#ef4444', bg: '#fef2f2', icon: FaExclamationTriangle },
+  }[age.colorKey]);
+
+  // Comments are chat-style and split out from the system-event timeline — same underlying
+  // ticket_history rows, just presented in the two sections the redesign calls for.
+  const timelineEvents = history.filter(h => h.action !== 'comment');
+  const comments       = history.filter(h => h.action === 'comment');
+
+  const showTeamActions   = canResolve && actionable && t?.status !== 'resolved_pending' && t?.status !== 'closed';
+  const showRaiserConfirm = isRaiser && t?.status === 'resolved_pending';
+
   return (
-    <Modal show={show} onHide={onHide} size="lg" centered>
-      <Modal.Header closeButton style={{ background: '#1e2a3e', border: 'none' }}>
-        <Modal.Title style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>
-          {t ? `#${t.ticket_number} — ${t.subject}` : 'Ticket Detail'}
-        </Modal.Title>
-      </Modal.Header>
-      <Modal.Body style={{ padding: 0 }}>
+    <>
+      <style>{TICKET_DRAWER_CSS}</style>
+      <Offcanvas
+        show={show}
+        onHide={requestClose}
+        placement="end"
+        className="ticket-drawer"
+        backdropClassName="ticket-drawer-backdrop"
+        aria-label={t ? `Ticket ${t.ticket_number} details` : 'Ticket details'}
+      >
         {loading && !t ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner animation="border" size="sm" /></div>
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <div style={{ background: '#1e2a3e', padding: '20px 24px', flexShrink: 0 }}>
+              <div style={{ width: '60%', height: 16, background: 'rgba(255,255,255,0.15)', borderRadius: 6 }} />
+            </div>
+            <div style={{ flex: 1, padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {[80, 100, 60, 90, 70].map((w, i) => (
+                <div key={i} style={{ width: `${w}%`, height: 14, background: '#f1f5f9', borderRadius: 6 }} />
+              ))}
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 20 }}><Spinner animation="border" size="sm" /></div>
+            </div>
+          </div>
         ) : t ? (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px' }}>
-            {/* LEFT — main */}
-            <div style={{ padding: '20px 24px', borderRight: '1px solid #f3f4f6', maxHeight: '80vh', overflowY: 'auto' }}>
-              {/* Status row */}
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
-                <StatusBadge status={t.status} />
-                <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 99, padding: '3px 10px', background: DEPT_META[t.department]?.color + '20', color: DEPT_META[t.department]?.color }}>
-                  {DEPT_META[t.department]?.icon} {t.department}
-                </span>
-                <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 99, padding: '3px 10px', background: PRIORITY_META[t.priority]?.color + '20', color: PRIORITY_META[t.priority]?.color }}>
-                  {PRIORITY_META[t.priority]?.label} Priority
-                </span>
-              </div>
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
-              <div style={{ fontSize: 13, color: '#374151', marginBottom: 14, lineHeight: 1.6 }}>
-                <strong style={{ color: '#111827' }}>Issue:</strong> {t.issue_type}
-              </div>
-
-              <div style={{ background: '#f8fafc', borderRadius: 14, padding: '16px 18px', marginBottom: 16, border: '1px solid #e2e8f0', boxShadow: '0 8px 24px rgba(15, 23, 42, 0.04)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Request Summary</div>
-                    <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.7 }}>{t.description.split('\n')[0] || t.description}</div>
+            {/* ── Sticky header ── */}
+            <div style={{ flexShrink: 0, background: '#1e2a3e', color: '#fff' }}>
+              <div style={{ padding: '16px 22px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', minWidth: 0 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 9, background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <FaFileAlt size={14} />
                   </div>
-                  {employeeDetails?.employeeName && (
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{employeeDetails.employeeName}</div>
-                      {employeeDetails.employeeNumber && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{employeeDetails.employeeNumber}</div>}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 700 }}>Ticket #{t.ticket_number}</span>
+                      <StatusBadge status={t.status} />
                     </div>
-                  )}
+                    <div style={{ fontSize: 11.5, opacity: 0.7, marginTop: 3 }}>
+                      Created {fmtDate(t.created_at)} • {age.shortLabel} ago
+                    </div>
+                  </div>
                 </div>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <DrawerKebabMenu ticket={t} />
+                  <button
+                    onClick={requestClose}
+                    aria-label="Close ticket details"
+                    style={{ background: 'rgba(255,255,255,0.12)', border: 'none', color: '#fff', width: 32, height: 32, borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <FaTimes size={14} />
+                  </button>
+                </div>
+              </div>
+              <div style={{ background: '#fff', padding: '14px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', wordBreak: 'break-word' }}>{t.subject}</div>
+                  <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>Issue Category: {t.issue_type}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 99, padding: '4px 11px', background: PRIORITY_META[t.priority]?.color + '18', color: PRIORITY_META[t.priority]?.color, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: PRIORITY_META[t.priority]?.color }} />
+                    {PRIORITY_META[t.priority]?.label} Priority
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 99, padding: '4px 11px', background: DEPT_META[t.department]?.color + '18', color: DEPT_META[t.department]?.color }}>
+                    {DEPT_META[t.department]?.icon} {t.department} Team
+                  </span>
+                </div>
+              </div>
+            </div>
 
+            {/* ── Scrollable body ── */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px', background: '#f8fafc' }}>
+
+              {/* Ticket Summary Card */}
+              <div className="td-fade-in" style={{ background: '#fff', borderRadius: 16, padding: '16px 18px', marginBottom: 16, border: '1px solid #eef0f3', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Request Summary</div>
                 {employeeDetails ? (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) 240px', gap: 18, alignItems: 'start' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) 220px', gap: 18, alignItems: 'start' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px 14px' }}>
                       {[
                         ['Employee Name', employeeDetails.employeeName],
@@ -503,166 +756,280 @@ function TicketDetail({ ticketId, show, onHide, onUpdated, userRole, userEmploye
                         ['Emergency Contact', employeeDetails.emergencyContact],
                         ['Employee Address', employeeDetails.address],
                       ].map(([label, value]) => (
-                        <div key={label} style={{ background: '#fff', border: '1px solid #f3f4f6', borderRadius: 10, padding: '10px 12px' }}>
+                        <div key={label} style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: 10, padding: '10px 12px' }}>
                           <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: 3 }}>{label}</div>
                           <div style={{ fontSize: 12, color: '#111827', fontWeight: 600, lineHeight: 1.4 }}>{value || '—'}</div>
                         </div>
                       ))}
                     </div>
-
-                    <div style={{ padding: '12px', border: '1px solid #e5e7eb', borderRadius: 12, background: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div style={{ padding: 12, border: '1px solid #f1f5f9', borderRadius: 12, background: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                       {employeePhoto ? (
-                        <img src={employeePhoto} alt={employeeDetails.employeeName || 'Employee profile'} style={{ width: '100%', height: 180, objectFit: 'cover', borderRadius: 10, border: '1px solid #e5e7eb' }} />
+                        <img src={employeePhoto} alt={employeeDetails.employeeName || 'Employee profile'} style={{ width: '100%', height: 160, objectFit: 'cover', borderRadius: 10, border: '1px solid #e5e7eb' }} />
                       ) : (
-                        <div style={{ width: '100%', height: 180, borderRadius: 10, background: 'linear-gradient(135deg, #eef2ff 0%, #f9fafb 100%)', border: '1px dashed #d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 12, textAlign: 'center', padding: 12 }}>
+                        <div style={{ width: '100%', height: 160, borderRadius: 10, background: 'linear-gradient(135deg, #eef2ff 0%, #f9fafb 100%)', border: '1px dashed #d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 11.5, textAlign: 'center', padding: 12 }}>
                           No profile photo uploaded yet
                         </div>
                       )}
-                      <div style={{ fontSize: 12, fontWeight: 700, color: '#111827', marginTop: 10, textAlign: 'center' }}>{employeeDetails.employeeName || 'Employee Profile'}</div>
-                      {employeeDetails.employeeNumber && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{employeeDetails.employeeNumber}</div>}
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#111827', marginTop: 9, textAlign: 'center' }}>{employeeDetails.employeeName || 'Employee Profile'}</div>
                       {employeePhoto && (
-                        <a href={employeePhoto} target="_blank" rel="noreferrer" style={{ marginTop: 10, fontSize: 11, fontWeight: 700, color: '#4f46e5', textDecoration: 'none' }}>
+                        <a href={employeePhoto} target="_blank" rel="noreferrer" style={{ marginTop: 8, fontSize: 11, fontWeight: 700, color: '#4f46e5', textDecoration: 'none' }}>
                           ⬇ Download photo
                         </a>
                       )}
                     </div>
                   </div>
                 ) : (
-                  <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{t.description}</div>
+                  <div style={{ fontSize: 13.5, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{t.description}</div>
+                )}
+                {t.attachment_url && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
+                    <a href={t.attachment_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#6366f1', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                      📎 {t.attachment_name || 'View Attachment'}
+                    </a>
+                  </div>
                 )}
               </div>
 
-              {t.attachment_url && (
-                <div style={{ marginBottom: 16 }}>
-                  <a href={t.attachment_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#6366f1', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                    📎 {t.attachment_name || 'View Attachment'}
-                  </a>
-                </div>
-              )}
-
-              {/* Resolve confirmation banner */}
-              {t.status === 'resolved_pending' && isRaiser && (
-                <div style={{ background: '#ede9fe', borderRadius: 12, padding: '14px 16px', marginBottom: 16, border: '1.5px solid #c4b5fd' }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: '#5b21b6', marginBottom: 4 }}>✅ Your issue has been resolved</div>
-                  {t.resolve_note && <div style={{ fontSize: 13, color: '#6d28d9', marginBottom: 12 }}>{t.resolve_note}</div>}
-                  <div style={{ fontSize: 13, color: '#7c3aed', marginBottom: 12 }}>Is your issue resolved? Please confirm.</div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => act('accept')} disabled={!!acting} style={{ padding: '8px 20px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                      {acting === 'accept' ? 'Processing…' : '✓ Yes, Close Ticket'}
-                    </button>
-                    <button onClick={() => setShowDecline(true)} disabled={!!acting} style={{ padding: '8px 20px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                      ✕ Not Resolved
-                    </button>
-                  </div>
-                  {showDecline && (
-                    <div style={{ marginTop: 12 }}>
-                      <textarea value={declineNote} onChange={e => setDeclineNote(e.target.value)} placeholder="Why is it not resolved? (optional)" rows={2} style={{ ...inputStyle, fontSize: 12 }} />
-                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                        <button onClick={() => act('decline')} disabled={!!acting} style={{ padding: '6px 16px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                          {acting === 'decline' ? 'Sending…' : 'Confirm Decline'}
-                        </button>
-                        <button onClick={() => setShowDecline(false)} style={{ padding: '6px 16px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>Cancel</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* History / Timeline */}
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 10 }}>Activity Timeline</div>
-                {history.length === 0 ? (
-                  <div style={{ fontSize: 12, color: '#9ca3af' }}>No activity yet</div>
-                ) : history.map(h => {
-                  const meta = ACTION_HISTORY_LABELS[h.action] || { icon: '•', color: '#9ca3af' };
-                  return (
-                    <div key={h.id} style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: meta.color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0 }}>
-                        {meta.icon}
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.5 }}>
-                          <span style={{ fontWeight: 600, color: '#111827' }}>{h.performed_by_name || 'System'}</span>
-                          {h.new_status && <span> → <StatusBadge status={h.new_status} /></span>}
-                        </div>
-                        {h.message && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2, background: '#f9fafb', borderRadius: 6, padding: '5px 8px' }}>{h.message}</div>}
-                        <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 3 }}>{fmtDate(h.created_at)}</div>
-                      </div>
-                    </div>
-                  );
-                })}
+              {/* Quick Info — compact two-column cards. Raised By / Raised For / Assigned To are
+                  kept as three visually distinct fields per the routing fix — never merged, since
+                  they can be three different people (creator, subject, and handler). Older tickets
+                  created before the raised_for column existed fall back to showing the raiser. */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+                <QuickInfoCard icon={FaUser} label="Raised By" value={t.raised_by_name} />
+                <QuickInfoCard icon={FaUserCheck} label="Raised For" value={t.raised_for_name || t.raised_by_name} />
+                <QuickInfoCard icon={FaUserCheck} label="Assigned To" value={t.assigned_to_name || `${t.department} Team Queue`} />
+                <QuickInfoCard icon={FaBuilding} label="Department" value={t.department} />
+                <QuickInfoCard icon={FaEnvelope} label="Email" value={t.raised_by_email} />
+                <QuickInfoCard icon={FaCalendarAlt} label="Created" value={fmtDate(t.created_at)} />
+                <QuickInfoCard icon={FaClock} label="Last Updated" value={fmtDate(t.updated_at)} />
               </div>
 
-              {/* Comment box */}
-              {actionable && (
-                <div>
-                  <textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Add a comment…" rows={2} style={{ ...inputStyle, fontSize: 12, marginBottom: 6 }} />
-                  <button onClick={() => comment.trim() && act('comment')} disabled={!comment.trim() || !!acting} style={{ ...submitBtnStyle, fontSize: 12, padding: '7px 16px' }}>
-                    {acting === 'comment' ? 'Posting…' : 'Post Comment'}
+              {t.tagged_employees?.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: 6 }}>Tagged</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {t.tagged_employees.map((e, i) => (
+                      <span key={i} style={{ fontSize: 12, color: '#374151', background: '#fff', border: '1px solid #eef0f3', borderRadius: 99, padding: '3px 10px' }}>@{e.name}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Status & SLA Card */}
+              <div style={{ background: '#fff', borderRadius: 16, padding: '14px 18px', marginBottom: 16, border: '1px solid #eef0f3', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>Time & SLA</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: 4 }}>
+                      {t.status === 'closed' ? 'Resolution Time' : 'Time Pending'}
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: slaMeta.color }}>{age.shortLabel}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: 4 }}>SLA Status</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: slaMeta.color, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <slaMeta.icon size={12} /> {slaMeta.label}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: 4 }}>SLA Response Due</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#9ca3af' }}>—</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: 4 }}>SLA Resolution Due</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#9ca3af' }}>—</div>
+                  </div>
+                </div>
+                {(t.resolved_at || t.closed_at) && (
+                  <div style={{ display: 'flex', gap: 18, marginTop: 12, paddingTop: 12, borderTop: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
+                    {t.resolved_at && <div style={{ fontSize: 11.5, color: '#6b7280' }}>Resolved: <strong style={{ color: '#374151' }}>{fmtDate(t.resolved_at)}</strong></div>}
+                    {t.closed_at && <div style={{ fontSize: 11.5, color: '#6b7280' }}>Closed: <strong style={{ color: '#374151' }}>{fmtDate(t.closed_at)}</strong></div>}
+                  </div>
+                )}
+              </div>
+
+              {/* Resolved — awaiting raiser confirmation */}
+              {showRaiserConfirm && !showDecline && (
+                <div className="td-fade-in" style={{ background: '#ede9fe', borderRadius: 14, padding: '14px 16px', marginBottom: 16, border: '1.5px solid #c4b5fd' }}>
+                  <div style={{ fontWeight: 700, fontSize: 13.5, color: '#5b21b6', marginBottom: 4 }}>✅ Your issue has been marked resolved</div>
+                  {t.resolve_note && <div style={{ fontSize: 12.5, color: '#6d28d9' }}>{t.resolve_note}</div>}
+                  <div style={{ fontSize: 12, color: '#7c3aed', marginTop: 8 }}>Use the buttons at the bottom to confirm or reopen this ticket.</div>
+                </div>
+              )}
+
+              {/* Activity Timeline */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 12 }}>Activity Timeline</div>
+                {timelineEvents.length === 0 ? (
+                  <div style={{ fontSize: 12, color: '#9ca3af' }}>No activity yet</div>
+                ) : (
+                  <div style={{ position: 'relative' }}>
+                    <div style={{ position: 'absolute', left: 13, top: 4, bottom: 4, width: 2, background: '#eef0f3' }} />
+                    {timelineEvents.map((h, i) => {
+                      const meta = ACTION_HISTORY_META[h.action] || { icon: FaClock, color: '#9ca3af' };
+                      const Icon = h.is_internal ? FaLock : meta.icon;
+                      const iconColor = h.is_internal ? '#b45309' : meta.color;
+                      return (
+                        <div key={h.id} className="td-fade-in" style={{ display: 'flex', gap: 12, marginBottom: i === timelineEvents.length - 1 ? 0 : 16, position: 'relative' }}>
+                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: iconColor + '18', border: `2px solid ${iconColor}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, zIndex: 1 }}>
+                            <Icon size={11} color={iconColor} />
+                          </div>
+                          <div style={{ flex: 1, paddingTop: 2 }}>
+                            <div style={{ fontSize: 12.5, color: '#374151', lineHeight: 1.5 }}>
+                              <span style={{ fontWeight: 700, color: '#111827' }}>{h.performed_by_name || 'System'}</span>
+                              {h.new_status && <span> → <StatusBadge status={h.new_status} /></span>}
+                              {h.is_internal && (
+                                <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 99, padding: '1px 8px' }}>
+                                  🔒 Internal
+                                </span>
+                              )}
+                            </div>
+                            {h.message && (
+                              <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4, background: h.is_internal ? '#fffbeb' : '#fff', border: `1px solid ${h.is_internal ? '#fde68a' : '#f1f5f9'}`, borderRadius: 8, padding: '7px 10px' }}>
+                                {h.message}
+                              </div>
+                            )}
+                            <div style={{ fontSize: 10.5, color: '#9ca3af', marginTop: 4 }}>{fmtDate(h.created_at)}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Comments — chat-style conversation */}
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 12 }}>
+                  Comments {comments.length > 0 && <span style={{ color: '#9ca3af', fontWeight: 600 }}>({comments.length})</span>}
+                </div>
+                {comments.length === 0 ? (
+                  <div style={{ fontSize: 12, color: '#9ca3af' }}>No comments yet — start the conversation below.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {comments.map(c => {
+                      const fromRaiser = c.performed_by === t.raised_by;
+                      return (
+                        <div key={c.id} className="td-fade-in" style={{ display: 'flex', gap: 10, background: c.is_internal ? '#fffbeb' : '#fff', border: `1px solid ${c.is_internal ? '#fde68a' : '#eef0f3'}`, borderRadius: 14, padding: '12px 14px' }}>
+                          <div style={{ width: 32, height: 32, borderRadius: '50%', background: avatarColor(c.performed_by_name), color: '#fff', fontSize: 11.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            {initialsOf(c.performed_by_name) || '?'}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 12.5, fontWeight: 700, color: '#111827' }}>{c.performed_by_name || 'Unknown'}</span>
+                              <span style={{ fontSize: 10.5, fontWeight: 700, color: fromRaiser ? '#4338ca' : '#0369a1', background: fromRaiser ? '#e0e7ff' : '#e0f2fe', borderRadius: 99, padding: '1px 8px' }}>
+                                {fromRaiser ? 'Raised By' : 'Team'}
+                              </span>
+                              {c.is_internal && (
+                                <span style={{ fontSize: 10, fontWeight: 700, color: '#b45309', background: '#fef3c7', borderRadius: 99, padding: '1px 8px', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                  <FaLock size={8} /> Internal
+                                </span>
+                              )}
+                              <span style={{ fontSize: 10.5, color: '#9ca3af', marginLeft: 'auto' }}>{fmtDate(c.created_at)}</span>
+                            </div>
+                            <div style={{ fontSize: 13, color: '#374151', marginTop: 5, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{c.message}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── Comment composer (pinned above the sticky action bar) ── */}
+            {actionable && (
+              <div style={{ flexShrink: 0, borderTop: '1px solid #eef0f3', background: '#fff', padding: '14px 22px' }}>
+                <AutoGrowTextarea
+                  value={comment}
+                  onChange={setComment}
+                  placeholder={isInternalNote ? 'Write an internal note (not visible to the employee)…' : 'Write a comment…'}
+                  style={{ fontSize: 13, marginBottom: 8, background: isInternalNote ? '#fffbeb' : '#fff', borderColor: isInternalNote ? '#fde68a' : undefined }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  {canResolve ? (
+                    <select
+                      value={isInternalNote ? 'internal' : 'public'}
+                      onChange={e => setIsInternalNote(e.target.value === 'internal')}
+                      style={{ fontSize: 12, fontWeight: 600, color: isInternalNote ? '#92400e' : '#374151', background: isInternalNote ? '#fffbeb' : '#f9fafb', border: `1.5px solid ${isInternalNote ? '#fde68a' : '#e5e7eb'}`, borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}
+                    >
+                      <option value="public">💬 Public Reply</option>
+                      <option value="internal">🔒 Internal Note</option>
+                    </select>
+                  ) : <span />}
+                  <button
+                    onClick={() => comment.trim() && act('comment')}
+                    disabled={!comment.trim() || !!acting}
+                    style={{ ...DRAWER_BTN.success, background: isInternalNote ? '#f59e0b' : '#4f46e5', opacity: (!comment.trim() || acting) ? 0.55 : 1, cursor: (!comment.trim() || acting) ? 'not-allowed' : 'pointer' }}
+                  >
+                    {acting === 'comment' ? 'Posting…' : <>Send <FaPaperPlane size={11} /></>}
                   </button>
                 </div>
-              )}
-            </div>
+                {isInternalNote && (
+                  <div style={{ fontSize: 11, color: '#92400e', marginTop: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <FaLock size={9} /> Internal notes are only visible to HR/Admin/Manager/TL
+                  </div>
+                )}
+              </div>
+            )}
 
-            {/* RIGHT — meta */}
-            <div style={{ padding: '20px 18px', background: '#fafafa', fontSize: 12 }}>
-              <InfoRow label="Ticket #" value={t.ticket_number} mono />
-              <InfoRow label="Raised by" value={t.raised_by_name} />
-              <InfoRow label="Email" value={t.raised_by_email} />
-              <InfoRow label="Assigned to" value={t.assigned_to_name || '—'} />
-              <InfoRow label="Created" value={fmtDate(t.created_at)} />
-              {t.resolved_at && <InfoRow label="Resolved at" value={fmtDate(t.resolved_at)} />}
-              {t.closed_at   && <InfoRow label="Closed at"   value={fmtDate(t.closed_at)} />}
-
-              {t.tagged_employees?.length > 0 && (
-                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #f3f4f6' }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', marginBottom: 6 }}>Tagged</div>
-                  {t.tagged_employees.map((e, i) => (
-                    <div key={i} style={{ fontSize: 12, color: '#374151', marginBottom: 3 }}>@{e.name}</div>
-                  ))}
-                </div>
-              )}
-
-              {/* TL/Admin actions */}
-              {canResolve && actionable && t.status !== 'resolved_pending' && t.status !== 'closed' && (
-                <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #f3f4f6' }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', marginBottom: 8 }}>Actions</div>
-                  {t.status === 'open' || t.status === 'reopened' ? (
-                    <button onClick={() => act('inprogress')} disabled={!!acting} style={{ width: '100%', marginBottom: 8, padding: '8px', background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                      {acting === 'inprogress' ? '…' : '🔄 Mark In Progress'}
-                    </button>
-                  ) : null}
-                  {!showResolve ? (
-                    <button onClick={() => setShowResolve(true)} style={{ width: '100%', padding: '8px', background: '#d1fae5', color: '#065f46', border: '1px solid #6ee7b7', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                      ✅ Mark as Resolved
-                    </button>
-                  ) : (
-                    <div>
-                      <textarea value={resolveNote} onChange={e => setResolveNote(e.target.value)} placeholder="Resolution note (optional)" rows={2} style={{ ...inputStyle, fontSize: 11, marginBottom: 6 }} />
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button onClick={() => act('resolve')} disabled={!!acting} style={{ flex: 1, padding: '7px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
-                          {acting === 'resolve' ? '…' : 'Confirm'}
-                        </button>
-                        <button onClick={() => setShowResolve(false)} style={{ padding: '7px 10px', background: '#f3f4f6', border: 'none', borderRadius: 8, fontSize: 11, cursor: 'pointer' }}>Cancel</button>
-                      </div>
+            {/* ── Sticky bottom action bar ── */}
+            {(showTeamActions || showRaiserConfirm) && (
+              <div style={{ flexShrink: 0, borderTop: '1px solid #eef0f3', background: '#fff', padding: '14px 22px' }}>
+                {showResolve ? (
+                  <div className="td-fade-in">
+                    <AutoGrowTextarea value={resolveNote} onChange={setResolveNote} placeholder="Resolution note (optional)" style={{ fontSize: 12.5, marginBottom: 8 }} minRows={2} />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => act('resolve')} disabled={!!acting} className="td-hover-lift" style={{ ...DRAWER_BTN.success, flex: 1 }}>
+                        {acting === 'resolve' ? 'Confirming…' : '✓ Confirm Resolved'}
+                      </button>
+                      <button onClick={() => setShowResolve(false)} className="td-hover-lift" style={DRAWER_BTN.ghost}>Cancel</button>
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
+                  </div>
+                ) : showDecline ? (
+                  <div className="td-fade-in">
+                    <AutoGrowTextarea value={declineNote} onChange={setDeclineNote} placeholder="Why is it not resolved? (optional)" style={{ fontSize: 12.5, marginBottom: 8 }} minRows={2} />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => act('decline')} disabled={!!acting} className="td-hover-lift" style={{ ...DRAWER_BTN.danger, flex: 1, background: '#ef4444', color: '#fff', border: 'none' }}>
+                        {acting === 'decline' ? 'Sending…' : '✕ Confirm Reopen'}
+                      </button>
+                      <button onClick={() => setShowDecline(false)} className="td-hover-lift" style={DRAWER_BTN.ghost}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {showRaiserConfirm && (
+                      <>
+                        <button onClick={() => act('accept')} disabled={!!acting} className="td-hover-lift" style={{ ...DRAWER_BTN.success, flex: 1 }}>
+                          {acting === 'accept' ? 'Processing…' : '✓ Confirm & Close Ticket'}
+                        </button>
+                        <button onClick={() => setShowDecline(true)} disabled={!!acting} className="td-hover-lift" style={{ ...DRAWER_BTN.danger, flex: 1 }}>
+                          Not Resolved
+                        </button>
+                      </>
+                    )}
+                    {showTeamActions && (
+                      <>
+                        {(t.status === 'open' || t.status === 'reopened') && (
+                          <button onClick={() => act('inprogress')} disabled={!!acting} className="td-hover-lift" style={{ ...DRAWER_BTN.primary, flex: 1 }}>
+                            {acting === 'inprogress' ? '…' : <><FaSyncAlt size={11} /> Mark In Progress</>}
+                          </button>
+                        )}
+                        <button onClick={() => setShowResolve(true)} className="td-hover-lift" style={{ ...DRAWER_BTN.success, flex: 1 }}>
+                          ✓ Mark as Resolved
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ) : null}
-      </Modal.Body>
-    </Modal>
+      </Offcanvas>
+    </>
   );
 }
-
-const InfoRow = ({ label, value, mono }) => (
-  <div style={{ marginBottom: 10 }}>
-    <div style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', marginBottom: 2 }}>{label}</div>
-    <div style={{ fontSize: 12, color: '#111827', fontFamily: mono ? 'monospace' : undefined, fontWeight: mono ? 700 : 500, wordBreak: 'break-all' }}>{value}</div>
-  </div>
-);
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
 
@@ -739,7 +1106,7 @@ function pageNumberList(current, total) {
   return result;
 }
 
-const TABLE_COLS = '130px minmax(180px,1fr) 120px 130px 180px 120px 50px';
+const TABLE_COLS = '120px minmax(170px,1fr) 110px 120px 160px 160px 110px 120px 44px';
 
 const pagerBtnStyle = {
   minWidth: 26, height: 26, borderRadius: 6, border: `1px solid ${TK.border}`,
@@ -751,16 +1118,28 @@ const pagerBtnStyle = {
 
 export default function TicketList() {
   const { user } = useAuth();
+  const { id: routeTicketId } = useParams();
   const [tickets,     setTickets]     = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [showForm,    setShowForm]    = useState(false);
-  const [detailId,    setDetailId]    = useState(null);
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [detailId,    setDetailId]    = useState(routeTicketId || null);
+  const [filterStatus, setFilterStatus] = useState(() => new URLSearchParams(window.location.search).get('status') || 'all');
   const [filterDept,   setFilterDept]   = useState('all');
   const [search,       setSearch]       = useState('');
-  const [sortOrder,    setSortOrder]    = useState('latest');
+  const [sortOrder,    setSortOrder]    = useState(() => new URLSearchParams(window.location.search).get('sort') || 'latest');
   const [page,         setPage]         = useState(1);
   const [rowsPerPage,  setRowsPerPage]  = useState(5);
+
+  // Bulk-select-and-resolve — same role gate as single-ticket resolve (ROLES_CAN_RESOLVE).
+  const [selectedIds,      setSelectedIds]      = useState(() => new Set());
+  const [showBulkResolve,  setShowBulkResolve]  = useState(false);
+  const [bulkNote,         setBulkNote]         = useState('');
+  const [bulkSubmitting,   setBulkSubmitting]   = useState(false);
+  const [bulkResult,       setBulkResult]       = useState(null); // { ok, failed }
+
+  // Deep link: a notification/dashboard-widget click can land on /tickets/:id or
+  // /tickets?status=... and this opens the right modal/filter without extra plumbing.
+  useEffect(() => { if (routeTicketId) setDetailId(routeTicketId); }, [routeTicketId]);
 
   const userEmail = user?.email || '';
   const userName  = user?.name  || user?.employeeId || '';
@@ -774,6 +1153,11 @@ export default function TicketList() {
 
   useEffect(() => { fetchTickets(); }, [fetchTickets]);
   useEffect(() => { setPage(1); }, [filterStatus, filterDept, search, sortOrder, rowsPerPage]);
+  useEffect(() => {
+    if (!bulkResult) return;
+    const t = setTimeout(() => setBulkResult(null), 5000);
+    return () => clearTimeout(t);
+  }, [bulkResult]);
 
   const canSeeAll    = ROLES_SEE_ALL.includes(user?.role);
   const canResolve   = ROLES_CAN_RESOLVE.includes(user?.role);
@@ -784,10 +1168,13 @@ export default function TicketList() {
       if (filterDept   !== 'all' && t.department !== filterDept) return false;
       if (search) {
         const q = search.toLowerCase();
-        return t.ticket_number?.toLowerCase().includes(q) ||
-               t.subject?.toLowerCase().includes(q)       ||
-               t.description?.toLowerCase().includes(q)   ||
-               t.raised_by_name?.toLowerCase().includes(q);
+        return t.ticket_number?.toLowerCase().includes(q)   ||
+               t.subject?.toLowerCase().includes(q)         ||
+               t.description?.toLowerCase().includes(q)     ||
+               t.raised_by_name?.toLowerCase().includes(q)  ||
+               t.raised_for_name?.toLowerCase().includes(q) ||
+               t.assigned_to_name?.toLowerCase().includes(q)||
+               t.department?.toLowerCase().includes(q);
       }
       return true;
     })
@@ -834,6 +1221,47 @@ export default function TicketList() {
   const pageSafe   = Math.min(page, totalPages);
   const pageItems  = filtered.slice((pageSafe - 1) * rowsPerPage, pageSafe * rowsPerPage);
 
+  // Only tickets that could actually be resolved one-by-one are eligible for bulk resolve —
+  // mirrors the single-ticket `showTeamActions` gate in TicketDetail (not closed, not already
+  // awaiting the raiser's confirmation).
+  const isBulkResolvable = (t) => canResolve && t.status !== 'closed' && t.status !== 'resolved_pending';
+  const pageEligibleIds  = pageItems.filter(isBulkResolvable).map(t => t.id);
+  const allPageSelected  = pageEligibleIds.length > 0 && pageEligibleIds.every(id => selectedIds.has(id));
+
+  const toggleSelect = (id) => setSelectedIds(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const toggleSelectPage = () => setSelectedIds(prev => {
+    const next = new Set(prev);
+    if (allPageSelected) pageEligibleIds.forEach(id => next.delete(id));
+    else pageEligibleIds.forEach(id => next.add(id));
+    return next;
+  });
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  // A leading checkbox column is only added to the grid for roles that can actually bulk-resolve.
+  const listCols     = canResolve ? `30px ${TABLE_COLS}` : TABLE_COLS;
+  const listMinWidth = canResolve ? 1130 : 1100;
+
+  const runBulkResolve = async () => {
+    setBulkSubmitting(true);
+    const ids = Array.from(selectedIds);
+    const results = await Promise.allSettled(
+      ids.map(id => axios.patch(API_ENDPOINTS.TICKET_RESOLVE(id), { resolve_note: bulkNote.trim() }))
+    );
+    const ok     = results.filter(r => r.status === 'fulfilled').length;
+    const failed = results.length - ok;
+    setBulkResult({ ok, failed });
+    setBulkSubmitting(false);
+    setBulkNote('');
+    clearSelection();
+    fetchTickets();
+  };
+
   return (
     <div style={{ width: '100%' }}>
       {/* ── Header ── */}
@@ -878,7 +1306,7 @@ export default function TicketList() {
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', flex: 1, minWidth: 260 }}>
           <div style={{ position: 'relative', flex: 1, minWidth: 220, maxWidth: 340 }}>
             <FaSearch size={12} color="#9ca3af" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search tickets by ID, subject or description…" style={{ ...inputStyle, paddingLeft: 32 }} />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by ID, subject, raised by/for, assignee, department…" style={{ ...inputStyle, paddingLeft: 32 }} />
           </div>
           <select value={filterDept} onChange={e => setFilterDept(e.target.value)} style={{ ...inputStyle, width: 'auto', maxWidth: 170 }}>
             <option value="all">All Departments</option>
@@ -898,6 +1326,19 @@ export default function TicketList() {
         </select>
       </div>
 
+      {/* ── Bulk-select action bar ── */}
+      {canResolve && selectedIds.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 12, padding: '10px 16px', marginBottom: 12 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#4338ca' }}>{selectedIds.size} ticket{selectedIds.size > 1 ? 's' : ''} selected</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={clearSelection} style={cancelBtnStyle}>Clear</button>
+            <button onClick={() => setShowBulkResolve(true)} style={{ ...submitBtnStyle, background: TK.success, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <FaCheckCircle size={12} /> Resolve Selected ({selectedIds.size})
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Ticket list ── */}
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}><Spinner animation="border" /></div>
@@ -912,13 +1353,27 @@ export default function TicketList() {
       ) : (
         <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${TK.border}`, boxShadow: '0 2px 10px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
           {/* Header row */}
-          <div style={{ display: 'grid', gridTemplateColumns: TABLE_COLS, gap: 12, padding: '12px 18px', background: '#f9fafb', borderBottom: `1px solid ${TK.border}`, fontSize: 11, fontWeight: 700, color: TK.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: listCols, gap: 12, padding: '12px 18px', background: '#f9fafb', borderBottom: `1px solid ${TK.border}`, fontSize: 11, fontWeight: 700, color: TK.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+            {canResolve && (
+              <span onClick={e => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  checked={allPageSelected}
+                  disabled={pageEligibleIds.length === 0}
+                  onChange={toggleSelectPage}
+                  title="Select all resolvable tickets on this page"
+                  style={{ cursor: pageEligibleIds.length ? 'pointer' : 'not-allowed' }}
+                />
+              </span>
+            )}
             <span>Ticket ID</span>
             <span>Subject</span>
             <span>Department</span>
             <span>Status</span>
             <span>Raised By</span>
+            <span>Assigned To</span>
             <span>Date</span>
+            <span>Age</span>
             <span>Action</span>
           </div>
           <div style={{ overflowX: 'auto' }}>
@@ -927,19 +1382,32 @@ export default function TicketList() {
               const statusColor = STATUS_META[t.status]?.color || TK.border;
               const isPending = t.status === 'resolved_pending' && t.raised_by === user?.employeeId;
               const created = new Date(t.created_at);
+              const raisedForName = t.raised_for_name && t.raised_for_name !== t.raised_by_name ? t.raised_for_name : null;
               return (
                 <div key={t.id}
                   onClick={() => setDetailId(t.id)}
                   style={{
-                    display: 'grid', gridTemplateColumns: TABLE_COLS, gap: 12, minWidth: 900,
+                    display: 'grid', gridTemplateColumns: listCols, gap: 12, minWidth: listMinWidth,
                     padding: '14px 18px', cursor: 'pointer', borderBottom: '1px solid #f3f4f6',
                     borderLeft: `4px solid ${statusColor}`,
-                    background: isPending ? '#faf5ff' : '#fff', transition: 'background 0.12s',
+                    background: selectedIds.has(t.id) ? '#eef2ff' : isPending ? '#faf5ff' : '#fff', transition: 'background 0.12s',
                     alignItems: 'center',
                   }}
-                  onMouseEnter={e => !isPending && (e.currentTarget.style.background = '#f9fafb')}
-                  onMouseLeave={e => !isPending && (e.currentTarget.style.background = '#fff')}
+                  onMouseEnter={e => !isPending && !selectedIds.has(t.id) && (e.currentTarget.style.background = '#f9fafb')}
+                  onMouseLeave={e => !isPending && !selectedIds.has(t.id) && (e.currentTarget.style.background = '#fff')}
                 >
+                  {canResolve && (
+                    <span onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(t.id)}
+                        disabled={!isBulkResolvable(t)}
+                        onChange={() => toggleSelect(t.id)}
+                        title={isBulkResolvable(t) ? 'Select for bulk resolve' : 'Not resolvable in this status'}
+                        style={{ cursor: isBulkResolvable(t) ? 'pointer' : 'not-allowed' }}
+                      />
+                    </span>
+                  )}
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: TK.primary }}>
                     {t.ticket_number}
                     <CopyButton text={t.ticket_number} />
@@ -951,14 +1419,21 @@ export default function TicketList() {
                   </div>
                   <span style={{ fontSize: 12, fontWeight: 700, color: deptM.color }}>{deptM.icon} {t.department}</span>
                   <StatusDot status={t.status} />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                     <div style={{ width: 30, height: 30, borderRadius: '50%', background: avatarColor(t.raised_by_name), color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       {initialsOf(t.raised_by_name) || '?'}
                     </div>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.raised_by_name}</div>
-                      <div style={{ fontSize: 10, color: '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.assigned_to_name ? `→ ${t.assigned_to_name}` : 'Unassigned'}</div>
+                      <div style={{ fontSize: 10, color: '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{raisedForName ? `for: ${raisedForName}` : ' '}</div>
                     </div>
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    {t.assigned_to_name ? (
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>{t.assigned_to_name}</span>
+                    ) : (
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', fontStyle: 'italic' }}>{t.department} Team Queue</span>
+                    )}
                   </div>
                   <div>
                     <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -969,6 +1444,7 @@ export default function TicketList() {
                       {created.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
                     </div>
                   </div>
+                  <div><AgeBadge ticket={t} compact /></div>
                   <button
                     onClick={(e) => { e.stopPropagation(); setDetailId(t.id); }}
                     title="View ticket"
@@ -1019,6 +1495,7 @@ export default function TicketList() {
         onCreated={ticket => { setTickets(p => [ticket, ...p]); }}
         userEmail={userEmail}
         userName={userName}
+        userEmployeeId={user?.employeeId}
       />
       <TicketDetail
         show={!!detailId}
@@ -1028,6 +1505,47 @@ export default function TicketList() {
         userRole={user?.role}
         userEmployeeId={user?.employeeId}
       />
+
+      {/* Bulk resolve confirmation */}
+      <Modal show={showBulkResolve} onHide={() => !bulkSubmitting && setShowBulkResolve(false)} centered>
+        <Modal.Header closeButton={!bulkSubmitting}>
+          <Modal.Title style={{ fontSize: 16 }}>Resolve {selectedIds.size} Ticket{selectedIds.size > 1 ? 's' : ''}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p style={{ fontSize: 13, color: '#4b5563' }}>
+            This will mark all {selectedIds.size} selected ticket{selectedIds.size > 1 ? 's' : ''} as resolved. Each raiser will be notified and asked to confirm, same as resolving one ticket at a time.
+          </p>
+          <label style={labelStyle}>Resolution Note <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional — applied to all selected tickets)</span></label>
+          <textarea
+            value={bulkNote}
+            onChange={e => setBulkNote(e.target.value)}
+            placeholder="e.g. Resolved as part of bulk cleanup"
+            rows={3}
+            style={{ ...inputStyle, resize: 'vertical' }}
+          />
+        </Modal.Body>
+        <Modal.Footer>
+          <button type="button" onClick={() => setShowBulkResolve(false)} disabled={bulkSubmitting} style={cancelBtnStyle}>Cancel</button>
+          <button
+            type="button"
+            onClick={async () => { await runBulkResolve(); setShowBulkResolve(false); }}
+            disabled={bulkSubmitting}
+            style={{ ...submitBtnStyle, background: TK.success }}
+          >
+            {bulkSubmitting ? 'Resolving…' : `Resolve ${selectedIds.size} Ticket${selectedIds.size > 1 ? 's' : ''}`}
+          </button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Bulk resolve result toast-ish banner — simple inline confirmation, auto-clears */}
+      {bulkResult && (
+        <div
+          style={{ position: 'fixed', bottom: 24, right: 24, background: bulkResult.failed ? '#fff7ed' : '#ecfdf5', border: `1px solid ${bulkResult.failed ? '#fdba74' : '#6ee7b7'}`, color: bulkResult.failed ? '#9a3412' : '#065f46', borderRadius: 10, padding: '12px 16px', fontSize: 13, fontWeight: 600, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 2000 }}
+        >
+          {bulkResult.ok} ticket{bulkResult.ok !== 1 ? 's' : ''} resolved{bulkResult.failed ? `, ${bulkResult.failed} failed` : ''}.
+          <button onClick={() => setBulkResult(null)} style={{ background: 'none', border: 'none', marginLeft: 10, cursor: 'pointer', fontWeight: 700, color: 'inherit' }}>×</button>
+        </div>
+      )}
     </div>
   );
 }

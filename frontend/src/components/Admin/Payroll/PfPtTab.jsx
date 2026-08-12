@@ -4,7 +4,7 @@
 // isFlexibleShift) — no new backend endpoint.
 import React, { useState, useRef } from 'react';
 import { Spinner } from 'react-bootstrap';
-import { FaSave, FaCheckCircle, FaExclamationCircle, FaSearch } from 'react-icons/fa';
+import { FaSave, FaCheckCircle, FaExclamationCircle, FaSearch, FaUserSlash } from 'react-icons/fa';
 import axios from '../../../config/axios';
 import API_ENDPOINTS from '../../../config/api';
 import { useNotification } from '../../../context/NotificationContext';
@@ -38,6 +38,7 @@ const PfPtTab = ({ records, refetch }) => {
   const [bulkTax, setBulkTax] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all | added | remaining
   const [search, setSearch] = useState('');
+  const [bulkExcluding, setBulkExcluding] = useState(false);
   const debounceRef = useRef({});
 
   // Sorted alphabetically by first name (already the order getBulkPayroll returns, kept
@@ -89,9 +90,37 @@ const PfPtTab = ({ records, refetch }) => {
     n.has(id) ? n.delete(id) : n.add(id);
     return n;
   });
-  const toggleSelectAll = () => setSelectedIds(prev =>
-    prev.size === visibleRecords.length ? new Set() : new Set(visibleRecords.map(r => r.employee_id))
-  );
+  // Excluded employees are still shown (dimmed) for visibility but excluded from "select all" —
+  // there's nothing to bulk-apply PF/PT to (or exclude again) for someone already excluded.
+  const selectableRecords = visibleRecords.filter(r => !r.exclude_from_payroll);
+  const allSelected = selectableRecords.length > 0 && selectableRecords.every(r => selectedIds.has(r.employee_id));
+  const toggleSelectAll = () => setSelectedIds(prev => {
+    const n = new Set(prev);
+    if (allSelected) selectableRecords.forEach(r => n.delete(r.employee_id));
+    else selectableRecords.forEach(r => n.add(r.employee_id));
+    return n;
+  });
+
+  // Same exclude_from_payroll flag/endpoint as the Payroll Preview and Excluded Employees
+  // tabs — this just gives a second entry point that reuses the selection this tab already has.
+  const handleBulkExclude = async () => {
+    const targets = records.filter(r => selectedIds.has(r.employee_id));
+    if (targets.length === 0) return;
+    if (!window.confirm(`Exclude ${targets.length} employee(s) from payroll? They will no longer appear in the payroll Excel export.`)) return;
+    setBulkExcluding(true);
+    try {
+      const results = await Promise.allSettled(
+        targets.map(rec => axios.put(API_ENDPOINTS.EMPLOYEE_BY_ID(rec.id), { exclude_from_payroll: true }))
+      );
+      const ok = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.length - ok;
+      showNotification(`${ok} employee(s) excluded from payroll${failed ? `, ${failed} failed` : ''}.`, failed ? 'warning' : 'success');
+      setSelectedIds(new Set());
+      refetch();
+    } finally {
+      setBulkExcluding(false);
+    }
+  };
 
   const applyBulk = () => {
     if (selectedIds.size === 0) { showNotification('Select at least one employee first', 'warning'); return; }
@@ -213,9 +242,17 @@ const PfPtTab = ({ records, refetch }) => {
           Apply to {selectedIds.size || 0} selected
         </button>
         <button
+          onClick={handleBulkExclude}
+          disabled={selectedIds.size === 0 || bulkExcluding}
+          style={{ ...primaryBtn, marginLeft: 'auto', background: selectedIds.size > 0 ? '#dc2626' : '#e2e8f0', color: selectedIds.size > 0 ? '#fff' : '#94a3b8', cursor: (selectedIds.size === 0 || bulkExcluding) ? 'not-allowed' : 'pointer', opacity: bulkExcluding ? 0.7 : 1 }}
+        >
+          {bulkExcluding ? <Spinner animation="border" size="sm" style={{ width: 11, height: 11 }} /> : <FaUserSlash size={11} />}
+          {bulkExcluding ? 'Excluding…' : `Exclude Selected${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
+        </button>
+        <button
           onClick={handleSaveAll}
           disabled={dirtyCount === 0}
-          style={{ ...primaryBtn, marginLeft: 'auto', background: dirtyCount > 0 ? '#16a34a' : '#e2e8f0', color: dirtyCount > 0 ? '#fff' : '#94a3b8', cursor: dirtyCount === 0 ? 'not-allowed' : 'pointer' }}
+          style={{ ...primaryBtn, background: dirtyCount > 0 ? '#16a34a' : '#e2e8f0', color: dirtyCount > 0 ? '#fff' : '#94a3b8', cursor: dirtyCount === 0 ? 'not-allowed' : 'pointer' }}
         >
           <FaSave size={11} /> Save All {dirtyCount > 0 ? `(${dirtyCount})` : ''}
         </button>
@@ -234,7 +271,14 @@ const PfPtTab = ({ records, refetch }) => {
               <thead>
                 <tr style={{ background: '#1e3a5f', color: '#fff' }}>
                   <th style={{ padding: '11px 12px', textAlign: 'center', width: 36 }}>
-                    <input type="checkbox" checked={visibleRecords.length > 0 && selectedIds.size === visibleRecords.length} onChange={toggleSelectAll} />
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      disabled={selectableRecords.length === 0}
+                      onChange={toggleSelectAll}
+                      title="Select all (excludable) employees on this page"
+                      style={{ cursor: selectableRecords.length ? 'pointer' : 'not-allowed' }}
+                    />
                   </th>
                   {['Employee', 'Code', 'Department', 'Monthly Salary', 'PF (₹)', 'PT (₹)', 'Professional Tax (₹)', 'Status', 'Action'].map(h => (
                     <th key={h} style={{ padding: '11px 12px', fontWeight: 600, textAlign: 'left', fontSize: 11, letterSpacing: 0.3 }}>{h}</th>
@@ -249,12 +293,20 @@ const PfPtTab = ({ records, refetch }) => {
                   const isSaved = saved[rec.employee_id];
                   const isSaving = saving[rec.employee_id];
                   return (
-                    <tr key={rec.employee_id} style={{ borderBottom: '1px solid #f1f5f9', background: isDirty ? '#fffbeb' : idx % 2 === 0 ? '#fff' : '#fafafa' }}>
+                    <tr key={rec.employee_id} style={{ borderBottom: '1px solid #f1f5f9', background: selectedIds.has(rec.employee_id) ? '#fef2f2' : rec.exclude_from_payroll ? '#f8fafc' : isDirty ? '#fffbeb' : idx % 2 === 0 ? '#fff' : '#fafafa', opacity: rec.exclude_from_payroll ? 0.55 : 1 }}>
                       <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                        <input type="checkbox" checked={selectedIds.has(rec.employee_id)} onChange={() => toggleSelect(rec.employee_id)} />
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(rec.employee_id)}
+                          disabled={rec.exclude_from_payroll}
+                          onChange={() => toggleSelect(rec.employee_id)}
+                          title={rec.exclude_from_payroll ? 'Already excluded from payroll' : undefined}
+                          style={{ cursor: rec.exclude_from_payroll ? 'not-allowed' : 'pointer' }}
+                        />
                       </td>
                       <td style={{ padding: '10px 12px', fontWeight: 600, color: '#1e293b' }}>
                         {rec.first_name} {rec.last_name}
+                        {rec.exclude_from_payroll && <div style={{ fontSize: 9, color: '#dc2626', fontWeight: 700 }}>EXCLUDED</div>}
                         {rec.designation && <div style={{ fontSize: 10, color: '#94a3b8' }}>{rec.designation}</div>}
                       </td>
                       <td style={{ padding: '10px 12px', color: '#64748b', fontFamily: 'monospace', fontSize: 11 }}>{rec.employee_id}</td>

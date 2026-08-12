@@ -210,7 +210,11 @@ const PayrollCenter = () => {
   // at generation time, so adding a deduction after generating a slip is reflected here
   // immediately. 'Slip Status' flags when that means Total Payable is now stale.
   const exportToExcel = async () => {
-    if (filteredRecords.length === 0) {
+    // Employees marked "exclude from payroll" (see Excluded Employees tab) must never show up
+    // in the exported sheet, even though they're kept visible (grayed out) in the on-screen
+    // preview tables for admin awareness — the export is the one place this is a hard filter.
+    const exportRecords = filteredRecords.filter(r => !r.exclude_from_payroll);
+    if (exportRecords.length === 0) {
       showNotification('No records to export for the current filters.', 'warning');
       return;
     }
@@ -301,7 +305,7 @@ const PayrollCenter = () => {
 
       const dayColumnLabels = cycleDays.map(d => `${String(d.getDate()).padStart(2, '0')}-${MONTHS[d.getMonth()].slice(0, 3)}`);
 
-      const rows = filteredRecords.map((r, i) => {
+      const rows = exportRecords.map((r, i) => {
         const emp = employeeDirectory[r.employee_id] || {};
         const co = isPropCulture(r) ? COMPANY.pc : COMPANY.b2b;
         const payable = r.final_payable_salary != null

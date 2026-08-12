@@ -3,13 +3,13 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   FaBell, FaClock, FaCalendarAlt, FaEdit,
   FaCheckCircle, FaTimesCircle, FaUser, FaSignOutAlt,
-  FaTimes, FaChevronDown, FaBullhorn
+  FaTimes, FaChevronDown, FaBullhorn, FaTicketAlt, FaExclamationTriangle
 } from 'react-icons/fa';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
-import { Badge, Dropdown, Spinner } from 'react-bootstrap';
+import { Badge, Dropdown, Spinner, Modal, Button } from 'react-bootstrap';
 import EventNotification from '../Common/EventNotification';
 
 const ROUTE_LABELS = {
@@ -37,7 +37,8 @@ const Navbar = () => {
   const { user, logout }   = useAuth();
   const navigate           = useNavigate();
   const location           = useLocation();
-  const { eventNotifications, markEventAsRead, markAllEventsAsRead, removeNotification } = useNotification();
+  const { eventNotifications, markEventAsRead, markAllEventsAsRead, removeNotification, showNotification } = useNotification();
+  const seenNotificationIdsRef = useRef(null); // null = not initialized yet (first fetch shouldn't toast)
 
   const [notifications, setNotifications]           = useState([]);
   const [showNotifications, setShowNotifications]   = useState(false);
@@ -49,6 +50,12 @@ const Navbar = () => {
   const [fetchingNotifications, setFetchingNotifications] = useState(false);
   const [activeNotice, setActiveNotice]             = useState(null);
   const [noticePaused, setNoticePaused]             = useState(false);
+  // Tickets specifically assigned to me that are still active (not resolved/closed) — shown as
+  // a blocking modal (no backdrop/ESC dismiss) the assignee must explicitly close. Re-populated
+  // once per full page load/visit; a ticket drops out of this queue for good once its status
+  // moves to resolved_pending/closed, not merely because it was closed once this session.
+  const [blockingTickets, setBlockingTickets]       = useState([]);
+  const ACTIVE_TICKET_STATUSES = ['open', 'in_progress', 'reopened'];
 
   const notificationRef  = useRef(null);
   const bellRef          = useRef(null);
@@ -67,6 +74,7 @@ const Navbar = () => {
       fetchNotifications();
       fetchPendingUpdateRequests();
       fetchActiveNotice();
+      fetchAssignedActiveTickets();
     }
   }, [user]);
 
@@ -82,6 +90,17 @@ const Navbar = () => {
     if (!user) return;
     noticeIntervalRef.current = setInterval(fetchActiveNotice, 60000);
     return () => clearInterval(noticeIntervalRef.current);
+  }, [user]);
+
+  // Poll real notifications (tickets, leave, regularization, etc.) every 45s — this is the
+  // "near-real-time" delivery mechanism: no WebSocket exists in this app, so polling at a
+  // tighter interval than the notice board is the safest way to get ticket updates to
+  // appear without a full page refresh, mirroring the pattern already used above.
+  const notificationIntervalRef = useRef(null);
+  useEffect(() => {
+    if (!user) return;
+    notificationIntervalRef.current = setInterval(fetchNotifications, 45000);
+    return () => clearInterval(notificationIntervalRef.current);
   }, [user]);
 
   // unread badge
@@ -122,12 +141,68 @@ const Navbar = () => {
     }
   };
 
+  // Tickets specifically assigned to me (by ID, not by name/role) that are still open/in
+  // progress/reopened — surfaced as a blocking pop-up once per visit until I resolve them.
+  const fetchAssignedActiveTickets = async () => {
+    if (!user?.employeeId) return;
+    try {
+      const res = await axios.get(API_ENDPOINTS.TICKETS);
+      const mine = (res.data?.tickets || [])
+        .filter(t => t.assigned_to === user.employeeId && ACTIVE_TICKET_STATUSES.includes(t.status))
+        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      setBlockingTickets(mine);
+    } catch { /* silent */ }
+  };
+
+  const dismissBlockingTicket = () => setBlockingTickets(q => q.slice(1));
+
   const fetchNotifications = async () => {
     if (!user?.employeeId) return;
     setFetchingNotifications(true);
     try {
       const res = await axios.get(API_ENDPOINTS.NOTIFICATIONS_BY_EMPLOYEE(user.employeeId));
-      if (res.data && Array.isArray(res.data)) setNotifications(res.data);
+      if (res.data && Array.isArray(res.data)) {
+        // Toast any ticket notification that showed up since the last poll — this is the
+        // "popup appears without a page refresh" requirement. The very first fetch just
+        // seeds the seen-set (no toast storm on login for notifications that already existed).
+        const currentIds = new Set(res.data.map(n => n.id));
+        if (seenNotificationIdsRef.current) {
+          const freshTicketNotifs = res.data.filter(n =>
+            n.type?.startsWith('ticket_') && !seenNotificationIdsRef.current.has(n.id)
+          );
+          freshTicketNotifs.forEach(n => {
+            const ticketId = n.metadata?.ticket_id;
+            // A brand-new "assigned to you" notification gets the blocking pop-up instead of
+            // (not in addition to) a toast — the modal itself is the notification for the
+            // assignee. Everything else (comments, status changes, team-wide "new ticket")
+            // still just toasts, same as before.
+            if (n.type === 'ticket_assigned' && ticketId) {
+              axios.get(API_ENDPOINTS.TICKET_BY_ID(ticketId)).then(r => {
+                const t = r.data?.ticket;
+                if (t && ACTIVE_TICKET_STATUSES.includes(t.status)) {
+                  setBlockingTickets(q => q.some(x => x.id === t.id) ? q : [...q, t]);
+                }
+              }).catch(() => {});
+              return;
+            }
+            showNotification(
+              <span
+                style={{ cursor: ticketId ? 'pointer' : 'default' }}
+                onClick={() => ticketId && navigate(`/tickets/${ticketId}`)}
+              >
+                <strong>{n.title}</strong>
+                <br />
+                <span style={{ fontSize: 12 }}>{n.message}</span>
+                {ticketId && <><br /><span style={{ fontSize: 12, fontWeight: 700, textDecoration: 'underline' }}>View Ticket →</span></>}
+              </span>,
+              'info',
+              6000
+            );
+          });
+        }
+        seenNotificationIdsRef.current = currentIds;
+        setNotifications(res.data);
+      }
     } catch { /* silent */ }
     finally { setFetchingNotifications(false); }
   };
@@ -176,6 +251,8 @@ const Navbar = () => {
         return <FaTimesCircle style={{ color: 'var(--danger)', ...s }} size={13} />;
       case 'update_request':
         return <FaEdit style={{ color: 'var(--warning)', ...s }} size={13} />;
+      case 'ticket_created': case 'ticket_comment': case 'ticket_status': case 'ticket_assigned':
+        return <FaTicketAlt style={{ color: 'var(--primary)', ...s }} size={13} />;
       default:
         return <FaBell style={{ color: 'var(--primary)', ...s }} size={13} />;
     }
@@ -210,8 +287,11 @@ const Navbar = () => {
   const noticeBg     = activeNotice?.background_color || 'var(--navbar-bg)';
   const noticeColor  = activeNotice?.text_color || '#2B2B2B';
 
+  const blockingTicket = blockingTickets[0] || null;
+
   // ─────────────────────────────────────────────────────────────
   return (
+    <>
     <nav
       style={{
         height: '60px',
@@ -527,15 +607,21 @@ const Navbar = () => {
                 <div style={{ fontSize: '10.5px', fontWeight: '600', color: 'var(--text-muted)', padding: '4px 4px 6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                   🔔 Updates
                 </div>
-                {notifications.map(notif => (
+                {notifications.map(notif => {
+                  const ticketId = notif.metadata?.ticket_id;
+                  const handleClick = () => {
+                    if (!notif.is_read) markAsRead(notif.id);
+                    if (ticketId) { setShowNotifications(false); navigate(`/tickets/${ticketId}`); }
+                  };
+                  return (
                   <div
                     key={notif.id}
-                    onClick={() => !notif.is_read && markAsRead(notif.id)}
+                    onClick={handleClick}
                     style={{
                       padding: '10px 12px', borderRadius: 'var(--radius-sm)', marginBottom: '4px',
                       background: !notif.is_read ? 'var(--primary-light)' : '#F8FAFC',
                       border: `1px solid ${!notif.is_read ? 'var(--primary-muted)' : 'var(--border)'}`,
-                      cursor: !notif.is_read ? 'pointer' : 'default',
+                      cursor: (!notif.is_read || ticketId) ? 'pointer' : 'default',
                       position: 'relative', display: 'flex', gap: '10px', alignItems: 'flex-start',
                       transition: 'background 0.15s',
                     }}
@@ -547,13 +633,17 @@ const Navbar = () => {
                       {!notif.is_read && (
                         <span style={{ marginLeft: '8px', background: 'var(--primary)', color: 'white', borderRadius: '4px', fontSize: '10px', padding: '1px 6px', fontWeight: '500' }}>New</span>
                       )}
+                      {ticketId && (
+                        <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: '700', color: 'var(--primary)', textDecoration: 'underline' }}>View Ticket →</span>
+                      )}
                     </div>
                     <button
                       onClick={(e) => deleteNotification(notif.id, e)}
                       style={{ position: 'absolute', top: '8px', right: '8px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px' }}
                     ><FaTimes size={10} /></button>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               eventNotifications.filter(e => !e.read).length === 0 && pendingCount === 0 && (
@@ -571,6 +661,50 @@ const Navbar = () => {
       )}
 
     </nav>
+
+    {/* Blocking "Ticket Assigned To You" pop-up — no backdrop/ESC dismiss, only the explicit
+        Close/View buttons. Reappears on every visit while the ticket stays open/in_progress/
+        reopened; stops for good once it reaches resolved_pending or closed. */}
+    {blockingTicket && (
+      <Modal show onHide={dismissBlockingTicket} backdrop="static" keyboard={false} centered>
+        <Modal.Header style={{ background: '#1e2a3e', color: '#fff', border: 'none' }}>
+          <Modal.Title style={{ fontSize: 16, display: 'flex', alignItems: 'center', gap: 9 }}>
+            <FaExclamationTriangle size={15} color="#fbbf24" />
+            Ticket Assigned To You
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: 'var(--primary)', marginBottom: 6 }}>
+            {blockingTicket.ticket_number}
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', marginBottom: 8 }}>{blockingTicket.subject}</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, fontSize: 12.5, color: '#4b5563', marginBottom: 10 }}>
+            <span><strong>Department:</strong> {blockingTicket.department}</span>
+            <span><strong>Priority:</strong> {blockingTicket.priority}</span>
+            <span><strong>Raised By:</strong> {blockingTicket.raised_by_name}</span>
+          </div>
+          {blockingTicket.description && (
+            <div style={{ fontSize: 13, color: '#374151', background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: 8, padding: '10px 12px', maxHeight: 120, overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
+              {blockingTicket.description}
+            </div>
+          )}
+          {blockingTickets.length > 1 && (
+            <div style={{ fontSize: 11.5, color: '#9ca3af', marginTop: 10 }}>+{blockingTickets.length - 1} more ticket{blockingTickets.length > 2 ? 's' : ''} assigned to you</div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" size="sm" onClick={dismissBlockingTicket}>Close</Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => { navigate(`/tickets/${blockingTicket.id}`); dismissBlockingTicket(); }}
+          >
+            View Ticket
+          </Button>
+        </Modal.Footer>
+      </Modal>
+    )}
+    </>
   );
 };
 

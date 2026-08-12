@@ -18,6 +18,7 @@ import BreakWidget from '../Common/BreakWidget';
 import TeamBreakDashboard from '../Common/TeamBreakDashboard';
 import DashboardQuickAccess from '../Common/DashboardQuickAccess';
 import WelcomeBanner from '../Common/WelcomeBanner';
+import TicketSummaryWidget from '../Common/TicketSummaryWidget';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement);
 
@@ -410,6 +411,8 @@ const ManagerDashboard = () => {
           </div>
         }
       />
+
+      <TicketSummaryWidget />
 
       {/* Stat Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16, marginBottom: 28 }}>

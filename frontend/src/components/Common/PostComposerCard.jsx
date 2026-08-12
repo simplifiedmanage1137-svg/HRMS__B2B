@@ -4,6 +4,8 @@ import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import Avatar from './Avatar';
 import PostsDrawer from './PostsDrawer';
+import PollWidget from './PollWidget';
+import PollDetailsDrawer from './PollDetailsDrawer';
 import { QA, QA_CARD_STYLE } from './quickAccessTheme';
 
 const TABS = [
@@ -49,7 +51,7 @@ function AnnouncementsList() {
   );
 }
 
-function PostCard({ post, onLikeToggle }) {
+function PostCard({ post, onLikeToggle, onVote, onViewPollDetails }) {
   const [openComments, setOpenComments] = useState(false);
   const [comments, setComments] = useState(null);
   const [commentInput, setCommentInput] = useState('');
@@ -80,7 +82,7 @@ function PostCard({ post, onLikeToggle }) {
   return (
     <div style={{ padding: '12px 0', borderTop: '1px solid #f3f4f6' }}>
       <div style={{ display: 'flex', gap: 10 }}>
-        <Avatar id={post.employee_id} firstName={post.author_name?.split(' ')[0]} lastName={post.author_name?.split(' ')[1]} size={32} />
+        <Avatar photo={post.author_photo} id={post.employee_id} firstName={post.author_name?.split(' ')[0]} lastName={post.author_name?.split(' ')[1]} size={32} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: QA.textDark }}>
             {post.author_name}
@@ -92,15 +94,7 @@ function PostCard({ post, onLikeToggle }) {
             {new Date(post.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
           </div>
           <div style={{ fontSize: 13, color: QA.textDark, lineHeight: 1.5 }}>{post.content}</div>
-          {post.post_type === 'poll' && (post.poll_options || []).length > 0 && (
-            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {post.poll_options.map((opt, i) => (
-                <div key={i} style={{ padding: '6px 10px', borderRadius: 8, background: QA.primaryLight, color: QA.primary, fontSize: 12, fontWeight: 600 }}>
-                  {opt}
-                </div>
-              ))}
-            </div>
-          )}
+          <PollWidget post={post} onVote={(index) => onVote(post.id, index)} onViewDetails={() => onViewPollDetails(post.id)} />
           <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
             <button onClick={() => onLikeToggle(post.id)}
               style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, color: post.liked_by_me ? QA.danger : QA.textMuted, fontSize: 11, padding: 0 }}>
@@ -150,6 +144,7 @@ export default function PostComposerCard() {
   const [loading, setLoading] = useState(true);
   const [showDrawer, setShowDrawer] = useState(false);
   const [postsLastSeen, setPostsLastSeen] = useState(getPostsLastSeen());
+  const [pollDrawerPostId, setPollDrawerPostId] = useState(null);
 
   const newPostCount = posts.filter(p => new Date(p.created_at) > new Date(postsLastSeen)).length;
 
@@ -191,6 +186,34 @@ export default function PostComposerCard() {
       setError(err.response?.data?.message || 'Failed to post');
     } finally {
       setPosting(false);
+    }
+  };
+
+  // Same optimistic-then-reconcile pattern as PostsDrawer.jsx's voteOnPoll — kept as a separate
+  // copy since this component maintains its own independent `posts` list/state.
+  const voteOnPoll = async (postId, optionIndex) => {
+    const prevPosts = posts;
+    setPosts(prev => prev.map(p => {
+      if (p.id !== postId || !p.poll) return p;
+      const wasVoted = p.poll.my_vote;
+      const options = p.poll.options.map(o => {
+        let count = o.count;
+        if (p.poll.results_visible && count !== null) {
+          if (o.index === optionIndex) count = count + 1;
+          if (o.index === wasVoted && wasVoted !== optionIndex) count = Math.max(0, count - 1);
+        }
+        return { ...o, count };
+      });
+      const total = wasVoted === null || wasVoted === undefined ? p.poll.total_votes + 1 : p.poll.total_votes;
+      const withPct = options.map(o => ({ ...o, percentage: p.poll.results_visible && total > 0 ? Math.round((o.count / total) * 100) : o.percentage }));
+      return { ...p, poll: { ...p.poll, my_vote: optionIndex, total_votes: total, options: withPct } };
+    }));
+    try {
+      const res = await axios.post(API_ENDPOINTS.POST_VOTE(postId), { option_index: optionIndex });
+      if (res.data?.success) setPosts(prev => prev.map(p => p.id === postId ? { ...p, poll: res.data.poll } : p));
+    } catch (err) {
+      setPosts(prevPosts);
+      alert(err.response?.data?.message || 'Failed to record your vote');
     }
   };
 
@@ -297,13 +320,16 @@ export default function PostComposerCard() {
       ) : (
         <div>
           {/* Compact card shows only the latest update — the rest live behind "View All Posts" */}
-          {posts.slice(0, 1).map(p => <PostCard key={p.id} post={p} onLikeToggle={toggleLike} />)}
+          {posts.slice(0, 1).map(p => (
+            <PostCard key={p.id} post={p} onLikeToggle={toggleLike} onVote={voteOnPoll} onViewPollDetails={setPollDrawerPostId} />
+          ))}
         </div>
       )}
         </>
       )}
 
       <PostsDrawer show={showDrawer} onClose={() => setShowDrawer(false)} />
+      <PollDetailsDrawer show={!!pollDrawerPostId} onHide={() => setPollDrawerPostId(null)} postId={pollDrawerPostId} />
     </div>
   );
 }
