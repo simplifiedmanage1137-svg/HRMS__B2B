@@ -17,6 +17,7 @@ export default function AttendanceCard({
   onRequestClockOut,
   clockLoading,
   readOnly = false,
+  readOnlyMessage = "Admin accounts don't clock in",
   disabledMobile = false,
   canClockOut = true,
   shiftTiming,
@@ -69,7 +70,7 @@ export default function AttendanceCard({
 
       {readOnly ? (
         <div style={{ fontSize: 12, fontWeight: 600, background: 'rgba(255,255,255,0.18)', display: 'inline-block', padding: '6px 12px', borderRadius: 20 }}>
-          Admin accounts don't clock in
+          {readOnlyMessage}
         </div>
       ) : disabledMobile ? (
         <div>

@@ -343,25 +343,25 @@ export default function DeductionManager() {
             </div>
           </div>
           <Row className="g-3">
-            <Col md={3}>
+            <Col xs={6} sm={6} md={3}>
               <Form.Label className="small fw-semibold mb-1">Month</Form.Label>
               <Form.Select size="sm" value={filterMonth} onChange={e => setFilterMonth(parseInt(e.target.value))}>
                 {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
               </Form.Select>
             </Col>
-            <Col md={2}>
+            <Col xs={6} sm={6} md={2}>
               <Form.Label className="small fw-semibold mb-1">Year</Form.Label>
               <Form.Select size="sm" value={filterYear} onChange={e => setFilterYear(parseInt(e.target.value))}>
                 {years.map(y => <option key={y} value={y}>{y}</option>)}
               </Form.Select>
             </Col>
-            <Col md={3}>
+            <Col xs={12} sm={6} md={3}>
               <Form.Label className="small fw-semibold mb-1">Department</Form.Label>
               <Form.Select size="sm" value={departmentFilter} onChange={e => setDepartmentFilter(e.target.value)}>
                 {departmentOptions.map(dep => <option key={dep} value={dep}>{dep}</option>)}
               </Form.Select>
             </Col>
-            <Col md={2}>
+            <Col xs={12} sm={6} md={2}>
               <Form.Label className="small fw-semibold mb-1">Status</Form.Label>
               <Form.Select size="sm" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
                 <option value="All">All</option>
@@ -369,7 +369,7 @@ export default function DeductionManager() {
                 <option value="without">No Deduction</option>
               </Form.Select>
             </Col>
-            <Col md={2}>
+            <Col xs={12} sm={6} md={2}>
               <Form.Label className="small fw-semibold mb-1">Employee Search</Form.Label>
               <Form.Control size="sm" placeholder="Name / ID" value={searchInput} onChange={e => setSearchInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && setSearch(searchInput)} />
             </Col>
@@ -384,7 +384,7 @@ export default function DeductionManager() {
           { label: 'Total Deduction Amount', value: fmtCurrency(totalDeducted), sub: 'Collected from this month', icon: <FaWallet />, bg: 'linear-gradient(135deg,#fef2f2,#fee2e2)' },
           { label: 'Average Deduction', value: fmtCurrency(averageDeduction), sub: 'Per employee with deduction', icon: <FaChartBar />, bg: 'linear-gradient(135deg,#f5f3ff,#ede9fe)' }
         ].map((card, index) => (
-          <Col md={6} xl={3} key={card.label}>
+          <Col xs={12} sm={6} xl={3} key={card.label}>
             <Card className="border-0 shadow-sm h-100 hover-card" style={{ borderRadius: 18, background: card.bg, transition: 'transform .2s ease, box-shadow .2s ease' }}>
               <Card.Body className="p-4">
                 <div className="d-flex align-items-center justify-content-between mb-3">
@@ -509,19 +509,19 @@ export default function DeductionManager() {
         <Modal.Body>
           <Form onSubmit={handleSubmit}>
             <Row className="g-3">
-              <Col md={6}>
+              <Col xs={12} sm={6}>
                 <Form.Group>
                   <Form.Label className="small fw-semibold">Amount</Form.Label>
                   <Form.Control type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Enter amount" required />
                 </Form.Group>
               </Col>
-              <Col md={6}>
+              <Col xs={12} sm={6}>
                 <Form.Group>
                   <Form.Label className="small fw-semibold">Deduction date</Form.Label>
                   <Form.Control type="date" value={deductionDate} onChange={(e) => setDeductionDate(e.target.value)} required />
                 </Form.Group>
               </Col>
-              <Col md={6}>
+              <Col xs={6}>
                 <Form.Group>
                   <Form.Label className="small fw-semibold">Month</Form.Label>
                   <Form.Select value={formMonth} onChange={(e) => setFormMonth(parseInt(e.target.value))}>
@@ -529,7 +529,7 @@ export default function DeductionManager() {
                   </Form.Select>
                 </Form.Group>
               </Col>
-              <Col md={6}>
+              <Col xs={6}>
                 <Form.Group>
                   <Form.Label className="small fw-semibold">Year</Form.Label>
                   <Form.Select value={formYear} onChange={(e) => setFormYear(parseInt(e.target.value))}>

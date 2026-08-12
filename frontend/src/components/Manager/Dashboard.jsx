@@ -37,6 +37,14 @@ const STAT_PALETTES = {
 
 const DESIG_COLORS = ['#3B82F6','#8B5CF6','#22C55E','#F97316','#EF4444','#0EA5E9','#EC4899','#14B8A6'];
 
+// Mobile-only layout fix — desktop/tablet (>576px) is untouched. The leave-type legend
+// grid forces a fixed 3-column layout via inline style, which is too cramped on a phone.
+const MANAGER_DASH_MOBILE_CSS = `
+  @media (max-width: 576px) {
+    .dash-legend-grid { grid-template-columns: 1fr !important; }
+  }
+`;
+
 const StatCard = ({ label, value, icon, pal, loading, onClick }) => (
   <div
     onClick={onClick}
@@ -367,6 +375,7 @@ const ManagerDashboard = () => {
 
   return (
     <div style={{ background: '#F8FAFC', minHeight: '100vh', padding: '24px 20px' }}>
+      <style>{MANAGER_DASH_MOBILE_CSS}</style>
 
       <WelcomeBanner name={user?.name || user?.employeeId} roleLabel="TL Dashboard" onRefresh={fetchData} refreshing={loading} />
 
@@ -392,6 +401,8 @@ const ManagerDashboard = () => {
         onClockIn={handleClockIn}
         onRequestClockOut={() => setShowClockOutConfirm(true)}
         clockLoading={clockLoading}
+        readOnly={true}
+        readOnlyMessage="Clock in/out from the Attendance page"
         unlimitedBreaks={(user?.department || '').trim().toLowerCase() === 'sales'}
         footerExtra={
           <div style={{ display: 'flex', gap: 2 }}>
@@ -472,7 +483,7 @@ const ManagerDashboard = () => {
 
           {/* Badge-style legend — same flex+baseline layout as admin */}
           {!loading && totalLeaves > 0 && (
-            <div style={{ padding: '0 20px 20px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+            <div className="dash-legend-grid" style={{ padding: '0 20px 20px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
               {leaveSegments.map(seg => (
                 <div
                   key={seg.label}

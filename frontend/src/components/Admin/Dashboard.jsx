@@ -82,6 +82,30 @@ import * as XLSX from 'xlsx';
 // the backend remains the authority on actual eligibility.
 const PAID_LEAVE_ELIGIBILITY_MONTHS = 3;
 
+// Mobile-only layout fixes — desktop/tablet (>576px) is untouched. The tab bar doesn't
+// wrap on its own (ButtonGroup) and the chart legend grids force a fixed column count
+// via inline style, so both need an explicit mobile override here.
+const ADMIN_DASH_MOBILE_CSS = `
+  @media (max-width: 576px) {
+    .admin-dash-tabnav {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 4px;
+      margin-left: -8px;
+      margin-right: -8px;
+      padding-left: 8px;
+      padding-right: 8px;
+    }
+    .admin-dash-tabnav .btn-group { flex-wrap: nowrap; }
+    .admin-dash-tabnav .btn {
+      white-space: nowrap;
+      font-size: 12.5px;
+      padding: 9px 14px;
+    }
+    .dash-legend-grid { grid-template-columns: 1fr !important; }
+  }
+`;
+
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -183,9 +207,10 @@ const AdminDashboard = () => {
       .catch(() => {});
   }, []);
 
-  // Sub-admin / HR: fetch own today's attendance on mount
+  // Admin / Sub-admin (UI "Manager") / HR: fetch own today's attendance on mount —
+  // TL (role 'manager') and Employee don't get the clock-in widget on this dashboard.
   useEffect(() => {
-    if (['sub_admin', 'hr'].includes(user?.role) && user?.employeeId) {
+    if (['admin', 'sub_admin', 'hr'].includes(user?.role) && user?.employeeId) {
       fetchSubAdminAttendance();
     }
   }, [user]);
@@ -892,6 +917,7 @@ const AdminDashboard = () => {
 
   return (
     <div className="p-2 p-md-3 p-lg-4">
+      <style>{ADMIN_DASH_MOBILE_CSS}</style>
       {/* Header */}
       <WelcomeBanner
         name={user?.employeeId}
@@ -901,7 +927,7 @@ const AdminDashboard = () => {
         onExport={() => setShowExportModal(true)}
       />
 
-      {['sub_admin', 'hr'].includes(user?.role) && subAdminClockMessage.text && (
+      {['admin', 'sub_admin', 'hr'].includes(user?.role) && subAdminClockMessage.text && (
         <div style={{
           fontSize: 12, fontWeight: 500, marginBottom: 16, padding: '8px 14px', borderRadius: 8,
           color: subAdminClockMessage.type === 'success' ? '#065f46' : '#991b1b',
@@ -926,12 +952,12 @@ const AdminDashboard = () => {
         onClockIn={handleSubAdminClockIn}
         onRequestClockOut={() => setShowClockOutConfirm(true)}
         clockLoading={subAdminClockLoading}
-        readOnly={!['sub_admin', 'hr'].includes(user?.role)}
+        readOnly={!['admin', 'sub_admin', 'hr'].includes(user?.role)}
         unlimitedBreaks={(user?.department || '').trim().toLowerCase() === 'sales'}
       />
 
       {/* Tab Navigation */}
-      <div className="mb-4">
+      <div className="mb-4 admin-dash-tabnav">
         <ButtonGroup>
           <Button
             variant={activeTab === 'overview' ? 'primary' : 'outline-secondary'}
@@ -1512,7 +1538,7 @@ const AdminDashboard = () => {
                         </div>
 
                         {/* Badge-style legend grid */}
-                        <div style={{
+                        <div className="dash-legend-grid" style={{
                           display: 'grid',
                           gridTemplateColumns: '1fr 1fr',
                           gap: 8,

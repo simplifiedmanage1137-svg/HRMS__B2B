@@ -43,6 +43,7 @@ export default function DashboardQuickAccess({
   onRequestClockOut,
   clockLoading,
   readOnly = false,
+  readOnlyMessage,
   disabledMobile = false,
   canClockOut = true,
   shiftTiming,
@@ -60,6 +61,7 @@ export default function DashboardQuickAccess({
           onRequestClockOut={onRequestClockOut}
           clockLoading={clockLoading}
           readOnly={readOnly}
+          readOnlyMessage={readOnlyMessage}
           disabledMobile={disabledMobile}
           canClockOut={canClockOut}
           shiftTiming={shiftTiming}
