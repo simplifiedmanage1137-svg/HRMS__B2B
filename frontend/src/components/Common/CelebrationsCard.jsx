@@ -1,20 +1,37 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Modal } from 'react-bootstrap';
-import { FaGift, FaBirthdayCake, FaTrophy, FaUserFriends, FaHeart, FaRegHeart, FaCommentDots } from 'react-icons/fa';
+import { FaGift, FaBirthdayCake, FaTrophy, FaUserFriends, FaHeart, FaRegHeart, FaCommentDots, FaTrashAlt, FaEllipsisV } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useNotification } from '../../context/NotificationContext';
+import { useAuth } from '../../context/AuthContext';
 import Avatar from './Avatar';
 import { QA, QA_ANIMATIONS_CSS } from './quickAccessTheme';
+
+const CAN_MANAGE_CELEBRATIONS = ['admin', 'sub_admin', 'hr'];
 
 // Reference span for the mini progress bar's "how soon" fill — not a data filter
 // (the compact row now shows the next people regardless of how far out they are).
 const UPCOMING_WINDOW_DAYS = 90;
 const UPCOMING_LIMIT = 9;
 
-const todayStr = () => new Date().toISOString().split('T')[0];
+// NEVER use `new Date().toISOString().split('T')[0]` for "today" — for a viewer in a timezone
+// ahead of UTC (e.g. IST, UTC+5:30), that converts to UTC first and can report YESTERDAY's date
+// for hours after local midnight. Build the string from local Y/M/D components instead.
+const todayStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+// Same UTC-midnight parsing pitfall as todayStr — parse "YYYY-MM-DD" by its Y/M/D components
+// directly instead of letting `new Date(str)` treat it as UTC.
+const parseDateOnly = (str) => {
+  if (!str) return null;
+  const [y, m, d] = str.split('T')[0].split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+};
 const fmtToday = () => new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long' });
-const fmtShort = (dateStr) => new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+const fmtShort = (dateStr) => parseDateOnly(dateStr)?.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) || '';
 
 // Per-tab theming — this app's own palette (purple/amber/emerald), not a copy of
 // any external reference design's exact brand colors or illustration assets.
@@ -200,7 +217,7 @@ function WishThread({ recipientEmployeeId, recipientName, eventType, accent }) {
   );
 }
 
-function HeroCard({ theme, person, eventType, expanded, confetti, onAction }) {
+function HeroCard({ theme, person, eventType, expanded, confetti, onAction, onHide, hiding }) {
   const name = person.first_name;
   const suffix = eventType === 'anniversary' ? `${person.years} Year${person.years === 1 ? '' : 's'}` : null;
 
@@ -209,6 +226,20 @@ function HeroCard({ theme, person, eventType, expanded, confetti, onAction }) {
       position: 'relative', overflow: 'hidden', borderRadius: 20, padding: 20,
       background: theme.light, display: 'grid', gridTemplateColumns: '1fr 140px', gap: 16, alignItems: 'center',
     }}>
+      {onHide && (
+        <button
+          onClick={onHide}
+          disabled={hiding}
+          title={`Remove ${person.first_name} from celebrations`}
+          style={{
+            position: 'absolute', top: 12, right: 12, zIndex: 2, width: 26, height: 26, borderRadius: '50%',
+            border: 'none', background: 'rgba(255,255,255,0.85)', color: QA.danger, cursor: hiding ? 'not-allowed' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: hiding ? 0.5 : 1,
+          }}
+        >
+          <FaTrashAlt size={11} />
+        </button>
+      )}
       <div style={{ position: 'relative', zIndex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
           <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -274,18 +305,49 @@ function EmptyToday({ theme }) {
   );
 }
 
-function UpcomingRow({ theme, people, showViewAllTile, onViewAll }) {
+function UpcomingRow({ theme, people, showViewAllTile, onViewAll, eventType, canManage, onHide, hidingId }) {
   // The View All tile takes the last slot itself, so up to (LIMIT - 1) real
   // people are shown alongside it — LIMIT divs total, always ending on View All.
   const peopleSlots = showViewAllTile ? UPCOMING_LIMIT - 1 : UPCOMING_LIMIT;
   const shown = people.slice(0, peopleSlots);
+  const isNewJoiner = eventType === 'new_joiner';
+  const [openMenuId, setOpenMenuId] = useState(null);
 
   return (
     <div className="qa-scroll-x">
       {shown.map(p => {
-        const pct = Math.max(8, Math.round(((UPCOMING_WINDOW_DAYS - p.days_until) / UPCOMING_WINDOW_DAYS) * 100));
+        // New joiners don't carry days_until/date from the backend (that's an "upcoming
+        // occurrence" concept for birthdays/anniversaries) — for this tab show how long ago
+        // they actually joined instead, computed from their real joining_date.
+        const daysAgo = isNewJoiner && p.joining_date
+          ? Math.round((new Date().setHours(0, 0, 0, 0) - parseDateOnly(p.joining_date).getTime()) / 86400000)
+          : null;
+        const pct = isNewJoiner ? 100 : Math.max(8, Math.round(((UPCOMING_WINDOW_DAYS - p.days_until) / UPCOMING_WINDOW_DAYS) * 100));
+        const menuOpen = openMenuId === p.employee_id;
         return (
-          <div key={p.employee_id} style={{ width: 142, flexShrink: 0, boxSizing: 'border-box', padding: '10px', borderRadius: 12, background: '#f9fafb' }}>
+          <div key={p.employee_id} style={{ position: 'relative', width: 142, flexShrink: 0, boxSizing: 'border-box', padding: '10px', borderRadius: 12, background: '#f9fafb' }}>
+            {canManage && (
+              <div style={{ position: 'absolute', top: 6, right: 6, zIndex: 3 }}>
+                <button
+                  onClick={() => setOpenMenuId(menuOpen ? null : p.employee_id)}
+                  title="More options"
+                  style={{ width: 22, height: 22, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.9)', color: QA.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <FaEllipsisV size={10} />
+                </button>
+                {menuOpen && (
+                  <div style={{ position: 'absolute', top: 24, right: 0, background: '#fff', border: `1px solid ${QA.border}`, borderRadius: 8, boxShadow: '0 4px 14px rgba(0,0,0,0.14)', minWidth: 168, overflow: 'hidden' }}>
+                    <button
+                      onClick={() => { setOpenMenuId(null); onHide(p); }}
+                      disabled={hidingId === p.employee_id}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '8px 10px', background: 'none', border: 'none', textAlign: 'left', fontSize: 11, fontWeight: 600, color: QA.danger, cursor: hidingId === p.employee_id ? 'not-allowed' : 'pointer' }}
+                    >
+                      <FaTrashAlt size={10} /> Hide from celebrations
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             <Avatar photo={p.profile_image} id={p.employee_id} firstName={p.first_name} lastName={p.last_name} size={34} />
             <div style={{ fontSize: 11, fontWeight: 700, color: QA.textDark, marginTop: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
               title={`${p.first_name} ${p.last_name}`}>
@@ -297,10 +359,12 @@ function UpcomingRow({ theme, people, showViewAllTile, onViewAll }) {
             </div> */}
             <div style={{ marginTop: 6 }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: theme.accent, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {p.date ? fmtShort(p.date) : ''}
+                {isNewJoiner ? (p.joining_date ? fmtShort(p.joining_date) : '') : (p.date ? fmtShort(p.date) : '')}
               </div>
               <div style={{ fontSize: 9, color: QA.textMuted, marginTop: 1 }}>
-                {p.days_until === 1 ? 'Tomorrow' : `in ${p.days_until} days`}
+                {isNewJoiner
+                  ? (daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : daysAgo != null ? `${daysAgo} days ago` : '')
+                  : (p.days_until === 1 ? 'Tomorrow' : `in ${p.days_until} days`)}
               </div>
             </div>
             <div style={{ height: 4, borderRadius: 4, background: '#e5e7eb', marginTop: 6, overflow: 'hidden' }}>
@@ -328,7 +392,7 @@ function UpcomingRow({ theme, people, showViewAllTile, onViewAll }) {
   );
 }
 
-const fmtFull = (dateStr) => new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+const fmtFull = (dateStr) => parseDateOnly(dateStr)?.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) || '';
 
 function AllUpcomingModal({ show, onClose, theme, eventType }) {
   const [list, setList] = useState([]);
@@ -391,7 +455,9 @@ function AllUpcomingModal({ show, onClose, theme, eventType }) {
 }
 
 export default function CelebrationsCard() {
-  const { todayEvents } = useNotification();
+  const { todayEvents, fetchTodayEvents } = useNotification();
+  const { user } = useAuth();
+  const canManage = CAN_MANAGE_CELEBRATIONS.includes(user?.role);
   const [expandedId, setExpandedId] = useState(null);
   const [confettiFor, setConfettiFor] = useState(null);
   // null = not manually chosen yet — falls back to whichever tab actually has
@@ -400,22 +466,39 @@ export default function CelebrationsCard() {
   const [tab, setTab] = useState(null);
   const [upcoming, setUpcoming] = useState({ birthdays: [], anniversaries: [], new_joiners: [] });
   const [showAllModal, setShowAllModal] = useState(false);
+  const [hidingId, setHidingId] = useState(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    // Pull the full-year list (not just the next 14 days) so the compact "Upcoming"
-    // row can always show up to UPCOMING_LIMIT people even if none fall in the next
-    // couple of weeks — "View All" already used this same all=true request.
-    axios.get(API_ENDPOINTS.TODAY_EVENTS_UPCOMING, { params: { all: 'true' } })
-      .then(res => { if (!cancelled && res.data?.success) setUpcoming(res.data); })
+  // Pull the full-year list (not just the next 14 days) so the compact "Upcoming" row can
+  // always show up to UPCOMING_LIMIT people even if none fall in the next couple of weeks —
+  // "View All" already used this same all=true request. Extracted so it can be re-run after
+  // an admin hides someone, not just once on mount.
+  const loadUpcoming = useCallback(() => {
+    return axios.get(API_ENDPOINTS.TODAY_EVENTS_UPCOMING, { params: { all: 'true' } })
+      .then(res => { if (res.data?.success) setUpcoming(res.data); })
       .catch(() => {});
-    return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => { loadUpcoming(); }, [loadUpcoming]);
 
   const handleAction = (employeeId) => {
     setExpandedId(prev => prev === employeeId ? null : employeeId);
     setConfettiFor(employeeId);
     setTimeout(() => setConfettiFor(null), 900);
+  };
+
+  // Admin/HR-only: suppress one person's celebration going forward (data isn't deleted —
+  // sets employees.hide_from_celebrations, enforced server-side in employeeRoutes.js).
+  const handleHide = async (person) => {
+    if (!window.confirm(`Remove ${person.first_name} ${person.last_name} from celebrations? They won't appear here again until an admin re-enables it.`)) return;
+    setHidingId(person.employee_id);
+    try {
+      await axios.put(API_ENDPOINTS.EMPLOYEE_BY_ID(person.id), { hide_from_celebrations: true });
+      await Promise.all([fetchTodayEvents(), loadUpcoming()]);
+    } catch {
+      alert('Failed to remove from celebrations.');
+    } finally {
+      setHidingId(null);
+    }
   };
 
   const todayBirthdays = todayEvents?.birthdays || [];
@@ -483,6 +566,8 @@ export default function CelebrationsCard() {
               expanded={expandedId === todayPeople[0].employee_id}
               confetti={confettiFor === todayPeople[0].employee_id}
               onAction={() => handleAction(todayPeople[0].employee_id)}
+              onHide={canManage ? () => handleHide(todayPeople[0]) : null}
+              hiding={hidingId === todayPeople[0].employee_id}
             />
             {todayPeople.slice(1).map(p => (
               <div key={p.employee_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px' }}>
@@ -495,6 +580,16 @@ export default function CelebrationsCard() {
                   style={{ padding: '5px 12px', borderRadius: 20, border: 'none', background: theme.light, color: theme.accent, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                   {theme.actionLabel}
                 </button>
+                {canManage && (
+                  <button
+                    onClick={() => handleHide(p)}
+                    disabled={hidingId === p.employee_id}
+                    title={`Remove ${p.first_name} from celebrations`}
+                    style={{ width: 26, height: 26, borderRadius: '50%', border: 'none', background: '#fef2f2', color: QA.danger, cursor: hidingId === p.employee_id ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: hidingId === p.employee_id ? 0.5 : 1 }}
+                  >
+                    <FaTrashAlt size={10} />
+                  </button>
+                )}
                 {expandedId === p.employee_id && (
                   <WishThread recipientEmployeeId={p.employee_id} recipientName={`${p.first_name} ${p.last_name}`} eventType={eventType} accent={theme.accent} />
                 )}
@@ -516,9 +611,10 @@ export default function CelebrationsCard() {
             </span>
           </div>
           <UpcomingRow
-            theme={theme} people={upcomingPeople}
+            theme={theme} people={upcomingPeople} eventType={eventType}
             showViewAllTile={activeTab !== 'new_joiners'}
             onViewAll={() => setShowAllModal(true)}
+            canManage={canManage} onHide={handleHide} hidingId={hidingId}
           />
         </>
       )}

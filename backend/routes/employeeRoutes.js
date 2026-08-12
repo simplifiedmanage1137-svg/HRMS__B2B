@@ -304,6 +304,35 @@ router.put('/manager/shift/:employee_id', verifyToken, isAdminOrManager, async (
     }
 });
 
+// Admin/HR-only "hide from celebrations" flag — lets an admin suppress one employee's
+// birthday/anniversary/new-joiner card from CelebrationsCard.jsx without deleting any data.
+// Additive column, safe to run once in the Supabase SQL editor:
+// ALTER TABLE employees ADD COLUMN IF NOT EXISTS hide_from_celebrations BOOLEAN DEFAULT false;
+// Every read below defaults falsy when the column isn't migrated yet (nobody hidden), and the
+// PUT /:id fallback (see ~line 900) drops it from the update rather than failing the request.
+
+// `new Date("2026-08-13")` parses a date-only string as UTC midnight, then reading back
+// .getMonth()/.getDate() on a server running in a timezone behind UTC can silently read the
+// PREVIOUS calendar day — a classic off-by-one for birthdays/anniversaries/joining dates.
+// Parsing the Y-M-D components directly and building the Date with the local-time constructor
+// sidesteps that ambiguity entirely, regardless of server TZ.
+const parseDateOnly = (value) => {
+    if (!value) return null;
+    const [y, m, d] = String(value).split('T')[0].split('-').map(Number);
+    if (!y || !m || !d) return null;
+    return new Date(y, m - 1, d);
+};
+
+// The inverse of parseDateOnly — formats a local Date back to "YYYY-MM-DD" using its local
+// Y/M/D components. NEVER use `date.toISOString().split('T')[0]` for this: for any server
+// timezone AHEAD of UTC (e.g. IST, UTC+5:30 — confirmed this app's deployment), converting a
+// local midnight to UTC first rolls it back into the previous day, so every "upcoming"
+// birthday/anniversary date silently displayed one day too early.
+const localDateStr = (date) => {
+    const y = date.getFullYear(), m = String(date.getMonth() + 1).padStart(2, '0'), d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+};
+
 // ============== TODAY'S EVENTS ROUTE (BIRTHDAYS & ANNIVERSARIES) ==============
 router.get('/today-events', async (req, res) => {
     try {
@@ -324,9 +353,11 @@ router.get('/today-events', async (req, res) => {
         const anniversaries = [];
 
         (employees || []).forEach(emp => {
+            if (emp.hide_from_celebrations) return;
+
             // Check birthday
             if (emp.dob) {
-                const dob = new Date(emp.dob);
+                const dob = parseDateOnly(emp.dob);
                 const dobMonth = dob.getMonth() + 1;
                 const dobDay = dob.getDate();
 
@@ -345,7 +376,7 @@ router.get('/today-events', async (req, res) => {
 
             // Check work anniversary
             if (emp.joining_date) {
-                const joiningDate = new Date(emp.joining_date);
+                const joiningDate = parseDateOnly(emp.joining_date);
                 const joiningMonth = joiningDate.getMonth() + 1;
                 const joiningDay = joiningDate.getDate();
 
@@ -372,7 +403,7 @@ router.get('/today-events', async (req, res) => {
 
         res.json({
             success: true,
-            date: today.toISOString().split('T')[0],
+            date: localDateStr(today),
             birthdays,
             anniversaries,
             total: birthdays.length + anniversaries.length
@@ -405,10 +436,18 @@ router.get('/today-events/upcoming', async (req, res) => {
         sunday.setDate(monday.getDate() + 6);
         sunday.setHours(23, 59, 59, 999);
 
-        const { data: employees, error } = await supabase
+        let { data: employees, error } = await supabase
             .from('employees')
-            .select('id, employee_id, first_name, last_name, dob, joining_date, department, designation, profile_image, is_active')
+            .select('id, employee_id, first_name, last_name, dob, joining_date, department, designation, profile_image, is_active, hide_from_celebrations')
             .eq('is_active', true);
+        if (error && /hide_from_celebrations|does not exist/i.test(error.message || '')) {
+            // Not migrated yet on this DB — retry without it so upcoming events still load;
+            // nobody is treated as hidden until the ALTER TABLE below is run.
+            ({ data: employees, error } = await supabase
+                .from('employees')
+                .select('id, employee_id, first_name, last_name, dob, joining_date, department, designation, profile_image, is_active')
+                .eq('is_active', true));
+        }
         if (error) throw error;
 
         // Returns { daysUntil, occurrenceYear, occurrenceDate } for the next upcoming
@@ -421,7 +460,7 @@ router.get('/today-events/upcoming', async (req, res) => {
             return {
                 daysUntil: Math.round((occurrence - today) / (1000 * 60 * 60 * 24)),
                 occurrenceYear: occurrence.getFullYear(),
-                occurrenceDate: occurrence.toISOString().split('T')[0],
+                occurrenceDate: localDateStr(occurrence),
             };
         };
 
@@ -429,8 +468,9 @@ router.get('/today-events/upcoming', async (req, res) => {
         const anniversaries = [];
 
         (employees || []).forEach(emp => {
+            if (emp.hide_from_celebrations) return;
             if (emp.dob) {
-                const dob = new Date(emp.dob);
+                const dob = parseDateOnly(emp.dob);
                 const { daysUntil, occurrenceDate } = nextOccurrence(dob);
                 if (daysUntil >= 1 && daysUntil <= WINDOW_DAYS) {
                     birthdays.push({
@@ -447,7 +487,7 @@ router.get('/today-events/upcoming', async (req, res) => {
                 }
             }
             if (emp.joining_date) {
-                const joiningDate = new Date(emp.joining_date);
+                const joiningDate = parseDateOnly(emp.joining_date);
                 const { daysUntil, occurrenceYear, occurrenceDate } = nextOccurrence(joiningDate);
                 const years = occurrenceYear - joiningDate.getFullYear();
                 if (years > 0 && daysUntil >= 1 && daysUntil <= WINDOW_DAYS) {
@@ -470,8 +510,8 @@ router.get('/today-events/upcoming', async (req, res) => {
 
         const newJoiners = (employees || [])
             .filter(emp => {
-                if (!emp.joining_date) return false;
-                const j = new Date(emp.joining_date);
+                if (!emp.joining_date || emp.hide_from_celebrations) return false;
+                const j = parseDateOnly(emp.joining_date);
                 return j >= monday && j <= sunday;
             })
             .map(emp => ({
@@ -864,7 +904,7 @@ router.put('/:id', verifyToken, isAdmin, async (req, res) => {
         // Match both, and strip every recently-added optional column at once so a single
         // not-yet-migrated field doesn't lose the rest of the update in the same request.
         if (error && /does not exist|schema cache/i.test(error.message || '')) {
-            const { pt_amount, professional_tax_amount, exclude_from_payroll, isFlexibleShift, ...safeUpdates } = updates;
+            const { pt_amount, professional_tax_amount, exclude_from_payroll, isFlexibleShift, hide_from_celebrations, ...safeUpdates } = updates;
             ({ data, error } = await supabase
                 .from('employees')
                 .update(safeUpdates)
