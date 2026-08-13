@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Modal, Spinner } from 'react-bootstrap';
+import { FaSyncAlt } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 
@@ -54,11 +55,9 @@ export default function TeamBreakDashboard() {
     } catch { /* silent */ } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => {
-    fetchStats();
-    const id = setInterval(fetchStats, 30_000);
-    return () => clearInterval(id);
-  }, [fetchStats]);
+  // Fetch once on mount only — no background poll. Use the refresh button in the header
+  // to pull fresh data on demand instead of hitting the DB every 30s from every open tab.
+  useEffect(() => { fetchStats(); }, [fetchStats]);
 
   useEffect(() => {
     const hasActive = data?.today_breaks?.some(b => !b.break_end);
@@ -137,6 +136,14 @@ export default function TeamBreakDashboard() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
             <span style={{ fontWeight: 700, fontSize: 15, color: '#111827' }}>Team Break Activity</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button
+                onClick={fetchStats}
+                disabled={loading}
+                title="Refresh"
+                style={{ background: 'none', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', color: '#9ca3af', padding: 2, display: 'flex', opacity: loading ? 0.5 : 1 }}
+              >
+                <FaSyncAlt size={12} style={loading ? { animation: 'tbdspin 0.8s linear infinite' } : undefined} />
+              </button>
               {today_breaks.some(b => !b.break_end) && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color: '#ef4444', background: '#fee2e2', borderRadius: 99, padding: '2px 8px' }}>
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', display: 'inline-block', animation: 'pulse 1.2s infinite' }} />
@@ -316,7 +323,7 @@ export default function TeamBreakDashboard() {
         </Modal.Body>
       </Modal>
 
-      <style>{`@keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.3 } }`}</style>
+      <style>{`@keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.3 } } @keyframes tbdspin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </>
   );
 }

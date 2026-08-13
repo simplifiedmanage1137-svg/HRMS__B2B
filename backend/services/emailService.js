@@ -144,6 +144,30 @@ const btn = (text, url) => `
   <a href="${url}" style="display:inline-block;padding:12px 28px;background:#1e3a5f;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;">${text}</a>
 </div>`;
 
+// ─── PASSWORD RESET ──────────────────────────────────────────────────────────
+// The reset link carries a short-lived, single-purpose JWT (see authRoutes.js
+// POST /forgot-password) — never the employee's actual password, which this app
+// never has access to in the first place (bcrypt hash only, one-way).
+const sendPasswordResetEmail = async (employee, resetToken) => {
+    const { to, name } = resolveRecipient(employee);
+    const frontendUrl = getFront();
+    const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
+
+    const html = shell('Password Reset Request', `
+        ${h2('Reset Your Password')}
+        ${para(`Hi ${name}, we received a request to reset your HRMS password. Click the button below to choose a new one.`)}
+        ${btn('Reset Password', resetLink)}
+        ${para('This link expires in 1 hour and can only be used once. If you did not request this, you can safely ignore this email — your password will not be changed.')}
+    `);
+
+    return sendEmail({
+        to,
+        subject: 'Reset your HRMS password',
+        html,
+        text: `Hi ${name}, reset your HRMS password here (expires in 1 hour): ${resetLink}\n\nIf you did not request this, ignore this email.`,
+    });
+};
+
 // ─── 1. SHIFT CHANGE ─────────────────────────────────────────────────────────
 const sendShiftChangeEmail = async (employee, shiftDetails) => {
     const { to, name } = resolveRecipient(employee);
@@ -369,4 +393,5 @@ module.exports = {
     sendNoticeBoardEmail,
     sendAnnouncementEmail,
     sendHolidayEmail,
+    sendPasswordResetEmail,
 };

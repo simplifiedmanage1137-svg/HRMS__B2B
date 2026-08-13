@@ -4,6 +4,7 @@ const rateLimit = require('express-rate-limit');
 const supabase = require('../config/supabase');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { sendPasswordResetEmail } = require('../services/emailService');
 require('dotenv').config();
 
 const loginLimiter = rateLimit({
@@ -435,7 +436,7 @@ router.post('/forgot-password', passwordLimiter, async (req, res) => {
         const { email } = req.body;
         if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
 
-        const { data: user } = await supabase.from('employees').select('id, email, first_name').eq('email', email).maybeSingle();
+        const { data: user } = await supabase.from('employees').select('id, email, first_name, last_name').eq('email', email).maybeSingle();
 
         // Always return same message for security
         if (!user) return res.json({ success: true, message: 'If your email exists, you will receive a reset link' });
@@ -445,6 +446,10 @@ router.post('/forgot-password', passwordLimiter, async (req, res) => {
         if (process.env.NODE_ENV === 'development') {
             console.log('📧 [DEV ONLY] Password reset token for', email, ':', resetToken);
         }
+
+        // Never blocks the response — same fire-and-forget pattern used for every other
+        // notification email in this app (see emailService.js callers elsewhere).
+        sendPasswordResetEmail(user, resetToken).catch(err => console.error('❌ Password reset email failed:', err));
 
         res.json({
             success: true,

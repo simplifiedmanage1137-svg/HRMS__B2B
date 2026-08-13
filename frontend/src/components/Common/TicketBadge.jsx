@@ -19,9 +19,10 @@ export default function TicketBadge({ variant = 'dark' }) {
                 // silent — badge just shows 0 if the count can't be fetched
             }
         };
+        // Fetch once on mount — no 60s poll. This is just a count indicator; clicking it
+        // navigates to the full ticket list, which always fetches fresh data itself.
         fetchCount();
-        const interval = setInterval(fetchCount, 60000);
-        return () => { cancelled = true; clearInterval(interval); };
+        return () => { cancelled = true; };
     }, []);
 
     const isDark = variant === 'dark';

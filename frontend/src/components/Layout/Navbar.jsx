@@ -59,7 +59,6 @@ const Navbar = () => {
 
   const notificationRef  = useRef(null);
   const bellRef          = useRef(null);
-  const noticeIntervalRef = useRef(null);
 
   // clock
   useEffect(() => {
@@ -78,30 +77,17 @@ const Navbar = () => {
     }
   }, [user]);
 
-  // re-fetch notice when admin saves
+  // re-fetch notice when admin saves — event-driven, no polling needed for everyone else
   useEffect(() => {
     const h = () => fetchActiveNotice();
     window.addEventListener('noticeBoardChanged', h);
     return () => window.removeEventListener('noticeBoardChanged', h);
   }, []);
 
-  // poll every 60s
-  useEffect(() => {
-    if (!user) return;
-    noticeIntervalRef.current = setInterval(fetchActiveNotice, 60000);
-    return () => clearInterval(noticeIntervalRef.current);
-  }, [user]);
-
-  // Poll real notifications (tickets, leave, regularization, etc.) every 45s — this is the
-  // "near-real-time" delivery mechanism: no WebSocket exists in this app, so polling at a
-  // tighter interval than the notice board is the safest way to get ticket updates to
-  // appear without a full page refresh, mirroring the pattern already used above.
-  const notificationIntervalRef = useRef(null);
-  useEffect(() => {
-    if (!user) return;
-    notificationIntervalRef.current = setInterval(fetchNotifications, 45000);
-    return () => clearInterval(notificationIntervalRef.current);
-  }, [user]);
+  // Notifications and the notice board are no longer auto-polled on a timer — that was a
+  // steady background DB load from every open tab, every 45-60s, whether or not anyone was
+  // looking. Both still fetch once on mount (above) and notifications refresh on-demand when
+  // the bell is actually opened (see the bell onClick below) — i.e. only "until they call".
 
   // unread badge
   useEffect(() => {
@@ -422,7 +408,7 @@ const Navbar = () => {
           onClick={() => {
             setShowNotifications(s => {
               const opening = !s;
-              if (opening) markAllAsRead();
+              if (opening) { fetchNotifications(); markAllAsRead(); }
               return opening;
             });
           }}

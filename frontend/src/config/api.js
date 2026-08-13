@@ -25,7 +25,7 @@ export const API_ENDPOINTS = {
   MANAGER_UPDATE_SHIFT: (employeeId) => ep(`/api/employees/manager/shift/${employeeId}`),
 
   // Auth
-  LOGIN:   ep('/api/auth/login'),
+  LOGIN:   ep('/api/auth/login'),                // login api checks 
   VERIFY:  ep('/api/auth/verify'),
   REFRESH: ep('/api/auth/refresh'),
   REGISTER: ep('/api/auth/register'),

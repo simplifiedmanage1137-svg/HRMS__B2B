@@ -355,9 +355,12 @@ router.get('/today-events', async (req, res) => {
         (employees || []).forEach(emp => {
             if (emp.hide_from_celebrations) return;
 
-            // Check birthday
-            if (emp.dob) {
-                const dob = parseDateOnly(emp.dob);
+            // Check birthday — parseDateOnly returns null for a malformed/unexpected dob value
+            // (unlike the old `new Date(str)` which silently produced "Invalid Date" instead of
+            // null); skip just this check for that employee rather than crash the whole endpoint,
+            // and don't let it skip their anniversary check below too.
+            const dob = emp.dob ? parseDateOnly(emp.dob) : null;
+            if (dob) {
                 const dobMonth = dob.getMonth() + 1;
                 const dobDay = dob.getDate();
 
@@ -375,8 +378,8 @@ router.get('/today-events', async (req, res) => {
             }
 
             // Check work anniversary
-            if (emp.joining_date) {
-                const joiningDate = parseDateOnly(emp.joining_date);
+            const joiningDate = emp.joining_date ? parseDateOnly(emp.joining_date) : null;
+            if (joiningDate) {
                 const joiningMonth = joiningDate.getMonth() + 1;
                 const joiningDay = joiningDate.getDate();
 
@@ -469,8 +472,8 @@ router.get('/today-events/upcoming', async (req, res) => {
 
         (employees || []).forEach(emp => {
             if (emp.hide_from_celebrations) return;
-            if (emp.dob) {
-                const dob = parseDateOnly(emp.dob);
+            const dob = emp.dob ? parseDateOnly(emp.dob) : null;
+            if (dob) {
                 const { daysUntil, occurrenceDate } = nextOccurrence(dob);
                 if (daysUntil >= 1 && daysUntil <= WINDOW_DAYS) {
                     birthdays.push({
@@ -486,8 +489,8 @@ router.get('/today-events/upcoming', async (req, res) => {
                     });
                 }
             }
-            if (emp.joining_date) {
-                const joiningDate = parseDateOnly(emp.joining_date);
+            const joiningDate = emp.joining_date ? parseDateOnly(emp.joining_date) : null;
+            if (joiningDate) {
                 const { daysUntil, occurrenceYear, occurrenceDate } = nextOccurrence(joiningDate);
                 const years = occurrenceYear - joiningDate.getFullYear();
                 if (years > 0 && daysUntil >= 1 && daysUntil <= WINDOW_DAYS) {
@@ -512,6 +515,7 @@ router.get('/today-events/upcoming', async (req, res) => {
             .filter(emp => {
                 if (!emp.joining_date || emp.hide_from_celebrations) return false;
                 const j = parseDateOnly(emp.joining_date);
+                if (!j) return false;
                 return j >= monday && j <= sunday;
             })
             .map(emp => ({

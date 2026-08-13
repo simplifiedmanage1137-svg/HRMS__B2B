@@ -184,12 +184,12 @@ export const NotificationProvider = ({ children }) => {
     setToastMessage(null);
   }, []);
 
-  // Fetch events when user logs in — depend on stable identifiers only, not function refs
+  // Fetch once when the user logs in — no background re-poll. Today's birthdays/
+  // anniversaries don't change within a session; a fresh login/reload is enough
+  // to pick up new ones (removed the hourly setInterval to cut idle DB load).
   useEffect(() => {
     if (user && token) {
       fetchTodayEvents();
-      const interval = setInterval(fetchTodayEvents, 60 * 60 * 1000);
-      return () => clearInterval(interval);
     }
   }, [user?.employeeId, token]); // eslint-disable-line react-hooks/exhaustive-deps
 

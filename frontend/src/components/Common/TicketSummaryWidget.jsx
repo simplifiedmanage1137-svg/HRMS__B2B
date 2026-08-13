@@ -27,9 +27,10 @@ export default function TicketSummaryWidget() {
         if (!cancelled && res.data?.success) setCounts(res.data);
       } catch { /* silent */ }
     };
+    // Fetch once on mount — no 60s poll. Clicking any bucket navigates to the full ticket
+    // list, which fetches its own fresh data.
     load();
-    const id = setInterval(load, 60000);
-    return () => { cancelled = true; clearInterval(id); };
+    return () => { cancelled = true; };
   }, []);
 
   const goTo = (bucket) => {

@@ -399,11 +399,10 @@ export default function BreakWidget({ isClockedIn = false, isClockedOut = false,
         finally { setLoading(false); }
     }, [isManager, mode]);
 
-    useEffect(() => {
-        fetchStatus();
-        const interval = setInterval(fetchStatus, 30_000);
-        return () => clearInterval(interval);
-    }, [fetchStatus]);
+    // Fetch once on mount only — no background 30s poll. Own break status already refreshes
+    // right after every start/end action (see handleStart/handleEnd below); team-panel/full
+    // mode data refreshes on next page load rather than continuously in the background.
+    useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
     // Live ticker for active breaks
     useEffect(() => {
