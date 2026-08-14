@@ -1556,29 +1556,54 @@ const parseLocalDateTimeIST = (datetimeStr) => {
 };
 
 // Get attendance report
+// Supabase/PostgREST silently caps any query at its default max-rows setting (1000 on this
+// project) — a query with no explicit .range() doesn't error when there's more data than
+// that, it just quietly returns page 1 and drops the rest. For a date range wide enough to
+// cross ~1000 attendance rows (this table already has 1400+ rows for a single ~31-day payroll
+// cycle across the whole company), that silently dropped the START of the range — e.g. a
+// payroll cycle's first few days going missing from every report/export built on this
+// endpoint, with no error anywhere to signal it. Loop pages until a page comes back short.
+const ATTENDANCE_PAGE_SIZE = 1000;
+const fetchAllPages = async (buildQuery) => {
+    let all = [];
+    let offset = 0;
+    for (;;) {
+        const { data, error } = await buildQuery().range(offset, offset + ATTENDANCE_PAGE_SIZE - 1);
+        if (error) return { data: null, error };
+        all = all.concat(data || []);
+        if (!data || data.length < ATTENDANCE_PAGE_SIZE) break;
+        offset += ATTENDANCE_PAGE_SIZE;
+    }
+    return { data: all, error: null };
+};
+
 exports.getAttendanceReport = async (req, res) => {
     try {
         const { start, end, employee_id } = req.query;
         if (!start || !end) {
             return res.status(400).json({ success: false, message: 'Start and end dates are required' });
         }
-        let query = supabase
-            .from('attendance')
-            .select('*, employees(first_name, last_name, department, shift_timing, comp_off_balance, profile_image, "isFlexibleShift")')
-            .gte('attendance_date', start)
-            .lte('attendance_date', end);
-        if (employee_id) query = query.eq('employee_id', employee_id);
-        query = query.order('attendance_date', { ascending: false });
-        let { data: attendance, error: attendanceError } = await query;
-        if (attendanceError && /isFlexibleShift|does not exist/i.test(attendanceError.message || '')) {
-            let fallbackQuery = supabase
+        const buildQuery = () => {
+            let q = supabase
                 .from('attendance')
-                .select('*, employees(first_name, last_name, department, shift_timing, comp_off_balance, profile_image)')
+                .select('*, employees(first_name, last_name, department, shift_timing, comp_off_balance, profile_image, "isFlexibleShift")')
                 .gte('attendance_date', start)
                 .lte('attendance_date', end);
-            if (employee_id) fallbackQuery = fallbackQuery.eq('employee_id', employee_id);
-            fallbackQuery = fallbackQuery.order('attendance_date', { ascending: false });
-            ({ data: attendance, error: attendanceError } = await fallbackQuery);
+            if (employee_id) q = q.eq('employee_id', employee_id);
+            return q.order('attendance_date', { ascending: false });
+        };
+        let { data: attendance, error: attendanceError } = await fetchAllPages(buildQuery);
+        if (attendanceError && /isFlexibleShift|does not exist/i.test(attendanceError.message || '')) {
+            const buildFallbackQuery = () => {
+                let q = supabase
+                    .from('attendance')
+                    .select('*, employees(first_name, last_name, department, shift_timing, comp_off_balance, profile_image)')
+                    .gte('attendance_date', start)
+                    .lte('attendance_date', end);
+                if (employee_id) q = q.eq('employee_id', employee_id);
+                return q.order('attendance_date', { ascending: false });
+            };
+            ({ data: attendance, error: attendanceError } = await fetchAllPages(buildFallbackQuery));
         }
         if (attendanceError) throw attendanceError;
 

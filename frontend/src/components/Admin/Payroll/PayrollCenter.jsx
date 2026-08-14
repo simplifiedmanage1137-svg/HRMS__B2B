@@ -237,10 +237,20 @@ const PayrollCenter = () => {
         new Date(l.start_date) <= endDate
       );
 
+      // A day can have two attendance rows — a placeholder the nightly absent-check cron
+      // wrote before the employee clocked in, and the real one from the regularization
+      // approval. Prefer whichever one is regularized / actually has a clock_in over a
+      // bare placeholder, instead of just letting array order silently decide (which one
+      // ends up here was previously arbitrary — this is what caused the export to sometimes
+      // read the stale placeholder instead of the approved, real record for the same day).
       const attendanceByKey = {};
       attendanceRows.forEach(rec => {
         if (!rec.attendance_date || !rec.employee_id) return;
-        attendanceByKey[`${rec.employee_id}_${rec.attendance_date.split('T')[0]}`] = rec;
+        const key = `${rec.employee_id}_${rec.attendance_date.split('T')[0]}`;
+        const existing = attendanceByKey[key];
+        if (!existing || (!existing.clock_in && rec.clock_in) || (!existing.is_regularized && rec.is_regularized)) {
+          attendanceByKey[key] = rec;
+        }
       });
 
       const leaveByKey = {};
@@ -274,6 +284,10 @@ const PayrollCenter = () => {
         if (dow === 0 || dow === 6) return 'WO';
         const att = attendanceByKey[`${employeeId}_${dateStr}`];
         if (!att) return 'A';
+        // A regularized day always shows as Present on the employee's own Attendance page
+        // (an admin approved it) — the Excel export must agree with what the employee/admin
+        // actually sees there, not silently recompute a stricter Half Day/Absent from hours.
+        if (att.is_regularized) return 'P';
         const status = (att.status || '').toLowerCase();
         if (status === 'present' || status === 'working') return 'P';
         if (status === 'half_day') return 'HF';
