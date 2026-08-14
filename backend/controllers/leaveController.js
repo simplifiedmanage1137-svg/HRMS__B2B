@@ -161,6 +161,63 @@ exports.getLeaveBalance = async (req, res) => {
     }
 };
 
+// ==================== GET LEAVE BALANCE — BULK (ALL ACTIVE EMPLOYEES) ====================
+// Same "available" figure as GET /balance/:employee_id (accrued − used − pending, same
+// probation/accrual rules), but for every active employee in 2 queries total instead of
+// N×3 — built for AttendanceReports.jsx's monthly export, which previously called the
+// single-employee endpoint once per employee in a sequential loop (76+ employees = 76+
+// round trips just to add one column). Read-only: unlike the single-employee endpoint,
+// this does NOT upsert `leave_balance` or sync `comp_off_balance` — callers here only ever
+// read `available`, so there's nothing to gain from writing a cache row for every employee
+// on every export, and doing that as a side effect of a read is exactly what wasn't wanted.
+exports.getLeaveBalanceBulk = async (req, res) => {
+    try {
+        const today = new Date();
+        const currentYear = today.getFullYear();
+
+        const { data: employees, error: empError } = await supabase
+            .from('employees')
+            .select('employee_id, joining_date')
+            .eq('is_active', true);
+        if (empError) throw empError;
+
+        const { data: yearLeaves, error: leaveError } = await supabase
+            .from('leaves')
+            .select('employee_id, days_count, leave_type, status')
+            .in('status', ['approved', 'pending'])
+            .gte('start_date', `${currentYear}-01-01`)
+            .lte('start_date', `${currentYear}-12-31`);
+        if (leaveError) throw leaveError;
+
+        const leavesByEmployee = {};
+        (yearLeaves || []).forEach(l => {
+            (leavesByEmployee[l.employee_id] = leavesByEmployee[l.employee_id] || []).push(l);
+        });
+
+        const sumDays = (leaves, status) => leaves
+            .filter(l => l.status === status && l.leave_type !== 'Unpaid' && l.leave_type !== 'Comp-Off' && l.leave_type !== 'Birthday')
+            .reduce((sum, l) => sum + (parseFloat(l.days_count) || 0), 0);
+
+        const balances = {};
+        (employees || []).forEach(emp => {
+            if (!emp.joining_date) { balances[emp.employee_id] = '0.0'; return; }
+            const joiningDate = new Date(emp.joining_date);
+            if (!isProbationComplete(joiningDate, today)) { balances[emp.employee_id] = '0.0'; return; }
+
+            const currentYearAccrual = calculateCurrentYearAccruedLeaves(joiningDate, today);
+            const empLeaves = leavesByEmployee[emp.employee_id] || [];
+            const used = sumDays(empLeaves, 'approved');
+            const pending = sumDays(empLeaves, 'pending');
+            balances[emp.employee_id] = Math.max(0, currentYearAccrual - used - pending).toFixed(1);
+        });
+
+        res.json({ success: true, balances });
+    } catch (error) {
+        console.error('Error fetching bulk leave balances:', error);
+        res.status(500).json({ success: false, message: error.message || 'Failed to fetch leave balances' });
+    }
+};
+
 // ==================== LEAVE USAGE BY TYPE ====================
 // Days used this year, grouped by leave_type — real data (used, not "remaining per type",
 // since this app tracks one pooled balance across Annual/Sick/Personal/etc.).
@@ -430,6 +487,14 @@ exports.getLeaves = async (req, res) => {
             if (!authenticatedUserId) return res.json([]);
             query = query.eq('employee_id', authenticatedUserId);
         }
+
+        // Optional date-range narrowing — additive, only applied when a caller passes it, so
+        // every existing caller that wants full history keeps getting exactly that. Matches
+        // on overlap (a leave spanning INTO or OUT OF the range still counts), same rule
+        // AttendanceReports.jsx/PayrollCenter.jsx already used to filter this client-side
+        // after fetching everything — now the server does the narrowing instead.
+        if (req.query.start) query = query.gte('end_date', req.query.start);
+        if (req.query.end) query = query.lte('start_date', req.query.end);
 
         query = query.order('created_at', { ascending: false });
         const { data: leaves, error } = await query;

@@ -225,9 +225,13 @@ const PayrollCenter = () => {
       const startStr = localDateStr(startDate);
       const endStr = localDateStr(endDate);
 
+      // `all: true` is required for an admin to see every employee's leaves (without it the
+      // backend restricts the caller to their own leave records) — was missing here entirely.
+      // start/end scopes the query to this cycle server-side instead of fetching every leave
+      // ever recorded and filtering client-side.
       const [attRes, leaveRes] = await Promise.all([
         axios.get(API_ENDPOINTS.ATTENDANCE_REPORT, { params: { start: startStr, end: endStr } }),
-        axios.get(API_ENDPOINTS.LEAVES).catch(() => ({ data: [] })),
+        axios.get(API_ENDPOINTS.LEAVES, { params: { all: true, start: startStr, end: endStr } }).catch(() => ({ data: [] })),
       ]);
       const attendanceRows = attRes.data?.attendance || attRes.data || [];
       const allLeaves = Array.isArray(leaveRes.data) ? leaveRes.data : (leaveRes.data?.data || []);

@@ -485,12 +485,14 @@ const AttendanceReports = () => {
 
       let leaveData = [];
       try {
-        const leaveResponse = await axios.get(API_ENDPOINTS.LEAVES);
-        leaveData = leaveResponse.data.filter(leave =>
-          leave.status === 'approved' &&
-          new Date(leave.end_date) >= cycleStart &&
-          new Date(leave.start_date) <= cycleEnd
-        );
+        // Scoped to this cycle's date range server-side (was fetching every leave record ever
+        // recorded, then filtering client-side, every time this view loaded). `all: true` is
+        // required for an admin to see every employee's leaves, not just their own — was
+        // missing here entirely, so this was actually under-scoped in the other direction too.
+        const leaveResponse = await axios.get(API_ENDPOINTS.LEAVES, {
+          params: { all: true, start: startDateStr, end: endDateStr },
+        });
+        leaveData = leaveResponse.data.filter(leave => leave.status === 'approved');
       } catch (error) {
         console.log('Could not fetch leave data');
       }
@@ -1051,6 +1053,16 @@ const AttendanceReports = () => {
           return (a.first_name || '').localeCompare(b.first_name || '');
         });
 
+        // One request for every employee's leave balance instead of one request PER employee
+        // inside the loop below (was 76+ sequential API calls just to add this column).
+        let leaveBalances = {};
+        try {
+          const balRes = await axios.get(API_ENDPOINTS.LEAVE_BALANCE_BULK);
+          leaveBalances = balRes.data?.balances || {};
+        } catch (error) {
+          console.error('Error fetching bulk leave balances:', error);
+        }
+
         for (const employee of sortedEmployees) {
           if (department !== 'all' && employee.department !== department) continue;
 
@@ -1071,7 +1083,7 @@ const AttendanceReports = () => {
             total_hours: 0
           };
 
-          const leaveBalance = await getLeaveBalance(employee.employee_id);
+          const leaveBalance = leaveBalances[employee.employee_id] ?? '0.0';
           const salary = calculateSalary(employee, empStats.overtime_amount);
 
           const row = {

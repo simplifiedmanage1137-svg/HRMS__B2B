@@ -12,6 +12,10 @@ router.get('/types', leaveController.getLeaveTypes);
 // Get leave balance for employee
 router.get('/balance/:employee_id', leaveController.getLeaveBalance);
 
+// Bulk leave balance for every active employee, in one request — see leaveController.js
+// for why this exists (was previously a per-employee loop in AttendanceReports.jsx's export).
+router.get('/balance-bulk', leaveController.getLeaveBalanceBulk);
+
 // Who's on leave today (dashboard widget)
 router.get('/on-leave-today', leaveController.getOnLeaveToday);
 

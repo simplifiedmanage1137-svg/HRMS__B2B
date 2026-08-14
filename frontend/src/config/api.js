@@ -68,6 +68,7 @@ export const API_ENDPOINTS = {
   LEAVE_APPLY:   ep('/api/leaves/apply'),
   LEAVE_BY_ID:   (id) => ep(`/api/leaves/${id}`),
   LEAVE_BALANCE: (employeeId) => ep(`/api/leaves/balance/${employeeId}`),
+  LEAVE_BALANCE_BULK: ep('/api/leaves/balance-bulk'),
   LEAVE_BALANCE_BY_YEAR: (employeeId, year) => ep(`/api/leaves/balance/${employeeId}/${year}`),
   LEAVE_STATUS:  (id) => ep(`/api/leaves/${id}/status`),
   LEAVE_BY_EMPLOYEE: (employeeId) => ep(`/api/leaves?employee_id=${employeeId}`),
