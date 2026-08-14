@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const supabase = require('../config/supabase');
 const { syncAttendanceForApprovedLeave } = require('../services/leaveAttendanceSync');
+const { isDateHoliday } = require('../data/holidays');
 
 // Helper function to get IST date string
 const getISTDateString = () => {
@@ -24,6 +25,22 @@ const isBirthdayToday = (dob, todayStr) => {
     return d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
 };
 
+const isWeekendDate = (dateStr) => {
+    const dayOfWeek = new Date(dateStr).getDay();
+    return dayOfWeek === 0 || dayOfWeek === 6; // Sunday / Saturday
+};
+
+// Priority for the birthday-auto-Present rule: Company Holiday → Weekend → Birthday on a
+// working day. A birthday that falls on a holiday or a weekend must NOT auto-mark Present —
+// only an actual working-day birthday qualifies. Pure/testable: takes the holiday check as
+// a parameter so it doesn't need the real `holidays` data or a live date to be unit tested.
+const shouldAutoMarkBirthdayPresent = (dob, todayStr, isHolidayFn = isDateHoliday) => {
+    if (!isBirthdayToday(dob, todayStr)) return false;
+    if (isHolidayFn(todayStr)) return false;
+    if (isWeekendDate(todayStr)) return false;
+    return true;
+};
+
 // Auto-creates + auto-approves a Birthday Leave record for an employee whose birthday is
 // today, if they haven't already applied for/received one this year — mirrors the
 // auto-approve behavior in leaveController.applyLeave's Birthday branch so an employee
@@ -43,27 +60,33 @@ const ensureBirthdayLeave = async (employee, todayStr) => {
     if (existing) return null;
 
     const nowIso = new Date().toISOString();
-    const { data: created, error } = await supabase
-        .from('leaves')
-        .insert([{
-            employee_id: employee.employee_id,
-            employee_name: `${employee.first_name} ${employee.last_name}`,
-            leave_type: 'Birthday',
-            leave_duration: 'Full Day',
-            start_date: todayStr,
-            end_date: todayStr,
-            reason: 'Company Birthday Leave',
-            days_count: 1,
-            status: 'approved',
-            applied_date: todayStr,
-            approved_date: todayStr,
-            approved_by: 'SYSTEM',
-            remarks: 'System generated — automatic Birthday Leave',
-            created_at: nowIso,
-            updated_at: nowIso
-        }])
-        .select()
-        .maybeSingle();
+    const leavePayload = {
+        employee_id: employee.employee_id,
+        employee_name: `${employee.first_name} ${employee.last_name}`,
+        leave_type: 'Birthday',
+        leave_duration: 'Full Day',
+        start_date: todayStr,
+        end_date: todayStr,
+        reason: 'Company Birthday Leave',
+        days_count: 1,
+        status: 'approved',
+        applied_date: todayStr,
+        approved_date: todayStr,
+        approved_by: 'SYSTEM',
+        remarks: 'System generated — automatic Birthday Leave',
+        created_at: nowIso,
+        updated_at: nowIso
+    };
+
+    let { data: created, error } = await supabase.from('leaves').insert([leavePayload]).select().maybeSingle();
+    if (error && /employee_name|does not exist/i.test(error.message || '')) {
+        // The live `leaves` table has never had an employee_name column — this exact
+        // same fallback already exists in leaveController.applyLeave for the same reason,
+        // this cron just never had it, which meant every automatic Birthday leave insert
+        // was silently failing (logged, never surfaced) since the feature was written.
+        const { employee_name: _removed, ...payloadWithout } = leavePayload;
+        ({ data: created, error } = await supabase.from('leaves').insert([payloadWithout]).select().maybeSingle());
+    }
 
     if (error) {
         console.error(`❌ Error auto-creating Birthday leave for ${employee.employee_id}:`, error.message);
@@ -120,7 +143,12 @@ const markAbsentEmployeesAsLeave = async () => {
             try {
                 // Birthday leave is recognized regardless of whether the employee already
                 // has an attendance/leave record today — it just shouldn't double-apply.
-                if (isBirthdayToday(employee.dob, today)) {
+                // Company Holiday → Weekend → Birthday-on-working-day priority is enforced
+                // inside shouldAutoMarkBirthdayPresent (a holiday/weekend birthday must not
+                // auto-mark Present). Note: the outer isWeekendOrHoliday check above already
+                // skips this whole function on a weekend, so that case is also covered there;
+                // the holiday check here is the one that was previously missing entirely.
+                if (shouldAutoMarkBirthdayPresent(employee.dob, today)) {
                     const createdBirthdayLeave = await ensureBirthdayLeave(employee, today);
                     if (createdBirthdayLeave) {
                         await syncAttendanceForApprovedLeave(createdBirthdayLeave);
@@ -296,5 +324,9 @@ const triggerAbsentCheck = async () => {
 module.exports = {
     scheduleAbsentCheck,
     triggerAbsentCheck,
-    markAbsentEmployeesAsLeave
+    markAbsentEmployeesAsLeave,
+    // Exported for unit testing — pure, no DB/network calls.
+    isBirthdayToday,
+    isWeekendDate,
+    shouldAutoMarkBirthdayPresent,
 };

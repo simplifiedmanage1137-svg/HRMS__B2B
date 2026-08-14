@@ -398,12 +398,17 @@ const Attendance = () => {
       return statusPill('weekend', 'W-Off', <FaMoon size={10} />);
     }
 
-    // Approved Paid/Birthday/Comp-Off leave — written as a Present placeholder with no
-    // clock_in by leaveAttendanceSync on approval. Must show Present, not "Not Clocked".
-    if (!record.clock_in && record.status === 'present' && record.attendance_type) {
+    // No clock_in but the backend already says Present — two cases write this shape:
+    //   1. Approved Paid/Birthday/Comp-Off leave (leaveAttendanceSync sets attendance_type).
+    //   2. An approved regularization for a request type that never had a time to select in
+    //      the first place — Client Visit / Official Duty / WFH / Other (see NO_PUNCH_TYPES
+    //      in regularizationController.js) — these only get is_regularized + status set,
+    //      never attendance_type. Both must show Present, not "Not Clocked".
+    if (!record.clock_in && record.status === 'present' && (record.attendance_type || record.is_regularized)) {
       const presentReason = record.attendance_type === 'paid_leave' ? 'Paid Leave'
         : record.attendance_type === 'birthday_leave' ? 'Birthday Leave'
         : record.attendance_type === 'comp_off' ? 'Comp-Off'
+        : record.is_regularized ? 'Regularized'
         : null;
       return statusPill('present', presentReason ? `Present — ${presentReason}` : 'Present', <FaCheckCircle size={10} />);
     }
@@ -417,8 +422,19 @@ const Attendance = () => {
       return statusPill('working', 'Working', <span style={{ fontSize: 8 }}>●</span>);
     }
 
-    // Clock in + clock out: calculate from hours — plain word, no extra info
+    // Clock in + clock out: the backend already computed and stored the authoritative status
+    // — at clock-out time (attendanceController) and again on regularization approval
+    // (recalculateAttendanceForApprovedRequest) — using this employee's real shift timing /
+    // flexible-shift rule. Trust record.status instead of recomputing here with
+    // getStatusFromHours' hardcoded 9h threshold, which disagrees for any shift that isn't
+    // exactly 9 hours and was exactly why an approved regularization (or a non-9h-shift
+    // employee's normal day) could show the wrong status. Only fall back to the local
+    // hours-based guess for older rows that never got a status written.
     if (record.clock_in && record.clock_out) {
+      if (record.status === 'present') return statusPill('present', 'Present', <FaCheckCircle size={10} />);
+      if (record.status === 'half_day') return statusPill('half_day', 'Half Day');
+      if (record.status === 'absent') return statusPill('absent', 'Absent');
+
       const totalHours = parseFloat(record.total_hours) || 0;
       const hoursStatus = getStatusFromHours(totalHours);
 
@@ -2466,7 +2482,7 @@ const Attendance = () => {
                               className={`da-row da-row-enter ${record.isToday ? 'fw-bold' : ''}`}
                               style={{
                                 borderBottom: `1px solid ${DA.border}`,
-                                ...(isBirthday ? { background: 'linear-gradient(90deg, rgba(236,72,153,.10), rgba(250,204,21,.10))' } : {})
+                                ...(isBirthday ? { background: 'linear-gradient(90deg, rgba(239,68,68,.35), rgba(250,204,21,.35))' } : {})
                               }}
                             >
                               <td className="small">
