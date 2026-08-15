@@ -4,7 +4,8 @@ const rateLimit = require('express-rate-limit');
 const supabase = require('../config/supabase');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { sendPasswordResetEmail } = require('../services/emailService');
+const crypto = require('crypto');
+const { sendPasswordResetOtpEmail } = require('../services/emailService');
 require('dotenv').config();
 
 const loginLimiter = rateLimit({
@@ -372,92 +373,133 @@ router.post('/change-password', passwordLimiter, async (req, res) => {
     }
 });
 
-// Self-service password reset — step 1: verify identity.
-// There's no email-sending service wired up in this project, so instead of an emailed
-// reset link, Date of Birth OR phone number (whichever the employee has on file) acts
-// as the second factor alongside the employee ID/email. This keeps a stranger from
-// resetting someone else's password with only their (often guessable) employee ID/email.
-const normalizeDate = (val) => String(val || '').split('T')[0].trim();
-const normalizePhone = (val) => String(val || '').replace(/\D/g, '').slice(-10);
+// Self-service password reset — email + 4-digit OTP (replaces the old DOB/phone
+// identity-verification flow entirely; that flow and its /verify-reset-identity route
+// no longer exist). One row per employee in password_reset_otps — a new request
+// overwrites (invalidates) any previous OTP, and a successful verify deletes the row.
+const OTP_EXPIRY_MINUTES = 10;
+const OTP_MAX_ATTEMPTS = 5;
+const OTP_RESEND_COOLDOWN_SECONDS = 60;
 
-router.post('/verify-reset-identity', passwordLimiter, async (req, res) => {
+const generateOtp = () => String(crypto.randomInt(1000, 10000)); // always exactly 4 digits
+
+// Step 1 (and "Resend OTP") — request a fresh OTP by email.
+router.post('/forgot-password', passwordLimiter, async (req, res) => {
     try {
-        const { identifier, method, dob, phone } = req.body;
-        const loginId = (identifier || '').trim();
-        const verifyMethod = method || (phone ? 'phone' : 'dob');
+        const { email } = req.body;
+        if (!email || !email.trim()) return res.status(400).json({ success: false, message: 'Email is required' });
 
-        if (!['dob', 'phone'].includes(verifyMethod)) {
-            return res.status(400).json({ success: false, message: 'Invalid verification method' });
-        }
-        if (!loginId || (verifyMethod === 'dob' ? !dob : !phone)) {
-            return res.status(400).json({
-                success: false,
-                message: `Employee ID / Email and ${verifyMethod === 'dob' ? 'Date of Birth' : 'Phone Number'} are required`,
-            });
-        }
+        const genericResponse = { success: true, message: 'If this email is registered, an OTP has been sent.' };
 
-        const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginId);
-        const { data: user, error } = isEmail
-            ? await supabase.from('employees').select('id, email, dob, phone, is_active').eq('email', loginId.toLowerCase()).maybeSingle()
-            : await supabase.from('employees').select('id, email, dob, phone, is_active').eq('employee_id', loginId).maybeSingle();
-
+        const { data: user, error } = await supabase
+            .from('employees')
+            .select('id, employee_id, email, first_name, last_name, is_active')
+            .eq('email', email.trim().toLowerCase())
+            .maybeSingle();
         if (error) throw error;
 
-        const genericFail = () => res.status(401).json({ success: false, message: "The details you entered don't match our records." });
+        // Same response whether the account exists, is inactive, or the email is wrong —
+        // never reveal account existence to an unauthenticated caller.
+        if (!user || user.is_active === false) return res.json(genericResponse);
 
-        // Don't distinguish "not found" from "deactivated" to an unauthenticated caller.
-        if (!user || user.is_active === false) return genericFail();
-
-        if (verifyMethod === 'dob') {
-            if (!user.dob) {
-                return res.status(400).json({ success: false, message: 'No date of birth is on file for this account. Try Phone Number instead, or contact HR/Admin.' });
+        // Server-side resend cooldown (defense in depth beyond the frontend's own timer —
+        // a page refresh can't bypass this one).
+        const { data: existingOtp } = await supabase
+            .from('password_reset_otps')
+            .select('created_at')
+            .eq('employee_id', user.employee_id)
+            .maybeSingle();
+        if (existingOtp) {
+            const secondsSinceLast = (Date.now() - new Date(existingOtp.created_at).getTime()) / 1000;
+            if (secondsSinceLast < OTP_RESEND_COOLDOWN_SECONDS) {
+                return res.status(429).json({
+                    success: false,
+                    message: `Please wait ${Math.ceil(OTP_RESEND_COOLDOWN_SECONDS - secondsSinceLast)}s before requesting another OTP.`,
+                });
             }
-            if (normalizeDate(dob) !== normalizeDate(user.dob)) return genericFail();
-        } else {
-            if (!user.phone) {
-                return res.status(400).json({ success: false, message: 'No phone number is on file for this account. Try Date of Birth instead, or contact HR/Admin.' });
-            }
-            if (normalizePhone(phone).length < 10 || normalizePhone(phone) !== normalizePhone(user.phone)) return genericFail();
         }
 
-        const resetToken = jwt.sign({ id: user.id, email: user.email, purpose: 'password_reset' }, JWT_SECRET, { expiresIn: '10m' });
+        const otp = generateOtp();
+        const otpHash = await bcrypt.hash(otp, 10);
+        const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000).toISOString();
 
-        res.json({ success: true, resetToken, message: 'Identity verified' });
+        const { error: upsertError } = await supabase
+            .from('password_reset_otps')
+            .upsert(
+                { employee_id: user.employee_id, otp_hash: otpHash, expires_at: expiresAt, attempts: 0, created_at: new Date().toISOString() },
+                { onConflict: 'employee_id' }
+            );
+        if (upsertError) throw upsertError;
+
+        // Never log the OTP itself, not even in development — only that one was generated.
+        console.log(`📧 OTP generated for ${user.employee_id}, expires in ${OTP_EXPIRY_MINUTES}m`);
+
+        // Never blocks the response — same fire-and-forget pattern used for every other
+        // notification email in this app (see emailService.js callers elsewhere).
+        sendPasswordResetOtpEmail(user, otp, OTP_EXPIRY_MINUTES).catch(err => console.error('❌ Password reset OTP email failed:', err));
+
+        res.json(genericResponse);
 
     } catch (error) {
-        console.error('❌ Verify reset identity error:', error);
+        console.error('❌ Forgot password error:', error);
         res.status(500).json({ success: false, message: 'Server error' });
     }
 });
 
-// Forgot password
-router.post('/forgot-password', passwordLimiter, async (req, res) => {
+// Step 2 — verify the OTP, and on success issue the same short-lived reset JWT
+// POST /reset-password already expects (unchanged from before).
+router.post('/verify-otp', passwordLimiter, async (req, res) => {
     try {
-        const { email } = req.body;
-        if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
+        const { email, otp } = req.body;
+        if (!email || !otp) return res.status(400).json({ success: false, message: 'Email and OTP are required' });
 
-        const { data: user } = await supabase.from('employees').select('id, email, first_name, last_name').eq('email', email).maybeSingle();
+        const genericFail = () => res.status(401).json({ success: false, message: 'Incorrect or expired OTP. Please request a new one.' });
 
-        // Always return same message for security
-        if (!user) return res.json({ success: true, message: 'If your email exists, you will receive a reset link' });
+        const { data: user, error: userErr } = await supabase
+            .from('employees')
+            .select('id, employee_id, email, is_active')
+            .eq('email', email.trim().toLowerCase())
+            .maybeSingle();
+        if (userErr) throw userErr;
+        if (!user || user.is_active === false) return genericFail();
 
-        const resetToken = jwt.sign({ id: user.id, email: user.email, purpose: 'password_reset' }, JWT_SECRET, { expiresIn: '1h' });
+        const { data: otpRow, error: otpErr } = await supabase
+            .from('password_reset_otps')
+            .select('*')
+            .eq('employee_id', user.employee_id)
+            .maybeSingle();
+        if (otpErr) throw otpErr;
+        if (!otpRow) return genericFail();
 
-        if (process.env.NODE_ENV === 'development') {
-            console.log('📧 [DEV ONLY] Password reset token for', email, ':', resetToken);
+        if (new Date(otpRow.expires_at) < new Date()) {
+            // Expired — clean up so a fresh "Send OTP" isn't blocked by the resend cooldown.
+            await supabase.from('password_reset_otps').delete().eq('employee_id', user.employee_id);
+            return genericFail();
         }
 
-        // Never blocks the response — same fire-and-forget pattern used for every other
-        // notification email in this app (see emailService.js callers elsewhere).
-        sendPasswordResetEmail(user, resetToken).catch(err => console.error('❌ Password reset email failed:', err));
+        if (otpRow.attempts >= OTP_MAX_ATTEMPTS) {
+            await supabase.from('password_reset_otps').delete().eq('employee_id', user.employee_id);
+            return res.status(429).json({ success: false, message: 'Too many incorrect attempts. Please request a new OTP.' });
+        }
 
-        res.json({
-            success: true,
-            message: 'If your email exists, you will receive a reset link',
-        });
+        const isMatch = await bcrypt.compare(String(otp).trim(), otpRow.otp_hash);
+        if (!isMatch) {
+            const attemptsLeft = OTP_MAX_ATTEMPTS - (otpRow.attempts + 1);
+            await supabase.from('password_reset_otps').update({ attempts: otpRow.attempts + 1 }).eq('employee_id', user.employee_id);
+            return res.status(401).json({
+                success: false,
+                message: attemptsLeft > 0 ? `Incorrect OTP. ${attemptsLeft} attempt(s) remaining.` : 'Incorrect OTP. Please request a new one.',
+            });
+        }
+
+        // Correct — invalidate the OTP immediately so it can never be reused.
+        await supabase.from('password_reset_otps').delete().eq('employee_id', user.employee_id);
+
+        const resetToken = jwt.sign({ id: user.id, email: user.email, purpose: 'password_reset' }, JWT_SECRET, { expiresIn: '10m' });
+        res.json({ success: true, resetToken, message: 'OTP verified' });
 
     } catch (error) {
-        console.error('❌ Forgot password error:', error);
+        console.error('❌ Verify OTP error:', error);
         res.status(500).json({ success: false, message: 'Server error' });
     }
 });

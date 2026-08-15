@@ -37,6 +37,7 @@ const Teams               = lazy(() => import('./components/Admin/Teams'));
 const PayrollCenter       = lazy(() => import('./components/Admin/Payroll/PayrollCenter'));
 const DeductionManager    = lazy(() => import('./components/Admin/DeductionManager'));
 const LeaveBalanceAdjustment = lazy(() => import('./components/Admin/LeaveBalanceAdjustment'));
+const EmailCenter         = lazy(() => import('./components/Admin/EmailCenter'));
 const FinanceExport       = lazy(() => import('./components/Admin/FinanceExport'));
 const ManagerTeam         = lazy(() => import('./components/Admin/ManagerTeam'));
 const AdminManagerTeams   = lazy(() => import('./components/Admin/AdminManagerTeams'));
@@ -292,6 +293,13 @@ function AppContent() {
             <Route path="/admin/leave-balance" element={
               <PrivateRoute allowedRoles={['admin', 'sub_admin', 'hr']}>
                 <LeaveBalanceAdjustment />
+              </PrivateRoute>
+            } />
+
+            {/* Email — Admin/HR manual compose to Managers/Team Leaders/HR/individual employees */}
+            <Route path="/admin/email" element={
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'hr']}>
+                <EmailCenter />
               </PrivateRoute>
             } />
 

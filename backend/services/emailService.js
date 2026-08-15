@@ -4,7 +4,11 @@
 const { Resend } = require('resend');
 
 // ─── Safe defaults (used when env var is missing or blank) ────────────────────
-const DEFAULT_FROM  = 'HRMS <noreply@hrms.b2bindemand.agency>';
+// The Resend-verified domain is the apex `b2bindemand.agency` — NOT the `hrms.` subdomain
+// (confirmed live via resend.domains.list()). Sending "from" an address on a subdomain that
+// wasn't itself separately verified gets a 403 from Resend even though the apex is verified,
+// which is exactly the bug this default used to have (and EMAIL_FROM was set to match it).
+const DEFAULT_FROM  = 'HRMS <noreply@b2bindemand.agency>';
 const DEFAULT_FRONT = 'https://hrms.b2bindemand.agency';
 
 
@@ -43,7 +47,10 @@ const getFront = () => envStr('FRONTEND_URL', DEFAULT_FRONT).replace(/\/$/, '');
 
 // ─── Core send wrapper ────────────────────────────────────────────────────────
 // Never throws — always returns { success, ... } so callers are never blocked.
-const sendEmail = async ({ to, subject, html, text }) => {
+// cc/bcc are optional string[] — omitted entirely from the Resend payload when empty,
+// rather than passed as `[]`, since Resend treats an empty array differently from a
+// missing field in some SDK versions.
+const sendEmail = async ({ to, subject, html, text, cc, bcc }) => {
     const from       = getFrom();
     const frontendUrl = getFront();
     const resend     = process.env.RESEND_API_KEY
@@ -54,6 +61,8 @@ const sendEmail = async ({ to, subject, html, text }) => {
     console.log('📧 Sending email');
     console.log('   Sending email from:', from);
     console.log('   Sending email to  :', to);
+    if (cc?.length)  console.log('   CC                :', cc);
+    if (bcc?.length) console.log('   BCC               :', bcc);
     console.log('   Email button URL  :', `${frontendUrl}/attendance`);
     console.log('   Subject           :', subject);
 
@@ -67,7 +76,10 @@ const sendEmail = async ({ to, subject, html, text }) => {
     }
 
     try {
-        const result = await resend.emails.send({ from, to, subject, html, text });
+        const payload = { from, to, subject, html, text };
+        if (cc?.length)  payload.cc  = cc;
+        if (bcc?.length) payload.bcc = bcc;
+        const result = await resend.emails.send(payload);
         console.log('✅ Resend response:', JSON.stringify(result));
         if (result.error) {
             console.error('❌ Resend error details:', result.error);
@@ -89,7 +101,7 @@ const shell = (title, bodyHtml) => {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${title}</title>
+  
 </head>
 <body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:32px 16px;">
@@ -98,7 +110,7 @@ const shell = (title, bodyHtml) => {
         <tr>
           <td style="background:#1e3a5f;padding:24px 32px;">
             <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">B2BinDemand HRMS</h1>
-            <p style="margin:4px 0 0;color:#94b8d6;font-size:13px;">${title}</p>
+
           </td>
         </tr>
         <tr><td style="padding:32px;">${bodyHtml}</td></tr>
@@ -144,27 +156,61 @@ const btn = (text, url) => `
   <a href="${url}" style="display:inline-block;padding:12px 28px;background:#1e3a5f;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;">${text}</a>
 </div>`;
 
-// ─── PASSWORD RESET ──────────────────────────────────────────────────────────
-// The reset link carries a short-lived, single-purpose JWT (see authRoutes.js
-// POST /forgot-password) — never the employee's actual password, which this app
-// never has access to in the first place (bcrypt hash only, one-way).
-const sendPasswordResetEmail = async (employee, resetToken) => {
+// ─── PASSWORD RESET OTP ───────────────────────────────────────────────────────
+// The OTP itself is generated + hashed for storage entirely in authRoutes.js — this
+// function only ever receives the plain 4-digit code to put in the email body, never
+// touches how it's stored/verified. Never logs the OTP itself (only the generic
+// send-email logging sendEmail() already does — subject/recipient, no OTP value).
+const sendPasswordResetOtpEmail = async (employee, otp, expiryMinutes) => {
     const { to, name } = resolveRecipient(employee);
-    const frontendUrl = getFront();
-    const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
 
-    const html = shell('Password Reset Request', `
-        ${h2('Reset Your Password')}
-        ${para(`Hi ${name}, we received a request to reset your HRMS password. Click the button below to choose a new one.`)}
-        ${btn('Reset Password', resetLink)}
-        ${para('This link expires in 1 hour and can only be used once. If you did not request this, you can safely ignore this email — your password will not be changed.')}
+    const html = shell('Your Password Reset OTP', `
+        ${h2('Password Reset OTP')}
+        ${para(`Hi ${name}, we received a request to reset your HRMS password. Use the code below to continue.`)}
+        <div style="text-align:center;margin:24px 0;">
+          <span style="display:inline-block;padding:16px 32px;background:#f0f4ff;border:2px dashed #1e3a5f;border-radius:10px;font-size:32px;font-weight:800;letter-spacing:8px;color:#1e3a5f;">${otp}</span>
+        </div>
+        ${para(`This OTP will expire in <strong>${expiryMinutes} minutes</strong>. Do not share this code with anyone — HRMS staff will never ask you for it.`)}
+        ${para('If you did not request a password reset, please ignore this email — your password will not be changed.')}
     `);
 
     return sendEmail({
         to,
-        subject: 'Reset your HRMS password',
+        subject: 'Your Password Reset OTP',
         html,
-        text: `Hi ${name}, reset your HRMS password here (expires in 1 hour): ${resetLink}\n\nIf you did not request this, ignore this email.`,
+        text: `Hi ${name}, your OTP for resetting your password is ${otp}. This OTP will expire in ${expiryMinutes} minutes. If you did not request a password reset, please ignore this email.`,
+    });
+};
+
+// ─── NEW EMPLOYEE CREDENTIALS ─────────────────────────────────────────────────
+// Sent to the candidate's own email the moment their onboarding submission
+// auto-creates their employee account (see onboardingRoutes.js POST /:token/submit).
+// The temp password is plain text here ONLY because it's genuinely one-time/temporary —
+// the employee is expected to change it on first login, same as it's already shown
+// once on the submission-success screen; this is not the employee's real password.
+const sendEmployeeCredentialsEmail = async (employee, credentials) => {
+    const { to, name } = resolveRecipient(employee);
+    const { employeeId, tempPassword } = credentials || {};
+    const frontendUrl = getFront();
+
+    const html = shell('Your HRMS Login Details', `
+        ${h2(`🎉 Welcome to the team, ${name}!`)}
+        ${para('Your employee account has been created. Use the credentials below to log in to HRMS.')}
+        ${tbl(
+            row('Employee ID', employeeId, true) +
+            row('Email', to) +
+            row('Temporary Password', `<span style="font-family:monospace;font-weight:700;">${tempPassword}</span>`)
+        )}
+        ${para('For security, please log in and change this temporary password as soon as possible.')}
+        ${btn('Log In to HRMS', `${frontendUrl}/login`)}
+        ${para('If you did not expect this email, please contact HR immediately.')}
+    `);
+
+    return sendEmail({
+        to,
+        subject: 'Your HRMS Login Details',
+        html,
+        text: `Hi ${name}, your HRMS account is ready.\n\nEmployee ID: ${employeeId}\nEmail: ${to}\nTemporary Password: ${tempPassword}\n\nPlease log in and change your password as soon as possible: ${frontendUrl}/login`,
     });
 };
 
@@ -378,7 +424,245 @@ const sendHolidayEmail = async (employeeList, holidayDetails) => {
     return { sent, failed };
 };
 
+// ─── 7. NEW EMPLOYEE JOINED ──────────────────────────────────────────────────
+// Bulk-sent to every Manager (role='sub_admin' — see roleGroups.js for the naming
+// note) + every HR (role='hr') when a new employee is created.
+const sendNewJoinerEmail = async (newEmployee, recipientList) => {
+    const { first_name, last_name, employee_id, department, designation, joining_date } = newEmployee || {};
+    const empName = `${first_name || ''} ${last_name || ''}`.trim() || 'New Employee';
+    const frontendUrl = getFront();
+
+    const results = await Promise.allSettled(
+        (recipientList || []).filter(e => e?.email).map(e => {
+            const name = `${e.first_name || ''} ${e.last_name || ''}`.trim() || 'Team';
+            const html = shell('New Employee Joined', `
+                ${h2('👋 A New Employee Has Joined')}
+                ${para(`Hi ${name}, a new employee has been added to HRMS.`)}
+                ${tbl(
+                    row('Name', empName, true) +
+                    row('Employee ID', employee_id) +
+                    row('Department', department || '—') +
+                    row('Designation', designation || '—') +
+                    row('Joining Date', joining_date ? new Date(joining_date).toLocaleDateString('en-IN') : '—')
+                )}
+                ${btn('View Employee Directory', `${frontendUrl}/admin/employees`)}
+            `);
+            return sendEmail({
+                to: e.email,
+                subject: `New Employee Joined: ${empName} (${employee_id || ''})`,
+                html,
+                text: `${empName} (${employee_id || ''}) has joined as ${designation || 'N/A'} in ${department || 'N/A'}, effective ${joining_date || 'N/A'}.`,
+            });
+        })
+    );
+
+    const sent   = results.filter(r => r.status === 'fulfilled' && r.value?.success).length;
+    const failed = results.length - sent;
+    console.log(`📧 New-joiner emails: ${sent} sent, ${failed} failed`);
+    return { sent, failed };
+};
+
+// ─── 8. LEAVE / COMP-OFF APPLIED ─────────────────────────────────────────────
+// Bulk-sent to the applicant's reporting manager + HR when a leave/comp-off request
+// is submitted (status change on approve/reject/cancel is handled separately by
+// the existing sendLeaveStatusEmail, sent to the applicant themselves).
+const sendLeaveAppliedEmail = async (leaveDetails, recipientList) => {
+    const { employeeName, leaveType, startDate, endDate, daysCount, reason } = leaveDetails || {};
+    const frontendUrl = getFront();
+    const isCompOff = leaveType === 'Comp-Off';
+
+    const results = await Promise.allSettled(
+        (recipientList || []).filter(e => e?.email).map(e => {
+            const name = `${e.first_name || ''} ${e.last_name || ''}`.trim() || 'Team';
+            const html = shell(`New ${isCompOff ? 'Comp-Off' : 'Leave'} Application`, `
+                ${h2(`📝 New ${isCompOff ? 'Comp-Off' : 'Leave'} Request`)}
+                ${para(`Hi ${name}, ${employeeName} has applied for ${leaveType}.`)}
+                ${tbl(
+                    row('Employee', employeeName, true) +
+                    row('Leave Type', leaveType) +
+                    row('From', startDate) +
+                    row('To', endDate) +
+                    row('Total Days', daysCount) +
+                    (reason ? row('Reason', escapeHtml(reason)) : '') +
+                    row('Status', badge('PENDING', '#d97706'))
+                )}
+                ${para('Please review and take action in HRMS.')}
+                ${btn('Review Request', `${frontendUrl}/admin/leave-requests`)}
+            `);
+            return sendEmail({
+                to: e.email,
+                subject: `${isCompOff ? 'Comp-Off' : 'Leave'} Application: ${employeeName} (${startDate} – ${endDate})`,
+                html,
+                text: `${employeeName} applied for ${leaveType} from ${startDate} to ${endDate}.${reason ? ' Reason: ' + reason : ''}`,
+            });
+        })
+    );
+
+    const sent   = results.filter(r => r.status === 'fulfilled' && r.value?.success).length;
+    const failed = results.length - sent;
+    console.log(`📧 Leave-applied emails: ${sent} sent, ${failed} failed`);
+    return { sent, failed };
+};
+
+// ─── 9. TICKET CREATED (for a specific employee) ────────────────────────────
+const sendTicketCreatedEmail = async (employee, ticketDetails) => {
+    const { to, name } = resolveRecipient(employee);
+    const { ticketNumber, subject: ticketSubject, description, priority, department, raisedByName } = ticketDetails || {};
+    const frontendUrl = getFront();
+    const priorityColor = priority === 'urgent' || priority === 'critical' ? '#dc2626'
+        : priority === 'high' ? '#ea580c' : '#1e3a5f';
+
+    const html = shell('Support Ticket Raised', `
+        ${h2('🎫 A Ticket Has Been Raised For You')}
+        ${para(`Hi ${name}, a support ticket has been raised${raisedByName ? ` by ${raisedByName}` : ''} on your behalf.`)}
+        ${tbl(
+            row('Ticket', ticketNumber, true) +
+            row('Subject', escapeHtml(ticketSubject)) +
+            row('Department', department) +
+            row('Priority', badge((priority || 'medium').toUpperCase(), priorityColor)) +
+            row('Status', badge('OPEN', '#1e3a5f')) +
+            (description ? row('Description', escapeHtml(description)) : '')
+        )}
+        ${btn('View Ticket', `${frontendUrl}/tickets`)}
+    `);
+
+    return sendEmail({
+        to,
+        subject: `Ticket Raised: ${ticketNumber} — ${ticketSubject}`,
+        html,
+        text: `A ticket (${ticketNumber}) titled "${ticketSubject}" has been raised for you. Priority: ${priority || 'medium'}.`,
+    });
+};
+
+// ─── 10. TICKET STATUS CHANGED ───────────────────────────────────────────────
+const TICKET_STATUS_LABELS = {
+    open: 'Open',
+    in_progress: 'In Progress',
+    resolved_pending: 'Resolved — Awaiting Your Confirmation',
+    reopened: 'Reopened',
+    closed: 'Closed',
+};
+const TICKET_STATUS_COLORS = {
+    open: '#1e3a5f',
+    in_progress: '#d97706',
+    resolved_pending: '#16a34a',
+    reopened: '#dc2626',
+    closed: '#64748b',
+};
+
+const sendTicketStatusEmail = async (employee, ticketDetails) => {
+    const { to, name } = resolveRecipient(employee);
+    const { ticketNumber, subject: ticketSubject, status, resolveNote, updatedBy } = ticketDetails || {};
+    const frontendUrl = getFront();
+    const label = TICKET_STATUS_LABELS[status] || status;
+    const color = TICKET_STATUS_COLORS[status] || '#1e3a5f';
+
+    const html = shell('Ticket Status Updated', `
+        ${h2('🎫 Your Ticket Status Has Changed')}
+        ${para(`Hi ${name}, your ticket status has been updated.`)}
+        ${tbl(
+            row('Ticket', ticketNumber, true) +
+            row('Subject', escapeHtml(ticketSubject)) +
+            row('New Status', badge(label, color)) +
+            (updatedBy ? row('Updated By', updatedBy) : '') +
+            (resolveNote ? row('Note', escapeHtml(resolveNote)) : '') +
+            row('Updated On', new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST')
+        )}
+        ${status === 'resolved_pending'
+            ? para('Please confirm whether this resolves your issue, or let us know if you still need help.')
+            : ''}
+        ${btn('View Ticket', `${frontendUrl}/tickets`)}
+    `);
+
+    return sendEmail({
+        to,
+        subject: `Ticket ${label}: ${ticketNumber}`,
+        html,
+        text: `Your ticket ${ticketNumber} ("${ticketSubject}") status changed to ${label}.`,
+    });
+};
+
+// ─── 11. MANUAL ADMIN/HR EMAIL (Email section, Admin & HR panel) ────────────
+// subject/message are free-typed by an admin/HR user — escaped before going into
+// HTML (never trust it, even from an authorized internal user).
+// cc/bcc (optional string[]) are applied to EVERY individual send below — this function
+// sends one personalized email per "to" recipient (not one email with everyone in the `to`
+// field), so a cc'd/bcc'd person receives one copy per main recipient, not just one total.
+// Worth knowing if a large recipient list is combined with cc/bcc.
+const sendManualEmail = async (recipientList, { subject, message, sentByName, cc, bcc }) => {
+    const frontendUrl = getFront();
+    const safeSubject = escapeHtml(subject);
+
+    const results = await Promise.allSettled(
+        (recipientList || []).filter(e => e?.email).map(e => {
+            const name = `${e.first_name || ''} ${e.last_name || ''}`.trim() || e.name || 'Employee';
+            const html = shell(safeSubject, `
+                ${h2(safeSubject)}
+                ${para(`Hi ${name},`)}
+                <div style="background:#f8fafc;border-left:4px solid #1e3a5f;padding:16px 20px;border-radius:0 8px 8px 0;margin:16px 0;">
+                  <p style="margin:0;font-size:14px;color:#1e293b;line-height:1.6;white-space:pre-wrap;">${escapeHtml(message)}</p>
+                </div>
+                ${sentByName ? tbl(
+                    row('Sent By', sentByName) +
+                    row('Sent On', new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST')
+                ) : ''}
+                ${btn('Open HRMS Portal', frontendUrl)}
+            `);
+            return sendEmail({ to: e.email, subject, html, text: `Hi ${name},\n\n${message}`, cc, bcc });
+        })
+    );
+
+    const sent   = results.filter(r => r.status === 'fulfilled' && r.value?.success).length;
+    const failed = results.length - sent;
+    console.log(`📧 Manual admin/HR emails: ${sent} sent, ${failed} failed`);
+    return { sent, failed, total: results.length };
+};
+
+// ─── 12. OFFER/ONBOARDING LINK ───────────────────────────────────────────────
+// Sends the generated candidate onboarding link directly to their email, with
+// optional CC (e.g. the hiring manager, another HR member).
+const sendOfferLinkEmail = async (candidateEmail, offerDetails, cc) => {
+    const { link, employeeName, designation, department, salary, expiryDate, notes } = offerDetails || {};
+    const frontendUrl = getFront();
+    const name = employeeName || 'there';
+
+    const html = shell('You\'re Invited to Join Us', `
+        ${h2(`🎉 Welcome, ${escapeHtml(name)}!`)}
+        ${para(`Hi ${escapeHtml(name)}, we're excited to offer you the position of <strong>${escapeHtml(designation)}</strong> in our ${escapeHtml(department)} team. Click the button below to complete your onboarding.`)}
+        ${tbl(
+            row('Position', escapeHtml(designation), true) +
+            row('Department', escapeHtml(department)) +
+            (salary ? row('Offered Salary', `₹${Number(salary).toLocaleString('en-IN')}/month`) : '') +
+            row('Offer Valid Until', expiryDate ? new Date(expiryDate).toLocaleDateString('en-IN') : '—')
+        )}
+        ${notes ? para(`<em>${escapeHtml(notes)}</em>`) : ''}
+        ${btn('Complete Your Onboarding', link)}
+        ${para('This is a secure, one-time link generated specifically for you. Please do not share it with anyone else.')}
+    `);
+
+    return sendEmail({
+        to: candidateEmail,
+        cc,
+        subject: `You're Invited to Join Us — ${designation || 'Offer'}`,
+        html,
+        text: `Hi ${name}, you've been offered the position of ${designation} in ${department}. Complete your onboarding here: ${link}`,
+    });
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+// Minimal HTML-escape for free-typed user content going into an HTML email body —
+// this is NOT a full sanitizer (no markup is ever allowed through), just prevents
+// broken/injected markup from a subject/message/reason field.
+const escapeHtml = (str) => {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+};
+
 const resolveRecipient = (employee) => {
     if (!employee) return { to: null, name: 'Employee' };
     const name = `${employee.first_name || ''} ${employee.last_name || ''}`.trim() || 'Employee';
@@ -393,5 +677,12 @@ module.exports = {
     sendNoticeBoardEmail,
     sendAnnouncementEmail,
     sendHolidayEmail,
-    sendPasswordResetEmail,
+    sendPasswordResetOtpEmail,
+    sendEmployeeCredentialsEmail,
+    sendNewJoinerEmail,
+    sendLeaveAppliedEmail,
+    sendTicketCreatedEmail,
+    sendTicketStatusEmail,
+    sendManualEmail,
+    sendOfferLinkEmail,
 };

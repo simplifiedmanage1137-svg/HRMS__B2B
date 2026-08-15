@@ -1,6 +1,6 @@
 // src/components/Employee/Dashboard.jsx
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Table, Badge, Spinner, Alert, Button, Modal, ButtonGroup } from 'react-bootstrap';
+import { Row, Col, Card, Table, Badge, Spinner, Alert, Button, Modal, ButtonGroup, Form } from 'react-bootstrap';
 import {
   FaUserCircle,
   FaCalendarAlt,
@@ -85,6 +85,15 @@ const EmployeeDashboard = () => {
   const [message, setMessage] = useState({ type: '', text: '' });
   const [canClockOut, setCanClockOut] = useState(false);
   const [showClockOutConfirm, setShowClockOutConfirm] = useState(false);
+
+  // Tickets the employee raised that the team has marked resolved and is now waiting on
+  // THEM to confirm (status 'resolved_pending') — surfaced as a popup on dashboard load
+  // instead of only showing up if they happen to click into /tickets on their own.
+  const [pendingConfirmTickets, setPendingConfirmTickets] = useState([]);
+  const [showTicketConfirmModal, setShowTicketConfirmModal] = useState(false);
+  const [ticketActionLoading, setTicketActionLoading] = useState(false);
+  const [ticketDeclineNote, setTicketDeclineNote] = useState('');
+  const [showTicketDeclineInput, setShowTicketDeclineInput] = useState(false);
 
   const OFFICE_COORDS = { radius: 100 };
   const STORAGE_KEY = `attendance_session_${user?.employeeId}`;
@@ -349,8 +358,70 @@ const EmployeeDashboard = () => {
     if (user?.employeeId) {
       loadDashboardData();
       fetchAllRatings();
+      checkPendingTicketConfirmations();
     }
   }, [user]);
+
+  // Fetch once on login/dashboard load — no polling, same convention as the other
+  // fetch-once-on-mount checks in NotificationContext/TicketBadge. GET /api/tickets has
+  // no server-side status filter, but for a regular employee the visible set is already
+  // scoped down to their own raised/assigned/department tickets (see visibleTicketsQuery
+  // in ticketRoutes.js), so filtering client-side here is cheap and needs no new endpoint.
+  const checkPendingTicketConfirmations = async () => {
+    try {
+      const res = await axios.get(API_ENDPOINTS.TICKETS);
+      const tickets = res.data?.tickets || [];
+      const mine = tickets.filter(t => t.raised_by === user.employeeId && t.status === 'resolved_pending');
+      if (mine.length > 0) {
+        setPendingConfirmTickets(mine);
+        setShowTicketConfirmModal(true);
+      }
+    } catch (error) {
+      console.error('Error checking pending ticket confirmations:', error);
+    }
+  };
+
+  const activeConfirmTicket = pendingConfirmTickets[0] || null;
+
+  useEffect(() => {
+    if (showTicketConfirmModal && pendingConfirmTickets.length === 0) {
+      setShowTicketConfirmModal(false);
+    }
+  }, [pendingConfirmTickets, showTicketConfirmModal]);
+
+  const advanceTicketQueue = () => {
+    setPendingConfirmTickets(prev => prev.slice(1));
+    setShowTicketDeclineInput(false);
+    setTicketDeclineNote('');
+  };
+
+  const handleConfirmTicketResolved = async () => {
+    if (!activeConfirmTicket) return;
+    setTicketActionLoading(true);
+    try {
+      await axios.patch(API_ENDPOINTS.TICKET_ACCEPT(activeConfirmTicket.id));
+      showNotification('Ticket closed. Thanks for confirming!', 'success');
+      advanceTicketQueue();
+    } catch (error) {
+      showNotification(error.response?.data?.message || 'Failed to close ticket', 'danger');
+    } finally {
+      setTicketActionLoading(false);
+    }
+  };
+
+  const handleDeclineTicketResolution = async () => {
+    if (!activeConfirmTicket) return;
+    setTicketActionLoading(true);
+    try {
+      await axios.patch(API_ENDPOINTS.TICKET_DECLINE(activeConfirmTicket.id), { reason: ticketDeclineNote.trim() });
+      showNotification('Ticket reopened — the team has been notified.', 'info');
+      advanceTicketQueue();
+    } catch (error) {
+      showNotification(error.response?.data?.message || 'Failed to reopen ticket', 'danger');
+    } finally {
+      setTicketActionLoading(false);
+    }
+  };
 
   const fetchAllRatings = async () => {
     try {
@@ -1648,6 +1719,97 @@ const EmployeeDashboard = () => {
         </Modal.Body>
         <Modal.Footer style={{ padding: '12px 20px' }}>
           <Button variant="secondary" size="sm" onClick={() => setShowRatingHistory(false)}>Close</Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Pending ticket confirmation popup — shown on dashboard load whenever this
+          employee has a ticket the team marked resolved (status 'resolved_pending')
+          that they haven't yet confirmed or reopened. */}
+      <Modal
+        show={showTicketConfirmModal && !!activeConfirmTicket}
+        onHide={() => setShowTicketConfirmModal(false)}
+        centered
+      >
+        <Modal.Header closeButton style={{ background: '#0f766e', border: 'none' }}>
+          <Modal.Title style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>
+            <FaCheckCircle className="me-2" />
+            Your Ticket Was Resolved
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ padding: 20 }}>
+          {activeConfirmTicket && (
+            <>
+              <div className="mb-3">
+                <div className="small text-muted mb-1">{activeConfirmTicket.ticket_number}</div>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>{activeConfirmTicket.subject}</div>
+              </div>
+
+              {activeConfirmTicket.resolve_note && (
+                <div style={{ background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: 10, padding: '10px 14px', marginBottom: 14 }}>
+                  <div className="small fw-semibold text-muted mb-1">What the team said:</div>
+                  <div style={{ fontSize: 13.5 }}>{activeConfirmTicket.resolve_note}</div>
+                </div>
+              )}
+
+              <div className="mb-3" style={{ fontSize: 14 }}>
+                Do you need more help with this, or is it resolved and okay to close?
+              </div>
+
+              {showTicketDeclineInput ? (
+                <div className="mb-3">
+                  <Form.Label className="small fw-semibold">What's still wrong? (optional)</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={2}
+                    size="sm"
+                    value={ticketDeclineNote}
+                    onChange={(e) => setTicketDeclineNote(e.target.value)}
+                    placeholder="Let the team know what still needs attention"
+                  />
+                </div>
+              ) : null}
+
+              {pendingConfirmTickets.length > 1 && (
+                <div className="small text-muted mb-2">
+                  <FaInfoCircle className="me-1" />
+                  You have {pendingConfirmTickets.length} tickets waiting on your confirmation — this is 1 of {pendingConfirmTickets.length}.
+                </div>
+              )}
+            </>
+          )}
+        </Modal.Body>
+        <Modal.Footer style={{ padding: '12px 20px', flexWrap: 'wrap', gap: 8 }}>
+          <Button
+            variant="link"
+            size="sm"
+            className="text-muted me-auto"
+            onClick={() => { setShowTicketConfirmModal(false); }}
+            disabled={ticketActionLoading}
+          >
+            Remind me later
+          </Button>
+          <Button
+            variant="outline-secondary"
+            size="sm"
+            onClick={() => {
+              if (activeConfirmTicket) navigate(`/tickets/${activeConfirmTicket.id}`);
+              setShowTicketConfirmModal(false);
+            }}
+          >
+            View Full Ticket
+          </Button>
+          {showTicketDeclineInput ? (
+            <Button variant="danger" size="sm" onClick={handleDeclineTicketResolution} disabled={ticketActionLoading}>
+              {ticketActionLoading ? <Spinner size="sm" animation="border" /> : "Confirm Reopen"}
+            </Button>
+          ) : (
+            <Button variant="outline-danger" size="sm" onClick={() => setShowTicketDeclineInput(true)} disabled={ticketActionLoading}>
+              Still Need Help
+            </Button>
+          )}
+          <Button variant="success" size="sm" onClick={handleConfirmTicketResolved} disabled={ticketActionLoading}>
+            {ticketActionLoading ? <Spinner size="sm" animation="border" /> : "Yes, Close Ticket"}
+          </Button>
         </Modal.Footer>
       </Modal>
     </div>

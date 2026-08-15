@@ -3,6 +3,8 @@ const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
 const EmployeeService = require('../services/employeeService');
+const emailService = require('../services/emailService');
+const { MANAGER_ROLES, HR_ROLES } = require('../config/roleGroups');
 
 // Generate Employee ID with 2-digit sequence based on joining date
 const generateEmployeeIdBasedOnJoiningDate = async (joiningDate) => {
@@ -280,6 +282,25 @@ exports.createEmployee = async (req, res) => {
                 employeeId,
                 id: employeeData[0].id
             });
+
+            // Fire-and-forget: notify every Manager (role='sub_admin') + HR (role='hr')
+            // about the new joiner. Runs after the response is already sent — must never
+            // delay or fail employee creation itself if email delivery has a problem.
+            (async () => {
+                try {
+                    const { data: recipients, error: recErr } = await supabase
+                        .from('employees')
+                        .select('email, first_name, last_name')
+                        .in('role', [...MANAGER_ROLES, ...HR_ROLES])
+                        .eq('is_active', true);
+                    if (recErr) throw recErr;
+                    if (recipients && recipients.length > 0) {
+                        await emailService.sendNewJoinerEmail(employeeData[0], recipients);
+                    }
+                } catch (emailErr) {
+                    console.error('❌ Failed to send new-joiner email:', emailErr.message);
+                }
+            })();
 
         } catch (error) {
             console.error('Transaction failed, rolling back...');

@@ -9,6 +9,7 @@ const supabase = require('../config/supabase');
 const { verifyToken, isAdmin, isAdminOrDesktopSupport } = require('../middleware/auth');
 const { uploadFile } = require('../lib/supabaseStorage');
 const { createOnboardingTickets } = require('../utils/onboardingTickets');
+const emailService = require('../services/emailService');
 
 const BUCKET = 'hrms-documents';
 
@@ -91,7 +92,7 @@ router.post('/generate', verifyToken, isAdminOrDesktopSupport, async (req, res) 
     try {
         const {
             employee_name, designation, department, employment_type,
-            salary, reporting_manager, reporting_manager_id, expiry_date, notes,
+            salary, reporting_manager, reporting_manager_id, expiry_date, notes, email,
         } = req.body;
 
         if (!employee_name?.trim())  return res.status(400).json({ success: false, message: 'Employee name is required' });
@@ -113,7 +114,7 @@ router.post('/generate', verifyToken, isAdminOrDesktopSupport, async (req, res) 
             ? `${admin.first_name} ${admin.last_name}`.trim()
             : req.user.employeeId;
 
-        const { data, error } = await supabase.from('employee_offer_links').insert([{
+        const insertPayload = {
             token,
             employee_name: employee_name.trim(),
             designation:   designation.trim(),
@@ -124,11 +125,19 @@ router.post('/generate', verifyToken, isAdminOrDesktopSupport, async (req, res) 
             reporting_manager_id: reporting_manager_id || null,
             expiry_date,
             notes:               notes?.trim() || null,
+            email:               email?.trim() || null,
             status:              'pending',
             generated_by:        req.user.employeeId,
             generated_by_name:   generatedByName,
-        }]).select().single();
+        };
 
+        let { data, error } = await supabase.from('employee_offer_links').insert([insertPayload]).select().single();
+        if (error && /email|does not exist/i.test(error.message || '')) {
+            // email column not migrated on this DB yet (scripts/add-offer-link-email-columns.sql)
+            // — retry without it so link generation keeps working either way.
+            const { email: _email, ...payloadWithoutEmail } = insertPayload;
+            ({ data, error } = await supabase.from('employee_offer_links').insert([payloadWithoutEmail]).select().single());
+        }
         if (error) throw error;
 
         const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -136,6 +145,64 @@ router.post('/generate', verifyToken, isAdminOrDesktopSupport, async (req, res) 
         res.status(201).json({ success: true, link, offer: data });
     } catch (err) {
         console.error('[onboarding] generate:', err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// ── POST /api/onboarding/links/:id/send-email — email the offer link to the candidate ──
+// (optionally CC'ing other people, e.g. the hiring manager). Same admin/desktop-support
+// gate as /generate — this doesn't create anything new, just emails an existing link.
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+router.post('/links/:id/send-email', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { email, cc } = req.body;
+
+        if (!email?.trim() || !EMAIL_REGEX.test(email.trim())) {
+            return res.status(400).json({ success: false, message: 'A valid candidate email address is required' });
+        }
+
+        const ccList = Array.isArray(cc)
+            ? [...new Set(cc.map(c => (c || '').trim()).filter(c => c && EMAIL_REGEX.test(c)))]
+            : [];
+
+        const { data: offer, error: offerErr } = await supabase
+            .from('employee_offer_links').select('*').eq('id', id).maybeSingle();
+        if (offerErr) throw offerErr;
+        if (!offer) return res.status(404).json({ success: false, message: 'Offer link not found' });
+
+        const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        const link = `${baseUrl}/onboarding/${offer.token}`;
+
+        const result = await emailService.sendOfferLinkEmail(email.trim(), {
+            link,
+            employeeName: offer.employee_name,
+            designation:  offer.designation,
+            department:   offer.department,
+            salary:       offer.salary,
+            expiryDate:   offer.expiry_date,
+            notes:        offer.notes,
+        }, ccList);
+
+        if (!result.success) {
+            return res.status(502).json({ success: false, message: result.error || 'Failed to send email via Resend' });
+        }
+
+        // Best-effort record-keeping — email/emailed_at/emailed_cc are additive columns
+        // (scripts/add-offer-link-email-columns.sql); if they're not migrated yet on this
+        // DB, the email has already been sent successfully above, so this must never turn
+        // a real success into an error response — just log and move on.
+        const { error: updateErr } = await supabase.from('employee_offer_links').update({
+            email:       email.trim(),
+            emailed_at:  new Date().toISOString(),
+            emailed_cc:  ccList.join(', ') || null,
+            updated_at:  new Date().toISOString(),
+        }).eq('id', id);
+        if (updateErr) console.warn('[onboarding] send-email: could not persist email/emailed_at (non-fatal):', updateErr.message);
+
+        res.json({ success: true, message: `Offer link emailed to ${email.trim()}${ccList.length ? ` (cc: ${ccList.join(', ')})` : ''}` });
+    } catch (err) {
+        console.error('[onboarding] send-email:', err);
         res.status(500).json({ success: false, message: err.message });
     }
 });
@@ -233,6 +300,9 @@ router.patch('/links/:id/approve', verifyToken, isAdmin, async (req, res) => {
         if (!sub) return res.status(404).json({ success: false, message: 'No submission found for this offer' });
 
         const { employee: emp, employeeId: newEmployeeId, tempPassword } = await createEmployeeAccountFromSubmission(offer, sub);
+
+        emailService.sendEmployeeCredentialsEmail(emp, { employeeId: newEmployeeId, tempPassword })
+            .catch(e => console.error('❌ Failed to send employee-credentials email:', e.message));
 
         await createOnboardingTickets(supabase, { employee: emp, actor: req.user });
 
@@ -522,6 +592,12 @@ router.post('/:token/submit', async (req, res) => {
             const { employee: emp, employeeId: newEmployeeId, tempPassword } =
                 await createEmployeeAccountFromSubmission(offer, submissionRow);
             credentials = { employee_id: newEmployeeId, temp_password: tempPassword, email: emp.email };
+
+            // Fire-and-forget: email the new employee their own credentials — never blocks
+            // the response, and a failure here must not undo the account/tickets created
+            // around it (the candidate also sees these credentials on-screen regardless).
+            emailService.sendEmployeeCredentialsEmail(emp, { employeeId: newEmployeeId, tempPassword })
+                .catch(e => console.error('❌ Failed to send employee-credentials email:', e.message));
 
             // Step 2 — raise onboarding tickets. Never throws (see onboardingTickets.js),
             // so a ticketing problem can't undo the account that was just created.

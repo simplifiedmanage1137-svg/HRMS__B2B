@@ -55,6 +55,7 @@
 const express = require('express');
 const router  = express.Router();
 const notificationService = require('../services/notificationService');
+const emailService = require('../services/emailService');
 const { AGE_THRESHOLDS_HOURS } = require('../config/ticketPolicy');
 const ROLES_CAN_RESOLVE = ['admin', 'sub_admin', 'manager', 'hr'];
 
@@ -100,6 +101,29 @@ module.exports = (supabase, authenticateToken) => {
             .eq('employee_id', employeeId)
             .maybeSingle();
         return data;
+    };
+
+    // Fire-and-forget status-change email to the employee the ticket concerns (raised_for,
+    // falling back to raised_by for tickets predating that column/older data) — called from
+    // every status-transition route below (in-progress/resolved/closed/reopened) and never
+    // awaited by the caller, so a slow/failed email never delays the API response.
+    const notifyTicketStatusEmail = (ticket, status, updatedByName, resolveNote) => {
+        (async () => {
+            try {
+                const targetId = ticket.raised_for || ticket.raised_by;
+                const targetEmp = await getEmployeeDetails(targetId);
+                if (!targetEmp?.email) return;
+                await emailService.sendTicketStatusEmail(targetEmp, {
+                    ticketNumber: ticket.ticket_number,
+                    subject: ticket.subject,
+                    status,
+                    resolveNote: resolveNote || null,
+                    updatedBy: updatedByName || null,
+                });
+            } catch (e) {
+                console.error('❌ Failed to send ticket-status email:', e.message);
+            }
+        })();
     };
 
     // ── GET /api/tickets/dept-employees/:department ────────────────────────
@@ -287,6 +311,19 @@ module.exports = (supabase, authenticateToken) => {
             );
             await notificationService.sendTicketNotifications(data, 'created', { actorEmployeeId: employeeId, actorName: raiserName });
 
+            // Fire-and-forget: email the employee the ticket is actually about (raised_for,
+            // defaults to the raiser themselves) — never blocks the response.
+            if (raisedForEmp.email) {
+                emailService.sendTicketCreatedEmail(raisedForEmp, {
+                    ticketNumber: data.ticket_number,
+                    subject: data.subject,
+                    description: data.description,
+                    priority: data.priority,
+                    department: data.department,
+                    raisedByName: raisedForEmp.employee_id !== employeeId ? raiserName : null,
+                }).catch(e => console.error('❌ Failed to send ticket-created email:', e.message));
+            }
+
             return res.json({ success: true, ticket: data });
         } catch (err) {
             console.error('[tickets] create error:', err);
@@ -349,6 +386,7 @@ module.exports = (supabase, authenticateToken) => {
                 }).eq('id', ticket.id);
                 await addHistory(ticket.id, 'status_changed', `Reopened automatically — ${name} replied after resolution`, 'resolved_pending', 'reopened', employeeId, name);
                 await notificationService.sendTicketNotifications({ ...ticket, status: 'reopened' }, 'reopened', { actorEmployeeId: employeeId, actorName: name });
+                notifyTicketStatusEmail({ ...ticket, status: 'reopened' }, 'reopened', name);
             } else {
                 await supabase.from('support_tickets').update({ updated_at: now }).eq('id', ticket.id);
                 if (!wantsInternal) {
@@ -384,6 +422,7 @@ module.exports = (supabase, authenticateToken) => {
             await supabase.from('support_tickets').update({ status: 'in_progress', updated_at: new Date().toISOString() }).eq('id', req.params.id);
             await addHistory(req.params.id, 'status_changed', `Marked as In Progress by ${name}`, oldStatus, 'in_progress', employeeId, name);
             await notificationService.sendTicketNotifications({ ...ticket, status: 'in_progress' }, 'in_progress', { actorEmployeeId: employeeId, actorName: name });
+            notifyTicketStatusEmail({ ...ticket, status: 'in_progress' }, 'in_progress', name);
 
             return res.json({ success: true });
         } catch (err) {
@@ -416,6 +455,7 @@ module.exports = (supabase, authenticateToken) => {
 
             await addHistory(req.params.id, 'resolved', resolve_note || `Resolved by ${name}. Awaiting employee confirmation.`, ticket.status, 'resolved_pending', employeeId, name);
             await notificationService.sendTicketNotifications({ ...ticket, status: 'resolved_pending' }, 'resolved', { actorEmployeeId: employeeId, actorName: name });
+            notifyTicketStatusEmail({ ...ticket, status: 'resolved_pending' }, 'resolved_pending', name, resolve_note);
 
             return res.json({ success: true });
         } catch (err) {
@@ -443,6 +483,7 @@ module.exports = (supabase, authenticateToken) => {
             await supabase.from('support_tickets').update({ status: 'closed', closed_at: now, updated_at: now }).eq('id', req.params.id);
             await addHistory(req.params.id, 'closed', `Issue confirmed resolved by ${name}. Ticket closed.`, 'resolved_pending', 'closed', employeeId, name);
             await notificationService.sendTicketNotifications({ ...ticket, status: 'closed' }, 'closed', { actorEmployeeId: employeeId, actorName: name });
+            notifyTicketStatusEmail({ ...ticket, status: 'closed' }, 'closed', name);
 
             return res.json({ success: true });
         } catch (err) {
@@ -475,6 +516,7 @@ module.exports = (supabase, authenticateToken) => {
 
             await addHistory(req.params.id, 'reopened', reason ? `Declined by ${name}: ${reason}` : `Declined by ${name} — issue not resolved. Ticket reopened.`, 'resolved_pending', 'reopened', employeeId, name);
             await notificationService.sendTicketNotifications({ ...ticket, status: 'reopened' }, 'reopened', { actorEmployeeId: employeeId, actorName: name });
+            notifyTicketStatusEmail({ ...ticket, status: 'reopened' }, 'reopened', name, reason);
 
             return res.json({ success: true });
         } catch (err) {

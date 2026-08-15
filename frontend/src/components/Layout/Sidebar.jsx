@@ -6,7 +6,7 @@ import {
   FaUserCircle, FaSignOutAlt, FaFingerprint, FaClock,
   FaBell, FaPaperPlane, FaEdit, FaUserTie,
   FaBullhorn, FaStar, FaChevronRight, FaLayerGroup, FaDesktop, FaChartLine, FaMinusCircle, FaFileExcel,
-  FaTicketAlt, FaReceipt, FaFileInvoiceDollar, FaCoins
+  FaTicketAlt, FaReceipt, FaFileInvoiceDollar, FaCoins, FaEnvelope
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -247,6 +247,7 @@ const Sidebar = () => {
                 onClick={() => { setPendingCount(0); markNotificationsAsRead(); }}
               />
               <NavItem to="/admin/broadcast" icon={<FaBullhorn />} label="Broadcast" />
+              <NavItem to="/admin/email" icon={<FaEnvelope />} label="Email" />
             </>
           ) : user?.role === 'sub_admin' ? (
             <>
@@ -276,6 +277,7 @@ const Sidebar = () => {
                 onClick={() => { setPendingCount(0); markNotificationsAsRead(); }}
               />
               <NavItem to="/admin/broadcast" icon={<FaBullhorn />} label="Broadcast" />
+              <NavItem to="/admin/email" icon={<FaEnvelope />} label="Email" />
               <Section label="My Team" />
               <NavItem to="/manager/my-team" icon={<FaUserTie />} label="My Team" />
               <Section label="My Attendance" />

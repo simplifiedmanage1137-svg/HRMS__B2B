@@ -1,5 +1,6 @@
 const supabase = require('../config/supabase');
-const { sendLeaveStatusEmail } = require('../services/emailService');
+const { sendLeaveStatusEmail, sendLeaveAppliedEmail } = require('../services/emailService');
+const { HR_ROLES } = require('../config/roleGroups');
 const {
     PAID_LEAVE_ELIGIBILITY_MONTHS,
     MONTHLY_ACCRUAL_RATE,
@@ -480,6 +481,49 @@ exports.applyLeave = async (req, res) => {
             message: isBirthday ? 'Birthday leave approved automatically!' : 'Leave request submitted successfully!',
             leave: insertedLeave
         });
+
+        // Fire-and-forget: notify the reporting manager (matched by name — reporting_manager
+        // is free text, not an employee_id FK, same limitation as elsewhere in this file) +
+        // every HR, that a leave/comp-off request needs review. Birthday leave is excluded —
+        // it's auto-approved the instant it's submitted (see statusFields above), so there is
+        // no pending decision for anyone to review.
+        if (!isBirthday) {
+            (async () => {
+                try {
+                    const managerName = reporting_manager.trim().toLowerCase();
+                    const [{ data: allActive, error: allErr }, { data: hrList, error: hrErr }] = await Promise.all([
+                        supabase.from('employees').select('email, first_name, last_name, reporting_manager').eq('is_active', true),
+                        supabase.from('employees').select('email, first_name, last_name').in('role', HR_ROLES).eq('is_active', true),
+                    ]);
+                    if (allErr) throw allErr;
+                    if (hrErr) throw hrErr;
+
+                    const matchedManager = (allActive || []).find(
+                        e => `${e.first_name || ''} ${e.last_name || ''}`.trim().toLowerCase() === managerName
+                    );
+
+                    const recipientMap = new Map();
+                    (hrList || []).forEach(e => { if (e.email) recipientMap.set(e.email, e); });
+                    if (matchedManager?.email) recipientMap.set(matchedManager.email, matchedManager);
+
+                    if (recipientMap.size > 0) {
+                        await sendLeaveAppliedEmail(
+                            {
+                                employeeName: `${employee.first_name} ${employee.last_name}`,
+                                leaveType: leave_type,
+                                startDate: start_date,
+                                endDate: end_date || start_date,
+                                daysCount: days_count || 1,
+                                reason,
+                            },
+                            Array.from(recipientMap.values())
+                        );
+                    }
+                } catch (emailErr) {
+                    console.error('❌ Failed to send leave-applied email:', emailErr.message);
+                }
+            })();
+        }
 
     } catch (error) {
         console.error('❌ Error applying leave:', error);

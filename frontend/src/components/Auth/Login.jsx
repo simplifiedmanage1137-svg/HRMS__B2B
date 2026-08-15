@@ -1,5 +1,5 @@
 // components/Auth/Login.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import axios from '../../config/axios';
@@ -7,9 +7,11 @@ import API_ENDPOINTS from '../../config/api';
 import loginBg from '../../assets/login.jpg'
 import {
   FaUser, FaLock, FaEye, FaEyeSlash,
-  FaExclamationTriangle, FaCalendarAlt, FaCheckCircle, FaArrowLeft, FaPhone
+  FaExclamationTriangle, FaCheckCircle, FaArrowLeft, FaEnvelope, FaKey
 } from 'react-icons/fa';
 import { Spinner } from 'react-bootstrap';
+
+const OTP_RESEND_COOLDOWN_SECONDS = 60;
 
 const Login = () => {
   const [identifier, setIdentifier] = useState('');
@@ -18,23 +20,29 @@ const Login = () => {
   const [error, setError]               = useState('');
   const [loading, setLoading]           = useState(false);
 
-  // Forgot-password flow — no email service is configured in this project, so identity
-  // is verified with Employee ID/Email + (Date of Birth OR Phone Number, employee's choice)
-  // instead of an emailed reset link.
-  const [mode, setMode] = useState('login'); // 'login' | 'identity' | 'newpass' | 'success'
-  const [verifyMethod, setVerifyMethod] = useState('dob'); // 'dob' | 'phone'
-  const [resetIdentifier, setResetIdentifier] = useState('');
-  const [resetDob, setResetDob] = useState('');
-  const [resetPhone, setResetPhone] = useState('');
+  // Forgot-password flow — email + 4-digit OTP (DOB/phone verification removed).
+  const [mode, setMode] = useState('login'); // 'login' | 'email' | 'otp' | 'newpass' | 'success'
+  const [resetEmail, setResetEmail] = useState('');
+  const [otp, setOtp] = useState('');
   const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [resetError, setResetError] = useState('');
+  const [resetInfo, setResetInfo] = useState(''); // transient success note, e.g. "OTP resent"
   const [resetLoading, setResetLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   const { login }  = useAuth();
   const navigate   = useNavigate();
+
+  // Ticks the "Resend OTP" cooldown down to 0 once a second while on the OTP screen.
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setTimeout(() => setResendCooldown(c => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -61,33 +69,67 @@ const Login = () => {
 
   const resetToLoginMode = () => {
     setMode('login');
-    setVerifyMethod('dob');
-    setResetIdentifier('');
-    setResetDob('');
-    setResetPhone('');
+    setResetEmail('');
+    setOtp('');
     setResetToken('');
     setNewPassword('');
     setConfirmPassword('');
     setResetError('');
+    setResetInfo('');
+    setResendCooldown(0);
   };
 
-  const handleVerifyIdentity = async (e) => {
+  // Step 1 — send a 4-digit OTP to the entered email. Same generic message whether or not
+  // the email is actually registered (backend never reveals account existence).
+  const handleSendOtp = async (e) => {
     e.preventDefault();
     setResetError('');
     setResetLoading(true);
     try {
-      const res = await axios.post(API_ENDPOINTS.PASSWORD_VERIFY_RESET_IDENTITY, {
-        identifier: resetIdentifier,
-        method: verifyMethod,
-        dob: verifyMethod === 'dob' ? resetDob : undefined,
-        phone: verifyMethod === 'phone' ? resetPhone : undefined,
-      });
+      const res = await axios.post(API_ENDPOINTS.PASSWORD_FORGOT, { email: resetEmail });
+      if (res.data.success) {
+        setMode('otp');
+        setResendCooldown(OTP_RESEND_COOLDOWN_SECONDS);
+      }
+    } catch (err) {
+      setResetError(err.response?.data?.message || 'Something went wrong. Please try again.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  // "Resend OTP" on the OTP screen — same endpoint as step 1, just without changing mode.
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || resendLoading) return;
+    setResetError('');
+    setResetInfo('');
+    setResendLoading(true);
+    try {
+      const res = await axios.post(API_ENDPOINTS.PASSWORD_FORGOT, { email: resetEmail });
+      if (res.data.success) {
+        setResetInfo('A new OTP has been sent to your email.');
+        setResendCooldown(OTP_RESEND_COOLDOWN_SECONDS);
+      }
+    } catch (err) {
+      setResetError(err.response?.data?.message || 'Failed to resend OTP. Please try again.');
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  // Step 2 — verify the 4-digit OTP, receive a short-lived reset token for step 3.
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    setResetError('');
+    setResetLoading(true);
+    try {
+      const res = await axios.post(API_ENDPOINTS.PASSWORD_VERIFY_OTP, { email: resetEmail, otp });
       if (res.data.success) {
         setResetToken(res.data.resetToken);
         setMode('newpass');
       }
     } catch (err) {
-      setResetError(err.response?.data?.message || 'Something went wrong. Please try again.');
+      setResetError(err.response?.data?.message || 'Incorrect or expired OTP. Please try again.');
     } finally {
       setResetLoading(false);
     }
@@ -285,7 +327,7 @@ const Login = () => {
                 <div style={{ textAlign: 'right', marginBottom: '16px' }}>
                   <button
                     type="button"
-                    onClick={() => setMode('identity')}
+                    onClick={() => setMode('email')}
                     style={{
                       background: 'none', border: 'none', padding: 0,
                       fontSize: '12.5px', fontWeight: 600, color: '#2563EB', cursor: 'pointer',
@@ -321,41 +363,14 @@ const Login = () => {
             </>
           )}
 
-          {mode === 'identity' && (
+          {mode === 'email' && (
             <>
               <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#0F172A', marginBottom: '4px' }}>
                 Reset your password
               </h2>
               <p style={{ fontSize: '12.5px', color: '#64748B', marginBottom: '18px' }}>
-                Verify your identity with your Employee ID/Email, plus one more detail
+                Enter your registered email address and we'll send you a 4-digit OTP
               </p>
-
-              {/* Verification method toggle */}
-              <div style={{
-                display: 'flex', background: '#F1F5F9', borderRadius: '10px',
-                padding: '4px', marginBottom: '18px', gap: '4px',
-              }}>
-                {[
-                  { key: 'dob', label: 'Date of Birth' },
-                  { key: 'phone', label: 'Phone Number' },
-                ].map(opt => (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    onClick={() => setVerifyMethod(opt.key)}
-                    style={{
-                      flex: 1, padding: '8px 10px', borderRadius: '8px', border: 'none',
-                      fontSize: '12.5px', fontWeight: 600, cursor: 'pointer',
-                      background: verifyMethod === opt.key ? '#FFFFFF' : 'transparent',
-                      color: verifyMethod === opt.key ? '#2563EB' : '#64748B',
-                      boxShadow: verifyMethod === opt.key ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
-                      transition: 'all 0.15s',
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
 
               {resetError && (
                 <div style={{
@@ -369,60 +384,27 @@ const Login = () => {
                 </div>
               )}
 
-              <form onSubmit={handleVerifyIdentity}>
-                <div style={{ marginBottom: '16px', position: 'relative' }}>
-                  <FaUser style={{
+              <form onSubmit={handleSendOtp}>
+                <div style={{ marginBottom: '20px', position: 'relative' }}>
+                  <FaEnvelope style={{
                     position: 'absolute', left: '16px', top: '50%',
                     transform: 'translateY(-50%)', color: '#94A3B8', fontSize: '14px', zIndex: 1,
                   }} />
                   <input
-                    type="text" value={resetIdentifier} required disabled={resetLoading}
-                    onChange={e => setResetIdentifier(e.target.value)}
-                    placeholder="Employee ID or Email address"
-                    autoComplete="username"
+                    type="email" value={resetEmail} required disabled={resetLoading}
+                    onChange={e => setResetEmail(e.target.value)}
+                    placeholder="Email address"
+                    autoComplete="email"
                     style={inputStyle}
                     onFocus={e  => e.target.style.borderColor = '#2563EB'}
                     onBlur={e   => e.target.style.borderColor = '#CBD5E1'}
                   />
                 </div>
 
-                {verifyMethod === 'dob' ? (
-                  <div style={{ marginBottom: '20px', position: 'relative' }}>
-                    <FaCalendarAlt style={{
-                      position: 'absolute', left: '16px', top: '50%',
-                      transform: 'translateY(-50%)', color: '#94A3B8', fontSize: '14px', zIndex: 1,
-                    }} />
-                    <input
-                      type="date" value={resetDob} required disabled={resetLoading}
-                      onChange={e => setResetDob(e.target.value)}
-                      max={new Date().toISOString().split('T')[0]}
-                      style={{ ...inputStyle, textAlign: 'left', color: resetDob ? '#334155' : '#94A3B8' }}
-                      onFocus={e  => e.target.style.borderColor = '#2563EB'}
-                      onBlur={e   => e.target.style.borderColor = '#CBD5E1'}
-                    />
-                  </div>
-                ) : (
-                  <div style={{ marginBottom: '20px', position: 'relative' }}>
-                    <FaPhone style={{
-                      position: 'absolute', left: '16px', top: '50%',
-                      transform: 'translateY(-50%)', color: '#94A3B8', fontSize: '14px', zIndex: 1,
-                    }} />
-                    <input
-                      type="tel" value={resetPhone} required disabled={resetLoading}
-                      onChange={e => setResetPhone(e.target.value)}
-                      placeholder="Registered phone number"
-                      autoComplete="tel"
-                      style={inputStyle}
-                      onFocus={e  => e.target.style.borderColor = '#2563EB'}
-                      onBlur={e   => e.target.style.borderColor = '#CBD5E1'}
-                    />
-                  </div>
-                )}
-
                 <button type="submit" disabled={resetLoading} style={submitButtonStyle(resetLoading)}>
                   {resetLoading
-                    ? <><Spinner as="span" animation="border" size="sm" /> Verifying...</>
-                    : 'Verify Identity'
+                    ? <><Spinner as="span" animation="border" size="sm" /> Sending OTP...</>
+                    : 'Send OTP'
                   }
                 </button>
               </form>
@@ -432,6 +414,95 @@ const Login = () => {
                 onClick={resetToLoginMode}
                 style={{
                   background: 'none', border: 'none', marginTop: '18px', padding: 0,
+                  fontSize: '12.5px', fontWeight: 600, color: '#64748B', cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: '6px',
+                }}
+              >
+                <FaArrowLeft size={11} /> Back to login
+              </button>
+            </>
+          )}
+
+          {mode === 'otp' && (
+            <>
+              <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#0F172A', marginBottom: '4px' }}>
+                Enter verification code
+              </h2>
+              <p style={{ fontSize: '12.5px', color: '#64748B', marginBottom: '18px' }}>
+                We sent a 4-digit OTP to <strong>{resetEmail}</strong>. It expires in 10 minutes.
+              </p>
+
+              {resetError && (
+                <div style={{
+                  background: '#FEF2F2', border: '1px solid #FEE2E2',
+                  borderRadius: '10px', padding: '10px 14px', marginBottom: '16px',
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  fontSize: '13px', color: '#991B1B', textAlign: 'left',
+                }}>
+                  <FaExclamationTriangle size={12} />
+                  {resetError}
+                </div>
+              )}
+              {resetInfo && (
+                <div style={{
+                  background: '#ECFDF5', border: '1px solid #D1FAE5',
+                  borderRadius: '10px', padding: '10px 14px', marginBottom: '16px',
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  fontSize: '13px', color: '#065F46', textAlign: 'left',
+                }}>
+                  <FaCheckCircle size={12} />
+                  {resetInfo}
+                </div>
+              )}
+
+              <form onSubmit={handleVerifyOtp}>
+                <div style={{ marginBottom: '16px', position: 'relative' }}>
+                  <FaKey style={{
+                    position: 'absolute', left: '16px', top: '50%',
+                    transform: 'translateY(-50%)', color: '#94A3B8', fontSize: '14px', zIndex: 1,
+                  }} />
+                  <input
+                    type="text" inputMode="numeric" pattern="[0-9]{4}" maxLength={4}
+                    value={otp} required disabled={resetLoading}
+                    onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    placeholder="4-digit OTP"
+                    autoComplete="one-time-code"
+                    style={{ ...inputStyle, textAlign: 'center', letterSpacing: '10px', fontWeight: 700, fontSize: '18px' }}
+                    onFocus={e  => e.target.style.borderColor = '#2563EB'}
+                    onBlur={e   => e.target.style.borderColor = '#CBD5E1'}
+                  />
+                </div>
+
+                <button type="submit" disabled={resetLoading || otp.length !== 4} style={submitButtonStyle(resetLoading || otp.length !== 4)}>
+                  {resetLoading
+                    ? <><Spinner as="span" animation="border" size="sm" /> Verifying...</>
+                    : 'Verify OTP'
+                  }
+                </button>
+              </form>
+
+              <div style={{ marginTop: '18px', fontSize: '12.5px', color: '#64748B' }}>
+                Didn't receive the OTP?{' '}
+                <button
+                  type="button"
+                  onClick={handleResendOtp}
+                  disabled={resendCooldown > 0 || resendLoading}
+                  style={{
+                    background: 'none', border: 'none', padding: 0,
+                    fontSize: '12.5px', fontWeight: 600,
+                    color: (resendCooldown > 0 || resendLoading) ? '#94A3B8' : '#2563EB',
+                    cursor: (resendCooldown > 0 || resendLoading) ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {resendLoading ? 'Resending...' : resendCooldown > 0 ? `Resend OTP (${resendCooldown}s)` : 'Resend OTP'}
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={resetToLoginMode}
+                style={{
+                  background: 'none', border: 'none', marginTop: '14px', padding: 0,
                   fontSize: '12.5px', fontWeight: 600, color: '#64748B', cursor: 'pointer',
                   display: 'inline-flex', alignItems: 'center', gap: '6px',
                 }}
@@ -538,17 +609,17 @@ const Login = () => {
                 <FaCheckCircle size={24} color="#16A34A" />
               </div>
               <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#0F172A', marginBottom: '6px' }}>
-                Password changed
+                Your password has been reset successfully
               </h2>
               <p style={{ fontSize: '12.5px', color: '#64748B', marginBottom: '24px' }}>
-                Your password has been updated. You can now sign in with your new password.
+                You can now sign in with your new password.
               </p>
               <button
                 type="button"
                 onClick={resetToLoginMode}
                 style={submitButtonStyle(false)}
               >
-                Back to Login
+                Go to Login
               </button>
             </>
           )}

@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Form, Button, Spinner, Alert } from 'react-bootstrap';
-import { CheckCircle, Copy, Link, X } from 'lucide-react';
+import { CheckCircle, Copy, Link, X, Mail } from 'lucide-react';
 import API_ENDPOINTS from '../../config/api';
+import EmailTagInput from '../Common/EmailTagInput';
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const DEPARTMENTS = ['IT', 'HR', 'Finance', 'Marketing', 'Sales', 'Operations', 'Administration', 'Legal'];
 const EMP_TYPES   = ['Full Time', 'Part Time', 'Freelancer', 'Contract Based', 'Intern', 'Probation'];
@@ -13,20 +16,31 @@ const minExpiry = () => {
     return d.toISOString().split('T')[0];
 };
 
+const EMPTY_FORM = { employee_name: '', designation: '', department: '', employment_type: '', salary: '', reporting_manager: '', reporting_manager_id: '', expiry_date: '', notes: '', email: '' };
+
 export default function GenerateLinkModal({ show, onHide, onGenerated }) {
-    const [form, setForm]       = useState({ employee_name: '', designation: '', department: '', employment_type: '', salary: '', reporting_manager: '', reporting_manager_id: '', expiry_date: '', notes: '' });
+    const [form, setForm]       = useState(EMPTY_FORM);
     const [managers, setManagers] = useState([]);
     const [saving, setSaving]   = useState(false);
     const [error, setError]     = useState('');
-    const [generated, setGenerated] = useState(null); // { link }
+    const [generated, setGenerated] = useState(null); // { link, offer }
     const [copied, setCopied]   = useState(false);
+
+    // "Send Email" flow — a small popup to add CC recipients before actually sending.
+    const [showCcPopup, setShowCcPopup] = useState(false);
+    const [cc, setCc]                 = useState([]);
+    const [sendingEmail, setSendingEmail] = useState(false);
+    const [sendEmailResult, setSendEmailResult] = useState(null); // { type, text }
 
     useEffect(() => {
         if (!show) return;
-        setForm({ employee_name: '', designation: '', department: '', employment_type: '', salary: '', reporting_manager: '', reporting_manager_id: '', expiry_date: '', notes: '' });
+        setForm(EMPTY_FORM);
         setError('');
         setGenerated(null);
         setCopied(false);
+        setShowCcPopup(false);
+        setCc([]);
+        setSendEmailResult(null);
         fetch(API_ENDPOINTS.TEAMS_MANAGERS_LIST, {
             headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
         })
@@ -43,20 +57,29 @@ export default function GenerateLinkModal({ show, onHide, onGenerated }) {
         setForm(f => ({ ...f, reporting_manager_id: id, reporting_manager: mgr ? `${mgr.first_name} ${mgr.last_name}`.trim() : '' }));
     };
 
+    // Shared by the "Generate Link" button and the "Send Email" flow (which must generate
+    // first if the admin hasn't already clicked Generate Link) — one call site for the
+    // actual POST /generate request so both paths can never drift apart.
+    const generateLink = async () => {
+        const res = await fetch(API_ENDPOINTS.ONBOARDING_GENERATE, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+            body: JSON.stringify(form),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+        const result = { link: data.link, offer: data.offer };
+        setGenerated(result);
+        if (onGenerated) onGenerated(data.offer);
+        return result;
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
         setSaving(true);
         try {
-            const res = await fetch(API_ENDPOINTS.ONBOARDING_GENERATE, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
-                body: JSON.stringify(form),
-            });
-            const data = await res.json();
-            if (!data.success) throw new Error(data.message);
-            setGenerated({ link: data.link });
-            if (onGenerated) onGenerated(data.offer);
+            await generateLink();
         } catch (err) {
             setError(err.message);
         } finally {
@@ -71,7 +94,55 @@ export default function GenerateLinkModal({ show, onHide, onGenerated }) {
         });
     };
 
+    // Clicking "Send Email" (from either the form footer or the post-generation success
+    // view) opens the CC popup first — the actual send only happens once that's confirmed.
+    const handleOpenSendEmail = () => {
+        setError('');
+        if (!generated) {
+            // Same required-field check the form itself enforces via `required` — re-checked
+            // here because "Send Email" can be clicked without the browser's native form
+            // validation running (it's a plain button, not the form's submit button).
+            if (!form.employee_name.trim() || !form.designation.trim() || !form.department.trim() ||
+                !form.employment_type || !form.salary || !form.expiry_date) {
+                setError('Please fill in all required fields before sending.');
+                return;
+            }
+        }
+        if (!form.email.trim() || !EMAIL_REGEX.test(form.email.trim())) {
+            setError('A valid candidate email address is required to send the offer link.');
+            return;
+        }
+        setSendEmailResult(null);
+        setCc([]);
+        setShowCcPopup(true);
+    };
+
+    const handleConfirmSendEmail = async () => {
+        setSendingEmail(true);
+        setSendEmailResult(null);
+        try {
+            // Generate the link first if the admin went straight to "Send Email" without
+            // clicking "Generate Link" beforehand.
+            const current = generated || await generateLink();
+
+            const res = await fetch(API_ENDPOINTS.ONBOARDING_LINK_SEND_EMAIL(current.offer.id), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+                body: JSON.stringify({ email: form.email.trim(), cc }),
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.message);
+            setSendEmailResult({ type: 'success', text: data.message });
+            setShowCcPopup(false);
+        } catch (err) {
+            setSendEmailResult({ type: 'danger', text: err.message });
+        } finally {
+            setSendingEmail(false);
+        }
+    };
+
     return (
+        <>
         <Modal show={show} onHide={onHide} size="lg" centered>
             <Modal.Header style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', border: 'none' }}>
                 <Modal.Title style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -95,11 +166,18 @@ export default function GenerateLinkModal({ show, onHide, onGenerated }) {
                         <div style={{ background: '#f8f9ff', border: '1px solid #e0e7ff', borderRadius: 10, padding: '12px 16px', marginBottom: 16, wordBreak: 'break-all', fontSize: 13, color: '#4338ca', textAlign: 'left' }}>
                             {generated.link}
                         </div>
+                        {error && <Alert variant="danger" className="py-2 text-start" style={{ fontSize: 13 }}>{error}</Alert>}
+                        {sendEmailResult && (
+                            <Alert variant={sendEmailResult.type} className="py-2 text-start" style={{ fontSize: 13 }}>{sendEmailResult.text}</Alert>
+                        )}
                         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
                             <button onClick={copyLink} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px', borderRadius: 8, background: copied ? '#d1fae5' : '#6366f1', color: copied ? '#065f46' : '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14, transition: 'background 0.2s' }}>
                                 {copied ? <><CheckCircle size={16} /> Copied!</> : <><Copy size={16} /> Copy Link</>}
                             </button>
-                            <button onClick={() => { setGenerated(null); }} style={{ padding: '8px 18px', borderRadius: 8, background: '#f3f4f6', color: '#374151', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
+                            <button onClick={handleOpenSendEmail} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px', borderRadius: 8, background: '#10b981', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
+                                <Mail size={16} /> Send Email
+                            </button>
+                            <button onClick={() => { setGenerated(null); setSendEmailResult(null); }} style={{ padding: '8px 18px', borderRadius: 8, background: '#f3f4f6', color: '#374151', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
                                 Generate Another
                             </button>
                         </div>
@@ -156,14 +234,26 @@ export default function GenerateLinkModal({ show, onHide, onGenerated }) {
                                     ))}
                                 </Form.Select>
                             </Form.Group>
+                            <Form.Group>
+                                <Form.Label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Candidate Email</Form.Label>
+                                <Form.Control size="sm" type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="e.g. rahul@example.com" style={{ borderRadius: 8 }} />
+                                <Form.Text style={{ fontSize: 11.5, color: '#9ca3af' }}>Required only if you want to use "Send Email".</Form.Text>
+                            </Form.Group>
                             <Form.Group style={{ gridColumn: '1 / -1' }}>
                                 <Form.Label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Notes / Message to Candidate</Form.Label>
                                 <Form.Control as="textarea" rows={2} size="sm" value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Optional — welcome message or any additional info" style={{ borderRadius: 8, resize: 'none' }} />
                             </Form.Group>
                         </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+                        {sendEmailResult && (
+                            <Alert variant={sendEmailResult.type} className="py-2 mt-3" style={{ fontSize: 13 }}>{sendEmailResult.text}</Alert>
+                        )}
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20, flexWrap: 'wrap' }}>
                             <Button variant="light" onClick={onHide} style={{ borderRadius: 8, fontWeight: 600 }}>Cancel</Button>
+                            <Button type="button" onClick={handleOpenSendEmail} style={{ borderRadius: 8, background: '#10b981', border: 'none', fontWeight: 600, padding: '8px 20px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <Mail size={15} /> Send Email
+                            </Button>
                             <Button type="submit" disabled={saving} style={{ borderRadius: 8, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none', fontWeight: 600, padding: '8px 24px' }}>
                                 {saving ? <><Spinner size="sm" animation="border" className="me-2" />Generating…</> : 'Generate Link'}
                             </Button>
@@ -172,5 +262,33 @@ export default function GenerateLinkModal({ show, onHide, onGenerated }) {
                 )}
             </Modal.Body>
         </Modal>
+
+        {/* CC popup — shown when "Send Email" is clicked, before the email actually sends —
+            rendered as a sibling modal, not nested inside the one above, so both manage
+            their own portal/backdrop independently. */}
+        <Modal show={showCcPopup} onHide={() => !sendingEmail && setShowCcPopup(false)} centered>
+                <Modal.Header closeButton={!sendingEmail} style={{ background: '#10b981', color: '#fff', border: 'none' }}>
+                    <Modal.Title style={{ fontWeight: 700, fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Mail size={18} /> Send Offer Link via Email
+                    </Modal.Title>
+                </Modal.Header>
+                <Modal.Body style={{ padding: '1.25rem' }}>
+                    <div className="small text-muted mb-1">Sending to</div>
+                    <div className="fw-semibold mb-3" style={{ fontSize: 14 }}>{form.email}</div>
+
+                    <Form.Label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>CC (optional)</Form.Label>
+                    <EmailTagInput value={cc} onChange={setCc} placeholder="Add someone to CC and press Enter" />
+                    <div className="small text-muted mt-2">
+                        The candidate will receive an email with the onboarding link. Anyone added to CC receives a copy.
+                    </div>
+                </Modal.Body>
+                <Modal.Footer style={{ border: 'none', paddingTop: 0 }}>
+                    <Button variant="light" onClick={() => setShowCcPopup(false)} disabled={sendingEmail} style={{ borderRadius: 8, fontWeight: 600 }}>Cancel</Button>
+                    <Button onClick={handleConfirmSendEmail} disabled={sendingEmail} style={{ borderRadius: 8, background: '#10b981', border: 'none', fontWeight: 600, padding: '8px 20px' }}>
+                        {sendingEmail ? <><Spinner size="sm" animation="border" className="me-2" />Sending…</> : 'Send Email'}
+                    </Button>
+                </Modal.Footer>
+            </Modal>
+        </>
     );
 }

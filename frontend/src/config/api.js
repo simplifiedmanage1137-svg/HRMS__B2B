@@ -33,9 +33,9 @@ export const API_ENDPOINTS = {
 
   // Password
   PASSWORD_CHANGE:        ep('/api/auth/change-password'),
-  PASSWORD_FORGOT:        ep('/api/auth/forgot-password'),
-  PASSWORD_RESET:         ep('/api/auth/reset-password'),
-  PASSWORD_VERIFY_RESET_IDENTITY: ep('/api/auth/verify-reset-identity'),
+  PASSWORD_FORGOT:        ep('/api/auth/forgot-password'),   // step 1 + "Resend OTP" — sends a 4-digit OTP by email
+  PASSWORD_VERIFY_OTP:    ep('/api/auth/verify-otp'),        // step 2 — verify OTP, returns a short-lived reset token
+  PASSWORD_RESET:         ep('/api/auth/reset-password'),    // step 3 — set new password using that reset token
 
   // Health / test
   TEST:    ep('/api/test'),
@@ -228,6 +228,7 @@ export const API_ENDPOINTS = {
   ONBOARDING_LINK_APPROVE:      (id) => ep(`/api/onboarding/links/${id}/approve`),
   ONBOARDING_LINK_CLEAR_TEMP_PASSWORD: (id) => ep(`/api/onboarding/links/${id}/clear-temp-password`),
   ONBOARDING_LINK_SUBMISSION:   (id) => ep(`/api/onboarding/links/${id}/submission`),
+  ONBOARDING_LINK_SEND_EMAIL:   (id) => ep(`/api/onboarding/links/${id}/send-email`),
   ONBOARDING_BY_TOKEN:          (token) => ep(`/api/onboarding/${token}`),
   ONBOARDING_ACCEPT:            (token) => ep(`/api/onboarding/${token}/accept`),
   ONBOARDING_REJECT:            (token) => ep(`/api/onboarding/${token}/reject`),
@@ -279,6 +280,9 @@ export const API_ENDPOINTS = {
   POST_VOTE:        (id) => ep(`/api/posts/${id}/vote`),
   POST_POLL_VOTERS: (id) => ep(`/api/posts/${id}/poll-voters`),
   POST_POLL_STATUS: (id) => ep(`/api/posts/${id}/poll-status`),
+
+  // Email (Admin/HR manual compose)
+  EMAIL_SEND:                ep('/api/email/send'),
 
   // Deductions
   DEDUCTIONS:                ep('/api/deductions'),
