@@ -1,7 +1,7 @@
 const supabase = require('../config/supabase');
 const { isDateHoliday, getHolidayName } = require('../data/holidays');
 const { getDeductionTotal } = require('./deductionController');
-const { toUTCMs } = require('./attendanceController')._shared;
+const { pickBetterAttendanceRow } = require('./attendanceController')._shared;
 const { getCycleDates, parseLocalDate, LATE_FREE_COUNT } = require('../config/payrollCycle');
 
 const FIXED_WORKING_DAYS = 22;
@@ -102,18 +102,19 @@ const getEmployeeDetails = async (employeeId) => {
 
 // Get attendance records for the cycle - best record per day
 //
-// Dedup logic mirrors attendanceController.getAttendanceReport exactly (same bug, same fix,
-// ported rather than reinvented): this used to have a rule where a 0-minute "admin absent"
-// row always beat a genuine clock-in row for the same day, on the theory that it must have
-// been an explicit admin override. In practice that shape is indistinguishable from
-// cron/absentEmployeeCheck.js's stale nightly placeholder (clock_in null, status 'absent',
-// written before the employee actually clocked in) — so real present/working days were
-// silently counted as absent in salary calculations whenever both rows existed for a date.
-// Recency (whichever row was actually written most recently) is the reliable signal instead.
+// Dedup uses the exact same pickBetterAttendanceRow rule as attendanceController's
+// getAttendanceReport / getEmployeeAttendanceReport (imported from there, not
+// reimplemented) — this used to have its own ad-hoc "prefer the later raw clock_out
+// timestamp" rule, independent of and inconsistent with the one those two endpoints use.
+// That's the same class of bug that caused B2B260612's Jul 28 day to show Present on the
+// employee's own Attendance page but Absent in the payroll Excel: whichever duplicate row
+// happens to carry the later clock_out timestamp isn't necessarily the real/complete one.
+// Left un-synced, that mismatch would also silently corrupt salary slips and the Payroll
+// Preview — this makes all three (Attendance page, Excel export, salary calculation) agree.
 const getAttendanceRecords = async (employeeId, startDateStr, endDateStr) => {
     const { data: attendance, error } = await supabase
         .from('attendance')
-        .select('attendance_date, clock_in, clock_out, clock_in_ist, clock_out_ist, status, total_minutes, late_minutes, overtime_hours, overtime_amount, is_holiday, holiday_name, created_at, updated_at')
+        .select('attendance_date, clock_in, clock_out, clock_in_ist, clock_out_ist, status, total_minutes, late_minutes, overtime_hours, overtime_amount, is_holiday, holiday_name, is_regularized, created_at, updated_at')
         .eq('employee_id', employeeId)
         .gte('attendance_date', startDateStr)
         .lte('attendance_date', endDateStr)
@@ -124,34 +125,7 @@ const getAttendanceRecords = async (employeeId, startDateStr, endDateStr) => {
     const bestPerDay = {};
     for (const rec of (attendance || [])) {
         const dateKey = rec.attendance_date.split('T')[0];
-        const existing = bestPerDay[dateKey];
-        if (!existing) {
-            bestPerDay[dateKey] = rec;
-            continue;
-        }
-
-        const existingClockOut = existing.clock_out_ist || existing.clock_out;
-        const newClockOut = rec.clock_out_ist || rec.clock_out;
-
-        if (newClockOut && !existingClockOut) {
-            bestPerDay[dateKey] = rec;
-        } else if (newClockOut && existingClockOut) {
-            if (toUTCMs(newClockOut) > toUTCMs(existingClockOut)) {
-                bestPerDay[dateKey] = rec;
-            }
-        } else if (!existingClockOut && !newClockOut) {
-            const existingTime = new Date(existing.updated_at || existing.created_at).getTime() || 0;
-            const newTime = new Date(rec.updated_at || rec.created_at).getTime() || 0;
-            if (newTime > existingTime) {
-                bestPerDay[dateKey] = rec;
-            } else if (newTime === existingTime) {
-                const existingHasClockIn = !!(existing.clock_in || existing.clock_in_ist);
-                const newHasClockIn = !!(rec.clock_in || rec.clock_in_ist);
-                if (newHasClockIn && !existingHasClockIn) {
-                    bestPerDay[dateKey] = rec;
-                }
-            }
-        }
+        bestPerDay[dateKey] = pickBetterAttendanceRow(bestPerDay[dateKey], rec);
     }
 
     return Object.values(bestPerDay);
@@ -176,6 +150,16 @@ const calculateAttendanceSummary = (attendanceRecords, leaves, startDateStr, end
     const startDate = parseLocalDate(startDateStr);
     const endDate   = parseLocalDate(endDateStr);
     const joinDate  = joiningDate ? parseLocalDate(joiningDate.toISOString().split('T')[0]) : null;
+
+    // A cycle can be (and, per real usage here, regularly is) summarized before it has
+    // finished — e.g. an admin generating/previewing a slip mid-month. Days after today
+    // haven't happened yet and must not be walked at all, let alone fall through to
+    // absentDays++ for lack of an attendance row — a fully-present new joiner would
+    // otherwise show a wall of "Absent" for the rest of the cycle that simply hasn't
+    // arrived yet.
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const loopEndDate = endDate > today ? today : endDate;
 
     // Use local date string (YYYY-MM-DD) to avoid UTC offset issues
     const toLocalDateStr = (d) => {
@@ -218,7 +202,7 @@ const calculateAttendanceSummary = (attendanceRecords, leaves, startDateStr, end
     let lateDays = 0;
 
     const currentDate = new Date(startDate);
-    while (currentDate <= endDate) {
+    while (currentDate <= loopEndDate) {
         const dateStr    = toLocalDateStr(currentDate);
         const dayOfWeek  = currentDate.getDay();
         const isWeekday  = dayOfWeek !== 0 && dayOfWeek !== 6;
@@ -248,7 +232,16 @@ const calculateAttendanceSummary = (attendanceRecords, leaves, startDateStr, end
             const dbStatus = (attendance.status || '').toLowerCase();
             const totalMinutes = attendance.total_minutes || 0;
 
-            if (dbStatus === 'present') {
+            // An admin-approved regularization always counts as a full present day for pay,
+            // regardless of the computed status/hours — same rule the employee's own
+            // Attendance page and the payroll Excel export already use (a regularization can
+            // legitimately land at dbStatus 'half_day' or even 'absent' if the approved
+            // clock-in/out totals under 9h/5h, but the point of approving it is that the day
+            // is paid in full). Without this, a regularized short day silently under-paid the
+            // employee even though every screen they can see shows "Present".
+            if (attendance.is_regularized) {
+                presentDays++;
+            } else if (dbStatus === 'present') {
                 presentDays++;
             } else if (dbStatus === 'half_day') {
                 halfDays++;
@@ -285,6 +278,17 @@ const calculateAttendanceSummary = (attendanceRecords, leaves, startDateStr, end
                 lateDays++;
                 totalLateMinutes += Number(attendance.late_minutes) || 0;
             }
+        } else if (isDateHoliday(dateStr)) {
+            // Company holiday, no attendance row and no leave record — expected, since
+            // cron/absentEmployeeCheck.js explicitly skips marking absences on holidays, so
+            // there is usually nothing in attendanceMap for this date at all. This day is
+            // already credited via holidayDays in generateSalarySlip's totalPaidDays; it must
+            // NOT also fall through to absentDays here. Before this fix, a fully-present
+            // employee with one company holiday in the cycle got docked a full day's pay for
+            // that holiday: totalPaidDays (which does add holidayDays) reached totalWorkingDays
+            // so basicSalary was correctly capped at the full monthly salary, but absentDays
+            // wrongly included the holiday too, so effectiveUnpaidDeduction still fired and
+            // subtracted a day's pay that was supposedly already covered.
         } else {
             absentDays++;
         }
@@ -323,6 +327,41 @@ exports.generateSalarySlip = async (req, res) => {
         const employee = await getEmployeeDetails(employee_id);
         if (!employee) return res.status(404).json({ success: false, message: 'Employee not found' });
 
+        // Self-service: an employee can generate their OWN slip any time, no admin approval
+        // needed — but only for a cycle that has actually finished (their joining month
+        // through last month), never the in-progress current cycle or a future one. Ownership
+        // of employee_id is enforced by the isOwnDataOrAdmin route middleware; this is the
+        // month-range check, which only applies to non-admin callers — admins keep their
+        // existing unrestricted ability to generate/preview any month (including mid-cycle).
+        const isAdminCaller = ['admin', 'sub_admin', 'hr'].includes(req.user?.role);
+        if (!isAdminCaller) {
+            const reqMonth = parseInt(month), reqYear = parseInt(year);
+            const today = new Date();
+
+            if (employee.joining_date) {
+                const joinDate = new Date(employee.joining_date);
+                const joiningMonthStart = new Date(joinDate.getFullYear(), joinDate.getMonth(), 1);
+                const requestedMonthStart = new Date(reqYear, reqMonth - 1, 1);
+                if (requestedMonthStart < joiningMonthStart) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `You cannot generate a salary slip for a month before your joining date (${joinDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })})`,
+                    });
+                }
+            }
+
+            // Cycle for the requested month ends on the 25th; only allow generating it from
+            // the 27th onward (2 days clear of cycle end), so the in-progress current cycle
+            // is never self-serviceable — matches the frontend's isMonthEligible rule exactly.
+            const allowFrom = new Date(reqYear, reqMonth - 1, 27);
+            if (today < allowFrom) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Salary slip for this month is not available yet — it becomes available on the 27th, once the pay cycle has fully closed.`,
+                });
+            }
+        }
+
         // Get cycle dates
         const cycle = getCycleDates(parseInt(month), parseInt(year));
 
@@ -350,7 +389,11 @@ exports.generateSalarySlip = async (req, res) => {
         const joiningDate   = employee.joining_date ? new Date(employee.joining_date) : null;
 
         // ── 1. Actual working days in cycle (Mon–Fri only, 26th to 25th) ──
-        const totalWorkingDays = calculateWorkingDaysInCycle(cycle.startDate, cycle.endDate);
+        // Must pass joiningDate for a mid-cycle joiner — otherwise the denominator is the
+        // full cycle's weekday count even though the employee was only eligible to work a
+        // fraction of it, which understates per-day salary and can leave a fully-present
+        // new joiner short of the full monthly cap they should hit at 100% attendance.
+        const totalWorkingDays = calculateWorkingDaysInCycle(cycle.startDate, cycle.endDate, joiningDate);
 
         // ── 2. Per-day salary based on actual cycle working days ──
         const perDaySalary = totalWorkingDays > 0 ? monthlySalary / totalWorkingDays : 0;
@@ -364,8 +407,15 @@ exports.generateSalarySlip = async (req, res) => {
         // outside the normal import flow or where records were just entered.
 
         // ── 4. Count company holidays (weekdays only) in cycle ──
-        // Holidays are treated as present days (not deducted)
-        const { holidayDays, holidayNames } = countHolidaysInCycle(cycle.startDateStr, cycle.endDateStr);
+        // Holidays are treated as present days (not deducted). Capped at today so a slip
+        // generated mid-cycle doesn't pre-credit a holiday that hasn't happened yet — kept
+        // in sync with calculateAttendanceSummary's own today-cap below.
+        const todayForCycle = new Date();
+        todayForCycle.setHours(0, 0, 0, 0);
+        const holidayCountEndDateStr = cycle.endDate > todayForCycle
+            ? `${todayForCycle.getFullYear()}-${String(todayForCycle.getMonth() + 1).padStart(2, '0')}-${String(todayForCycle.getDate()).padStart(2, '0')}`
+            : cycle.endDateStr;
+        const { holidayDays, holidayNames } = countHolidaysInCycle(cycle.startDateStr, holidayCountEndDateStr);
 
         // ── 5. Calculate attendance summary ──
         const summary = calculateAttendanceSummary(
@@ -431,7 +481,12 @@ exports.generateSalarySlip = async (req, res) => {
             absent_days:        summary.absentDays,
             paid_leave_days:    summary.paidLeaveDays,
             unpaid_leave_days:  summary.unpaidLeaveDays,
-            unpaid_deduction:   unpaidDeduction,
+            // Store the amount actually subtracted from net_salary (effectiveUnpaidDeduction),
+            // not the raw deductibleDays × perDaySalary figure — the two diverge whenever
+            // absent days are already excluded from basic_salary (the common case), and the
+            // PDF/employee salary-slip views display this column as if it were money actually
+            // taken out, so it must always agree with net_salary or the numbers won't add up.
+            unpaid_deduction:   effectiveUnpaidDeduction,
             basic_salary:       basicSalary,
             overtime_hours:     overtimeHours,
             overtime_amount:    overtimeAmount,
@@ -670,7 +725,12 @@ exports.generateBulkSalarySlips = async (req, res) => {
                     .eq('year', year);
 
                 if (!existing || existing.length === 0) {
-                    const genReq = { body: { employee_id: emp.employee_id, month, year } };
+                    // This whole endpoint is already isAdmin-gated at the route level, so the
+                    // delegated call must carry that same admin identity through — otherwise
+                    // generateSalarySlip's self-service month-eligibility check (joining month
+                    // through last completed cycle only) would wrongly apply to admin bulk runs
+                    // too, blocking generation for the current in-progress cycle.
+                    const genReq = { body: { employee_id: emp.employee_id, month, year }, user: req.user };
                     const genRes = { json: (data) => results.push({ employee_id: emp.employee_id, ...data }), status: () => genRes };
                     await exports.generateSalarySlip(genReq, genRes);
                 } else {
@@ -948,7 +1008,7 @@ exports.saveSalaryAdjustment = async (req, res) => {
             // Use limit(1) to avoid maybeSingle() error when duplicate rows exist
             const { data: slipRows } = await supabase
                 .from('salary_slips')
-                .select('id, basic_salary, net_salary')
+                .select('id, basic_salary, net_salary, unpaid_deduction, custom_deduction')
                 .eq('employee_id', employee_id)
                 .eq('month', parseInt(month))
                 .eq('year',  parseInt(year))
@@ -957,7 +1017,13 @@ exports.saveSalaryAdjustment = async (req, res) => {
             const existingSlip = slipRows?.[0] || null;
 
             const basicSalary = parseFloat(existingSlip?.basic_salary || 0);
-            const netSalary   = parseFloat(Math.max(0, basicSalary + otAmount - dt).toFixed(2));
+            // Must carry forward whatever unpaid/custom deductions the slip already had —
+            // recomputing net_salary from basicSalary + otAmount − dt alone (as this used to)
+            // silently dropped both, so saving OT could make a slip's payable amount go back
+            // UP even though nothing about the employee's absences or admin deductions changed.
+            const existingUnpaidDeduction = parseFloat(existingSlip?.unpaid_deduction || 0);
+            const existingCustomDeduction = parseFloat(existingSlip?.custom_deduction || 0);
+            const netSalary = parseFloat(Math.max(0, basicSalary + otAmount - existingUnpaidDeduction - dt - existingCustomDeduction).toFixed(2));
 
             const otPayload = {
                 overtime_amount: otAmount,
@@ -979,7 +1045,8 @@ exports.saveSalaryAdjustment = async (req, res) => {
             } else {
                 // No slip yet — create a minimal stub so OT is persisted
                 const cycle = getCycleDates(parseInt(month), parseInt(year));
-                const totalWD = calculateWorkingDaysInCycle(cycle.startDate, cycle.endDate);
+                const joiningDateOT = employee.joining_date ? new Date(employee.joining_date) : null;
+                const totalWD = calculateWorkingDaysInCycle(cycle.startDate, cycle.endDate, joiningDateOT);
                 const { data, error } = await supabase
                     .from('salary_slips')
                     .insert([{
@@ -1042,8 +1109,9 @@ exports.saveSalaryAdjustment = async (req, res) => {
             .maybeSingle();
 
         const cycle = getCycleDates(parseInt(month), parseInt(year));
+        const joiningDateAdj = employee.joining_date ? new Date(employee.joining_date) : null;
         const totalWorkingDays = existingSlip?.total_working_days
-            || calculateWorkingDaysInCycle(cycle.startDate, cycle.endDate);
+            || calculateWorkingDaysInCycle(cycle.startDate, cycle.endDate, joiningDateAdj);
 
         const earnedValue = salary_earned !== undefined && salary_earned !== ''
             ? parseFloat(salary_earned)
@@ -1063,11 +1131,17 @@ exports.saveSalaryAdjustment = async (req, res) => {
         const professionalTaxAmountAdj = isPFApplicableAdj ? (employee.professional_tax_amount != null ? parseInt(employee.professional_tax_amount) : 0) : 0;
         const fixedDeductions = monthlySalary > 0 ? (isPFApplicableAdj ? pfAmountAdj + ptAmountAdj + professionalTaxAmountAdj : 200) : 0;
 
+        // Any admin/custom deductions (late fines, damages, etc.) for this employee/month —
+        // must be subtracted here too, exactly like generateSalarySlip does. Without this, a
+        // manual salary-earned adjustment silently wiped out a custom deduction from
+        // net_salary even though the deduction row itself was untouched.
+        const customDeductionAdj = parseFloat((await getDeductionTotal(employee_id, month, year)).toFixed(2));
+
         // basic_salary = what the employee earned (before fixed deductions)
         // For OT case:  earned(49900) - OT(1900) = monthly(48000) ← base pay
         // For short case: earned(41350) - 0 = 41350 ← reduced pay
         const adjBasicSalary = parseFloat((adj.salary_earned - adj.adj_overtime_amount).toFixed(2));
-        const adjNetSalary   = parseFloat(Math.max(0, adj.salary_earned - fixedDeductions).toFixed(2));
+        const adjNetSalary   = parseFloat(Math.max(0, adj.salary_earned - fixedDeductions - customDeductionAdj).toFixed(2));
 
         // Core payload — only uses columns that always exist in salary_slips
         // NOTE: absent_days is NOT included here — it stays from generateSalarySlip (attendance-based)
@@ -1078,6 +1152,7 @@ exports.saveSalaryAdjustment = async (req, res) => {
             overtime_hours:   adj.adj_overtime_hours,
             unpaid_deduction: 0,
             dt:               fixedDeductions,
+            custom_deduction: customDeductionAdj,
             updated_at:       new Date().toISOString(),
         };
 
@@ -1117,7 +1192,7 @@ exports.saveSalaryAdjustment = async (req, res) => {
             resultSlip = data;
         } else {
             // No attendance-based slip yet — create a stub with adjustment only
-            const totalWD = calculateWorkingDaysInCycle(cycle.startDate, cycle.endDate);
+            const totalWD = calculateWorkingDaysInCycle(cycle.startDate, cycle.endDate, joiningDateAdj);
             const impliedPresentDays = Math.max(0, totalWD - impliedAbsentDays);
             const { data, error } = await supabase
                 .from('salary_slips')
@@ -1140,6 +1215,7 @@ exports.saveSalaryAdjustment = async (req, res) => {
                     overtime_hours:     adj.adj_overtime_hours,
                     overtime_amount:    adj.adj_overtime_amount,
                     dt:                 fixedDeductions,
+                    custom_deduction:   customDeductionAdj,
                     net_salary:         adjNetSalary,
                     is_paid:            false,
                     generated_date:     new Date().toISOString(),
@@ -1250,7 +1326,16 @@ exports.getBulkPayroll = async (req, res) => {
         const records = employees.map(emp => {
             const monthlySalary   = parseFloat(emp.in_hand_salary || emp.gross_salary || emp.salary || 0);
             const slip            = slipMap[emp.employee_id] || null;
-            const totalWorkingDays = slip?.total_working_days || defaultWD;
+            // defaultWD (whole cycle, no joining-date adjustment) is only a fallback for
+            // employees who joined before this cycle started — a mid-cycle joiner with no
+            // slip yet must get their own joining-date-aware count here, otherwise Payroll
+            // Preview shows an inflated "Total Working Days" for them (the full cycle instead
+            // of just the days since they joined) before a slip has ever been generated.
+            const empJoiningDate  = emp.joining_date ? new Date(emp.joining_date) : null;
+            const totalWorkingDays = slip?.total_working_days
+                || (empJoiningDate && empJoiningDate > cycle.startDate
+                    ? calculateWorkingDaysInCycle(cycle.startDate, cycle.endDate, empJoiningDate)
+                    : defaultWD);
             const shiftHours      = slip?.shift_hours || parseShiftHours(emp.shift_timing) || 8;
             const attendance      = attendanceByEmployee[emp.employee_id];
             const deductionItems  = deductionsByEmployee[emp.employee_id] || [];
@@ -1261,6 +1346,16 @@ exports.getBulkPayroll = async (req, res) => {
             let adj;
             if (slip?.salary_earned != null) {
                 adj = calcAdjustment(monthlySalary, slip.salary_earned, totalWorkingDays, shiftHours);
+                // calcAdjustment's own final_payable_salary is monthly + OT − shortfall only —
+                // it has no idea about PF/PT/Professional Tax or admin deductions, so it always
+                // comes out higher than what the employee actually gets paid. slip.net_salary
+                // (set by saveSalaryAdjustment, which DOES subtract those) is the real figure —
+                // prefer it whenever a slip exists, exactly like the no-adjustment branch below
+                // already does, so Payroll Preview/Excel never shows a bigger "payable" number
+                // than the salary slip PDF for the same employee/month.
+                if (slip?.net_salary != null) {
+                    adj.final_payable_salary = parseFloat(slip.net_salary);
+                }
             } else {
                 // No manual adjustment yet — show defaults
                 adj = {

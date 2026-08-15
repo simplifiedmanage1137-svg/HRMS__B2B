@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const leaveController = require('../controllers/leaveController');
+const { isAdmin, isOwnDataOrAdmin } = require('../middleware/auth');
 
 // Debug: Check what functions are available
 console.log('🔍 Available leaveController methods:', Object.keys(leaveController));
@@ -36,6 +37,13 @@ router.post('/manual-accrual/:employee_id', leaveController.manualAccrual);
 
 // Yearly reset (admin only)
 router.post('/yearly-reset', leaveController.yearlyReset);
+
+// HR/Admin manual leave-balance adjustment — add or reduce Comp-Off / pooled paid-leave
+// balance any time, no approval workflow. Admin-gated (isAdmin covers admin/sub_admin/hr).
+router.post('/adjust-balance', isAdmin, leaveController.adjustLeaveBalance);
+
+// Adjustment audit history — employee can see their own, admin/hr can see anyone's.
+router.get('/adjustments/:employee_id', isOwnDataOrAdmin, leaveController.getLeaveAdjustmentHistory);
 
 console.log('✅ Leave routes loaded');
 

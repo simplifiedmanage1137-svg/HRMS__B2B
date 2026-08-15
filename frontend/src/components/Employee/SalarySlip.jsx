@@ -73,13 +73,16 @@ const SalarySlip = () => {
   const currentMonth = today.getMonth() + 1;
   const currentYear = today.getFullYear();
 
-  // Salary slips can only be generated for the previous month — current/future months are not eligible
+  // Default starting point for the picker — the most recently completed cycle (previous
+  // calendar month). The employee can pick any earlier eligible month too, from their
+  // joining month up through this one — see generateEligibleMonths/isMonthEligible.
   const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1;
   const prevYear = currentMonth === 1 ? currentYear - 1 : currentYear;
 
-  // Locked to the previous month/year — salary slips are only generated for the prior cycle
-  const selectedMonth = prevMonth.toString();
-  const selectedYear = prevYear;
+  // Employee-selectable — no longer locked to "previous month only". Self-service
+  // generation is allowed for any completed cycle: joining month through last month.
+  const [selectedMonth, setSelectedMonth] = useState(prevMonth.toString());
+  const [selectedYear, setSelectedYear] = useState(prevYear);
   const [hasAttendance, setHasAttendance] = useState(true);
   const [checkingAttendance, setCheckingAttendance] = useState(false);
   const [months] = useState([
@@ -166,16 +169,19 @@ const SalarySlip = () => {
   const generateEligibleMonths = (joiningInfo) => {
     if (!joiningInfo) return;
 
-    const currentDate = new Date();
-    const currentYear = currentDate.getFullYear();
-    const currentMonth = currentDate.getMonth() + 1;
-
+    const today = new Date();
     const eligible = [];
 
     let year = joiningInfo.year;
     let month = joiningInfo.month;
 
-    while (year < currentYear || (year === currentYear && month <= currentMonth)) {
+    // A month's cycle (26th of the prior month → 25th of this one) only becomes
+    // self-serviceable once we're 2 days clear of its own end — i.e. from the 27th of
+    // that same month onward (same rule as isMonthEligible below). This naturally stops
+    // at the last fully-completed cycle and excludes the current in-progress one, without
+    // hardcoding "previous calendar month" — e.g. on the 27th+ of a month, that month's
+    // own slip is already eligible even though we're still "in" it.
+    while (today >= new Date(year, month - 1, 27)) {
       eligible.push({
         year: year,
         month: month,
@@ -190,6 +196,13 @@ const SalarySlip = () => {
     }
 
     setEligibleMonths(eligible);
+
+    // Default the picker to the most recently completed eligible cycle.
+    if (eligible.length > 0) {
+      const latest = eligible[eligible.length - 1];
+      setSelectedYear(latest.year);
+      setSelectedMonth(latest.month.toString());
+    }
   };
 
   const fetchEmployeeData = async () => {
@@ -405,7 +418,7 @@ const SalarySlip = () => {
       });
 
       const { basicSalary, deduction, netSalary, overtimeAmount, overtimeHours, absentDays, unpaidLeaveDays, unpaidDeduction, perDaySalary } = getSlipAmounts(slip);
-      const totalAbsentDeduction = (absentDays + unpaidLeaveDays) * perDaySalary;
+      const totalAbsentDeduction = unpaidDeduction;
       const bd = getDeductionBreakdown(slip);
       const pfAmt = bd.pf;
       const ptAmt = bd.pt;
@@ -795,34 +808,43 @@ const SalarySlip = () => {
             </Card.Header>
             <Card.Body className="p-2 p-md-3">
               <Form>
-                {/* Year Selection - locked to previous month's year only */}
+                {/* Year Selection — any year that has at least one eligible month */}
                 <Form.Group className="mb-2">
                   <Form.Label className="small fw-medium text-muted">Select Year</Form.Label>
                   <Form.Select
                     value={selectedYear}
                     size="sm"
                     className="py-2"
-                    disabled
+                    disabled={eligibleMonths.length === 0}
+                    onChange={(e) => {
+                      const year = parseInt(e.target.value);
+                      setSelectedYear(year);
+                      const firstForYear = eligibleMonths.find(em => em.year === year);
+                      if (firstForYear) setSelectedMonth(firstForYear.month.toString());
+                    }}
                   >
-                    <option value={prevYear}>{prevYear}</option>
+                    {[...new Set(eligibleMonths.map(em => em.year))].map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
                   </Form.Select>
                 </Form.Group>
 
-                {/* Month Selection - locked to previous month only */}
+                {/* Month Selection — any completed cycle from joining month through last month */}
                 <Form.Group className="mb-3">
                   <Form.Label className="small fw-medium text-muted">Select Month</Form.Label>
                   <Form.Select
                     value={selectedMonth}
                     size="sm"
                     className="py-2"
-                    disabled
+                    disabled={eligibleMonths.length === 0}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
                   >
-                    <option value={prevMonth}>
-                      {months.find(m => m.value === prevMonth)?.label} (Previous Month)
-                    </option>
+                    {eligibleMonths.filter(em => em.year === parseInt(selectedYear)).map(em => (
+                      <option key={em.month} value={em.month}>{em.label}</option>
+                    ))}
                   </Form.Select>
                   <small className="text-muted d-block mt-1">
-                    Salary slips can only be generated for the previous month.
+                    Generate a slip for any completed cycle from your joining month through last month — no approval needed.
                   </small>
 
                   {selectedMonth && selectedYear && joiningInfo && !isMonthEligible(selectedMonth, selectedYear) && (
@@ -846,7 +868,7 @@ const SalarySlip = () => {
                     <div className="mt-1 text-danger small d-flex align-items-start">
                       <FaInfoCircle className="me-1 flex-shrink-0 mt-1" size={10} />
                       <span className="text-wrap">
-                        No attendance records found for {months.find(m => m.value === prevMonth)?.label} {prevYear}. You cannot generate a salary slip without attendance data.
+                        No attendance records found for {months.find(m => m.value === parseInt(selectedMonth))?.label} {selectedYear}. You cannot generate a salary slip without attendance data.
                       </span>
                     </div>
                   )}
@@ -1178,21 +1200,11 @@ const SalarySlip = () => {
                       </td>
                       <td className="text-end py-1 pe-2 fw-semibold">{formatCurrency(selectedSlipAmounts.basicSalary)}</td>
                     </tr>
-                    {selectedSlipAmounts.absentDays > 0 && (
+                    {selectedSlipAmounts.unpaidDeduction > 0 && (
                       <tr style={{ backgroundColor: '#fff3cd' }}>
                         <td className="py-1 ps-2">
                           <span className="text-danger">
-                            Absent Deduction ({selectedSlipAmounts.absentDays} day{selectedSlipAmounts.absentDays > 1 ? 's' : ''} × ₹{formatCurrency(selectedSlipAmounts.perDaySalary)}/day)
-                          </span>
-                        </td>
-                        <td className="text-end py-1 pe-2 text-danger fw-bold">- {formatCurrency(selectedSlipAmounts.absentDays * selectedSlipAmounts.perDaySalary)}</td>
-                      </tr>
-                    )}
-                    {selectedSlipAmounts.unpaidLeaveDays > 0 && (
-                      <tr style={{ backgroundColor: '#fff3cd' }}>
-                        <td className="py-1 ps-2">
-                          <span className="text-danger">
-                            Unpaid Leave Deduction ({selectedSlipAmounts.unpaidLeaveDays} day{selectedSlipAmounts.unpaidLeaveDays > 1 ? 's' : ''} × ₹{formatCurrency(selectedSlipAmounts.perDaySalary)}/day)
+                            Absent Deduction ({selectedSlipAmounts.absentDays > 0 ? `${selectedSlipAmounts.absentDays} absent` : ''}{selectedSlipAmounts.unpaidLeaveDays > 0 ? `${selectedSlipAmounts.absentDays > 0 ? ' + ' : ''}${selectedSlipAmounts.unpaidLeaveDays} unpaid leave` : ''} × ₹{formatCurrency(selectedSlipAmounts.perDaySalary)}/day)
                           </span>
                         </td>
                         <td className="text-end py-1 pe-2 text-danger fw-bold">- {formatCurrency(selectedSlipAmounts.unpaidDeduction)}</td>
@@ -1233,13 +1245,13 @@ const SalarySlip = () => {
                       const professionalTaxV = bdown.professionalTax || 0;
                       const dtV = bdown.dt !== null ? bdown.dt : selectedSlipAmounts.deduction;
                       const customDed = parseFloat(selectedSlip?.custom_deduction || 0);
-                      const absentDeduct = (selectedSlipAmounts.absentDays + selectedSlipAmounts.unpaidLeaveDays) * selectedSlipAmounts.perDaySalary;
+                      const absentDeduct = selectedSlipAmounts.unpaidDeduction;
                       return (<>
                         {pfV > 0 && <tr><td className="py-1 ps-2">PF (Provident Fund)</td><td className="text-end py-1 pe-2">{formatCurrency(pfV)}</td></tr>}
                         <tr><td className="py-1 ps-2">PT</td><td className="text-end py-1 pe-2">{ptV > 0 ? formatCurrency(ptV) : '0'}</td></tr>
                         {professionalTaxV > 0 && <tr><td className="py-1 ps-2">Professional Tax</td><td className="text-end py-1 pe-2">{formatCurrency(professionalTaxV)}</td></tr>}
                         <tr><td className="py-1 ps-2">TDS</td><td className="text-end py-1 pe-2">0</td></tr>
-                        {(selectedSlipAmounts.absentDays + selectedSlipAmounts.unpaidLeaveDays) > 0 && (
+                        {absentDeduct > 0 && (
                           <tr style={{ backgroundColor: '#ffe0e0' }}>
                             <td className="py-1 ps-2 text-danger">
                               Absent Deduction ({selectedSlipAmounts.absentDays > 0 ? `${selectedSlipAmounts.absentDays} absent` : ''}{selectedSlipAmounts.unpaidLeaveDays > 0 ? `${selectedSlipAmounts.absentDays > 0 ? ' + ' : ''}${selectedSlipAmounts.unpaidLeaveDays} unpaid leave` : ''} × ₹{formatCurrency(selectedSlipAmounts.perDaySalary)}/day)
@@ -1278,8 +1290,8 @@ const SalarySlip = () => {
               {/* Calculation */}
               <div className="bg-light p-2 mb-3 rounded small">
                 <strong>Calculation:</strong> Basic Salary (₹{formatCurrency(selectedSlipAmounts.basicSalary)})
-                {(selectedSlipAmounts.absentDays + selectedSlipAmounts.unpaidLeaveDays) > 0 && (
-                  <span className="text-danger"> - Absent Deduction (₹{formatCurrency((selectedSlipAmounts.absentDays + selectedSlipAmounts.unpaidLeaveDays) * selectedSlipAmounts.perDaySalary)})</span>
+                {selectedSlipAmounts.unpaidDeduction > 0 && (
+                  <span className="text-danger"> - Absent Deduction (₹{formatCurrency(selectedSlipAmounts.unpaidDeduction)})</span>
                 )}
                 {selectedSlipAmounts.overtimeAmount > 0 && (
                   <span className="text-success"> + Overtime (₹{formatCurrency(selectedSlipAmounts.overtimeAmount)})</span>

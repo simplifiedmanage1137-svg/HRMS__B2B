@@ -6,7 +6,7 @@ import {
   FaUserCircle, FaSignOutAlt, FaFingerprint, FaClock,
   FaBell, FaPaperPlane, FaEdit, FaUserTie,
   FaBullhorn, FaStar, FaChevronRight, FaLayerGroup, FaDesktop, FaChartLine, FaMinusCircle, FaFileExcel,
-  FaTicketAlt, FaReceipt, FaFileInvoiceDollar
+  FaTicketAlt, FaReceipt, FaFileInvoiceDollar, FaCoins
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -225,6 +225,7 @@ const Sidebar = () => {
               <Section label="Management" />
               <NavItem to="/admin/employees"          icon={<FaUsers />}       label="Employees" />
               <NavItem to="/admin/leave-requests"     icon={<FaCalendarAlt />} label="Leave Requests" />
+              <NavItem to="/admin/leave-balance"      icon={<FaCoins />}       label="Leave Balance" />
               <NavItem to="/admin/attendance/reports" icon={<FaClock />}       label="Attendance" />
               <NavItem to="/admin/ratings"            icon={<FaStar />}        label="Employee Ratings" />
               <NavItem to="/performance/reviews"      icon={<FaChartLine />}   label="Performance Reviews" />
@@ -256,6 +257,7 @@ const Sidebar = () => {
               <Section label="Management" />
               <NavItem to="/admin/employees"          icon={<FaUsers />}       label="Employees" />
               <NavItem to="/admin/leave-requests"     icon={<FaCalendarAlt />} label="Leave Requests" />
+              <NavItem to="/admin/leave-balance"      icon={<FaCoins />}       label="Leave Balance" />
               <NavItem to="/admin/attendance/reports" icon={<FaClock />}       label="Attendance" />
               <NavItem to="/admin/ratings"            icon={<FaStar />}        label="Employee Ratings" />
               <NavItem to="/performance/reviews"      icon={<FaChartLine />}   label="Performance Reviews" />

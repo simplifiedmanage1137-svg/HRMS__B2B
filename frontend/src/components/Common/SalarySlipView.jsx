@@ -133,10 +133,10 @@ const SalarySlipView = ({ slip, employee }) => {
             <SalaryRow label="PT"                    value={ptAmt} />
             {professionalTaxAmt > 0 && <SalaryRow label="Professional Tax" value={professionalTaxAmt} />}
             <SalaryRow label="TDS"                   value={0} />
-            {(a.absentDays + a.unpaidLeaveDays) > 0 && (
+            {a.unpaidDeduction > 0 && (
               <SalaryRow
                 label={`Absent Deduction (${a.absentDays > 0 ? `${a.absentDays} absent` : ''}${a.unpaidLeaveDays > 0 ? `${a.absentDays > 0 ? ' + ' : ''}${a.unpaidLeaveDays} unpaid` : ''} × ₹${fmtNum(a.perDaySalary)}/day)`}
-                value={(a.absentDays + a.unpaidLeaveDays) * a.perDaySalary}
+                value={a.unpaidDeduction}
                 accent="#dc2626"
               />
             )}
@@ -144,7 +144,7 @@ const SalarySlipView = ({ slip, employee }) => {
             {parseFloat(slip?.custom_deduction || 0) > 0 && (
               <SalaryRow label="Other Deduction" value={parseFloat(slip.custom_deduction)} accent="#dc2626" />
             )}
-            <SalaryRow label="Total Deductions" value={pfAmt + ptAmt + professionalTaxAmt + dtAmt + (a.absentDays + a.unpaidLeaveDays) * a.perDaySalary + parseFloat(slip?.custom_deduction || 0)} bold accent="#dc2626" last />
+            <SalaryRow label="Total Deductions" value={pfAmt + ptAmt + professionalTaxAmt + dtAmt + a.unpaidDeduction + parseFloat(slip?.custom_deduction || 0)} bold accent="#dc2626" last />
           </div>
         </Col>
       </Row>

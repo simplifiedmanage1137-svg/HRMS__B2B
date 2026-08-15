@@ -190,19 +190,28 @@ router.get('/completed-requests', verifyToken, isAdmin, async (req, res) => {
             return res.json([]);
         }
 
+        // Batch-fetch every employee referenced across all completed requests in ONE query
+        // instead of one lookup per request — this list has no date bound or limit, so it
+        // only grows as more requests get completed over time.
+        const involvedIds = [...new Set(requests.map(r => r.employee_id).filter(Boolean))];
+        const employeeMap = {};
+        if (involvedIds.length > 0) {
+            const { data: involvedEmployees, error: empLookupError } = await supabase
+                .from('employees')
+                .select('employee_id, first_name, last_name, email, department, designation')
+                .in('employee_id', involvedIds);
+            if (empLookupError) {
+                console.warn('⚠️ Could not batch-fetch employees for completed requests:', empLookupError);
+            } else {
+                (involvedEmployees || []).forEach(e => { employeeMap[e.employee_id] = e; });
+            }
+        }
+
         const formattedRequests = [];
 
         for (const req of requests) {
             try {
-                const { data: employee, error: empError } = await supabase
-                    .from('employees')
-                    .select('first_name, last_name, email, department, designation')
-                    .eq('employee_id', req.employee_id)
-                    .single();
-
-                if (empError) {
-                    console.warn(`⚠️ Could not fetch employee for ${req.employee_id}:`, empError);
-                }
+                const employee = employeeMap[req.employee_id] || null;
 
                 formattedRequests.push({
                     id: req.id,

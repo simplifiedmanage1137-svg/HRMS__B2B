@@ -20,6 +20,44 @@ const isTeamLeaderDesignation = (designation) => {
            d.includes('head') || d.includes('supervisor');
 };
 
+// Sum of HR/admin manual balance adjustments (leave_balance_adjustments, category='paid')
+// for one employee in a given year — this is the offset term getLeaveBalance/
+// getLeaveBalanceBulk add into the accrual formula. Table is a new, optional addition
+// (see scripts/create-leave-balance-adjustments.sql) — degrade to 0 if it hasn't been
+// created on this DB yet, same defensive pattern used everywhere else this session.
+const getManualPaidAdjustmentTotal = async (employee_id, leave_year) => {
+    const { data, error } = await supabase
+        .from('leave_balance_adjustments')
+        .select('adjustment_days')
+        .eq('employee_id', employee_id)
+        .eq('leave_category', 'paid')
+        .eq('leave_year', leave_year);
+    if (error) {
+        if (/does not exist|schema cache/i.test(error.message || '')) return 0;
+        throw error;
+    }
+    return (data || []).reduce((sum, a) => sum + (parseFloat(a.adjustment_days) || 0), 0);
+};
+
+// Same as above, but for every employee at once — one query instead of N, for
+// getLeaveBalanceBulk. Returns { [employee_id]: totalAdjustmentDays }.
+const getManualPaidAdjustmentTotalsBulk = async (leave_year) => {
+    const { data, error } = await supabase
+        .from('leave_balance_adjustments')
+        .select('employee_id, adjustment_days')
+        .eq('leave_category', 'paid')
+        .eq('leave_year', leave_year);
+    if (error) {
+        if (/does not exist|schema cache/i.test(error.message || '')) return {};
+        throw error;
+    }
+    const totals = {};
+    (data || []).forEach(a => {
+        totals[a.employee_id] = (totals[a.employee_id] || 0) + (parseFloat(a.adjustment_days) || 0);
+    });
+    return totals;
+};
+
 // ==================== GET LEAVE BALANCE ====================
 exports.getLeaveBalance = async (req, res) => {
     try {
@@ -106,9 +144,15 @@ exports.getLeaveBalance = async (req, res) => {
             ?.filter(l => l.leave_type === 'Unpaid')
             ?.reduce((sum, l) => sum + (parseFloat(l.days_count) || 0), 0) || 0;
 
+        // HR/admin manual adjustment (see getManualPaidAdjustmentTotal) — a signed offset
+        // added into the formula so an "extra 2 days" or "reduce 1 day" grant actually sticks,
+        // instead of being silently recomputed away on the next balance fetch like anything
+        // written straight into leave_balance would be.
+        const manualAdjustment = await getManualPaidAdjustmentTotal(employee_id, currentYear);
+
         let available = 0;
         if (isProbComplete) {
-            available = Math.max(0, currentYearAccrual - used - pending);
+            available = Math.max(0, currentYearAccrual + manualAdjustment - used - pending);
         }
 
         await supabase
@@ -128,6 +172,7 @@ exports.getLeaveBalance = async (req, res) => {
         res.json({
             success: true,
             total_accrued: currentYearAccrual.toFixed(1),
+            manual_adjustment: manualAdjustment.toFixed(1),
             used: used.toFixed(1),
             pending: pending.toFixed(1),
             available: available.toFixed(1),
@@ -177,7 +222,7 @@ exports.getLeaveBalanceBulk = async (req, res) => {
 
         const { data: employees, error: empError } = await supabase
             .from('employees')
-            .select('employee_id, joining_date')
+            .select('employee_id, joining_date, comp_off_balance')
             .eq('is_active', true);
         if (empError) throw empError;
 
@@ -189,6 +234,17 @@ exports.getLeaveBalanceBulk = async (req, res) => {
             .lte('start_date', `${currentYear}-12-31`);
         if (leaveError) throw leaveError;
 
+        // Comp-Off has its own ledger-backed balance (not part of the accrual formula
+        // above) — bulk-fetched here too so one call gets everything the Payroll Excel
+        // export needs (PL available/used, Comp-Off available/used).
+        const CompOffService = require('../services/compOffService');
+        let compOffUsedTotals = {};
+        try {
+            compOffUsedTotals = await CompOffService.getUsedCompOffCountsBulk(currentYear);
+        } catch (e) {
+            console.error('Error fetching bulk comp-off usage:', e);
+        }
+
         const leavesByEmployee = {};
         (yearLeaves || []).forEach(l => {
             (leavesByEmployee[l.employee_id] = leavesByEmployee[l.employee_id] || []).push(l);
@@ -198,20 +254,36 @@ exports.getLeaveBalanceBulk = async (req, res) => {
             .filter(l => l.status === status && l.leave_type !== 'Unpaid' && l.leave_type !== 'Comp-Off' && l.leave_type !== 'Birthday')
             .reduce((sum, l) => sum + (parseFloat(l.days_count) || 0), 0);
 
+        // Same manual-adjustment offset getLeaveBalance applies — must be included here too,
+        // otherwise this bulk endpoint (used by the AttendanceReports export) would disagree
+        // with the single-employee balance for anyone HR has adjusted.
+        const adjustmentTotals = await getManualPaidAdjustmentTotalsBulk(currentYear);
+
+        // `balances` is the pre-existing shape (employee_id -> available days as a string) —
+        // kept exactly as-is since AttendanceReports.jsx's export already depends on it.
+        // Everything else here is new/additive.
         const balances = {};
+        const used = {};
+        const compOffBalance = {};
+        const compOffUsed = {};
         (employees || []).forEach(emp => {
-            if (!emp.joining_date) { balances[emp.employee_id] = '0.0'; return; }
+            compOffBalance[emp.employee_id] = Number(emp.comp_off_balance || 0).toFixed(1);
+            compOffUsed[emp.employee_id] = (compOffUsedTotals[emp.employee_id] || 0).toFixed(1);
+
+            if (!emp.joining_date) { balances[emp.employee_id] = '0.0'; used[emp.employee_id] = '0.0'; return; }
             const joiningDate = new Date(emp.joining_date);
-            if (!isProbationComplete(joiningDate, today)) { balances[emp.employee_id] = '0.0'; return; }
+            if (!isProbationComplete(joiningDate, today)) { balances[emp.employee_id] = '0.0'; used[emp.employee_id] = '0.0'; return; }
 
             const currentYearAccrual = calculateCurrentYearAccruedLeaves(joiningDate, today);
             const empLeaves = leavesByEmployee[emp.employee_id] || [];
-            const used = sumDays(empLeaves, 'approved');
+            const usedDays = sumDays(empLeaves, 'approved');
             const pending = sumDays(empLeaves, 'pending');
-            balances[emp.employee_id] = Math.max(0, currentYearAccrual - used - pending).toFixed(1);
+            const manualAdjustment = adjustmentTotals[emp.employee_id] || 0;
+            balances[emp.employee_id] = Math.max(0, currentYearAccrual + manualAdjustment - usedDays - pending).toFixed(1);
+            used[emp.employee_id] = usedDays.toFixed(1);
         });
 
-        res.json({ success: true, balances });
+        res.json({ success: true, balances, used, comp_off_balance: compOffBalance, comp_off_used: compOffUsed });
     } catch (error) {
         console.error('Error fetching bulk leave balances:', error);
         res.status(500).json({ success: false, message: error.message || 'Failed to fetch leave balances' });
@@ -931,6 +1003,136 @@ exports.yearlyReset = async (req, res) => {
             message: 'Failed to reset yearly leaves',
             error: error.message
         });
+    }
+};
+
+// ==================== ADJUST LEAVE BALANCE (HR/Admin — add, reduce, no approval flow) ====================
+// Covers the two balances this system actually tracks: the pooled paid-leave bucket
+// (Annual/Sick/Personal/Maternity/Paternity/Bereavement all draw from ONE shared balance
+// here — see leavePolicy.js — so this adjusts that bucket as a whole, not per sub-type) and
+// Comp-Off (its own ledger-backed balance in comp_off_earnings). Unpaid and Birthday have no
+// balance concept in this system (Unpaid is unrestricted, Birthday is a fixed once-a-year
+// auto-approved perk) so they're rejected here rather than silently accepted and ignored.
+exports.adjustLeaveBalance = async (req, res) => {
+    try {
+        const { employee_id, leave_category, adjustment_days, reason } = req.body;
+
+        if (!employee_id || !leave_category || adjustment_days === undefined || adjustment_days === null || adjustment_days === '') {
+            return res.status(400).json({ success: false, message: 'employee_id, leave_category and adjustment_days are required' });
+        }
+        if (!['paid', 'comp_off'].includes(leave_category)) {
+            return res.status(400).json({ success: false, message: "leave_category must be 'paid' or 'comp_off'" });
+        }
+        const days = parseFloat(adjustment_days);
+        if (!days || Number.isNaN(days) || days === 0) {
+            return res.status(400).json({ success: false, message: 'adjustment_days must be a non-zero number' });
+        }
+
+        const { data: employee, error: empError } = await supabase
+            .from('employees')
+            .select('employee_id, first_name, last_name')
+            .eq('employee_id', employee_id)
+            .single();
+        if (empError || !employee) {
+            return res.status(404).json({ success: false, message: 'Employee not found' });
+        }
+
+        const currentYear = new Date().getFullYear();
+        const adjustedBy = req.user?.employeeId || null;
+        const adjustedByName = req.user?.email || adjustedBy;
+
+        if (leave_category === 'comp_off') {
+            if (!Number.isInteger(days)) {
+                return res.status(400).json({ success: false, message: 'Comp-Off is tracked in whole days — adjustment_days must be a whole number' });
+            }
+            const CompOffService = require('../services/compOffService');
+            const todayStr = new Date().toISOString().split('T')[0];
+
+            if (days > 0) {
+                // Grant N comp-off days — insert N earned-style rows, exactly like a real
+                // holiday-worked earn (see compOffService.earnCompOff), so the existing
+                // row-count-based balance/expiry logic needs no changes at all.
+                const rows = Array.from({ length: days }, () => ({
+                    employee_id,
+                    attendance_date: todayStr,
+                    holiday_date: todayStr,
+                    holiday_name: 'HR/Admin Adjustment',
+                    comp_off_days: 1,
+                    is_used: false,
+                }));
+                const { error: insErr } = await supabase.from('comp_off_earnings').insert(rows);
+                if (insErr) throw insErr;
+                const { data: empBal } = await supabase.from('employees').select('comp_off_balance').eq('employee_id', employee_id).single();
+                await supabase.from('employees').update({ comp_off_balance: (empBal?.comp_off_balance || 0) + days }).eq('employee_id', employee_id);
+            } else {
+                // Reduce — consume the oldest available comp-off rows, same mechanism the
+                // system already uses when comp-off is spent on a real leave. Naturally
+                // refuses to go below 0 (throws if not enough balance to reduce by).
+                try {
+                    await CompOffService.useCompOff(employee_id, null, Math.abs(days));
+                } catch (e) {
+                    return res.status(400).json({ success: false, message: e.message || 'Insufficient comp-off balance to reduce by that amount' });
+                }
+            }
+        }
+        // 'paid' category needs no ledger mutation here — the audit row inserted below IS
+        // the adjustment mechanism; getLeaveBalance/getLeaveBalanceBulk sum it into the
+        // accrual formula on every read.
+
+        const { error: logErr } = await supabase.from('leave_balance_adjustments').insert([{
+            employee_id,
+            leave_category,
+            leave_year: currentYear,
+            adjustment_days: days,
+            reason: reason || null,
+            adjusted_by: adjustedBy,
+            adjusted_by_name: adjustedByName,
+        }]);
+        if (logErr) {
+            const tableMissing = /does not exist|schema cache/i.test(logErr.message || '');
+            if (leave_category === 'paid' && tableMissing) {
+                // For 'paid' this insert IS the whole adjustment — nothing else changed, so
+                // this must be a hard failure, not a silently-ignored no-op.
+                return res.status(500).json({
+                    success: false,
+                    message: 'Leave balance adjustments table has not been created yet — run scripts/create-leave-balance-adjustments.sql first',
+                });
+            }
+            if (!tableMissing) throw logErr;
+            // Comp-Off already changed via the ledger above; a missing audit table only
+            // means this specific adjustment won't show in history — not worth failing over.
+            console.warn('leave_balance_adjustments insert skipped (table not migrated yet):', logErr.message);
+        }
+
+        res.json({
+            success: true,
+            message: `${days > 0 ? 'Added' : 'Reduced'} ${Math.abs(days)} ${leave_category === 'comp_off' ? 'Comp-Off' : 'paid leave'} day(s) for ${employee.first_name} ${employee.last_name}`,
+        });
+    } catch (error) {
+        console.error('Error adjusting leave balance:', error);
+        res.status(500).json({ success: false, message: 'Failed to adjust leave balance', error: error.message });
+    }
+};
+
+// ==================== GET LEAVE BALANCE ADJUSTMENT HISTORY ====================
+exports.getLeaveAdjustmentHistory = async (req, res) => {
+    try {
+        const { employee_id } = req.params;
+        const { data, error } = await supabase
+            .from('leave_balance_adjustments')
+            .select('*')
+            .eq('employee_id', employee_id)
+            .order('created_at', { ascending: false });
+        if (error) {
+            if (/does not exist|schema cache/i.test(error.message || '')) {
+                return res.json({ success: true, adjustments: [] });
+            }
+            throw error;
+        }
+        res.json({ success: true, adjustments: data || [] });
+    } catch (error) {
+        console.error('Error fetching leave adjustment history:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch adjustment history', error: error.message });
     }
 };
 

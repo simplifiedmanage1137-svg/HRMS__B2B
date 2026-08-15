@@ -209,6 +209,11 @@ const PayrollCenter = () => {
   // line item an employee has for the cycle, not just whatever was baked into the slip
   // at generation time, so adding a deduction after generating a slip is reflected here
   // immediately. 'Slip Status' flags when that means Total Payable is now stale.
+  // 'PL Left/Used (Year)' and 'Comp-Off Left/Used (Year)' come from GET /api/leaves/
+  // balance-bulk — year-to-date balances against the yearly accrual quota, NOT scoped to
+  // this one pay cycle (unlike 'Paid Leave Days'/'Absent Days' above, which only count this
+  // cycle's days). PL is the pooled Annual/Sick/Personal/Maternity/Paternity/Bereavement
+  // balance this system tracks as one bucket (see leavePolicy.js) — not per sub-type.
   const exportToExcel = async () => {
     // Employees marked "exclude from payroll" (see Excluded Employees tab) must never show up
     // in the exported sheet, even though they're kept visible (grayed out) in the on-screen
@@ -229,12 +234,20 @@ const PayrollCenter = () => {
       // backend restricts the caller to their own leave records) — was missing here entirely.
       // start/end scopes the query to this cycle server-side instead of fetching every leave
       // ever recorded and filtering client-side.
-      const [attRes, leaveRes] = await Promise.all([
+      const [attRes, leaveRes, leaveBalanceRes] = await Promise.all([
         axios.get(API_ENDPOINTS.ATTENDANCE_REPORT, { params: { start: startStr, end: endStr } }),
         axios.get(API_ENDPOINTS.LEAVES, { params: { all: true, start: startStr, end: endStr } }).catch(() => ({ data: [] })),
+        // Year-to-date PL/Comp-Off available + used — a different concept from the per-cycle
+        // 'Paid Leave Days'/'Absent Days' columns above (which only cover this one pay cycle).
+        // Non-fatal: export still works with blank balance columns if this fails.
+        axios.get(API_ENDPOINTS.LEAVE_BALANCE_BULK).catch(() => ({ data: {} })),
       ]);
       const attendanceRows = attRes.data?.attendance || attRes.data || [];
       const allLeaves = Array.isArray(leaveRes.data) ? leaveRes.data : (leaveRes.data?.data || []);
+      const plAvailableByEmp = leaveBalanceRes.data?.balances || {};
+      const plUsedByEmp = leaveBalanceRes.data?.used || {};
+      const compOffAvailableByEmp = leaveBalanceRes.data?.comp_off_balance || {};
+      const compOffUsedByEmp = leaveBalanceRes.data?.comp_off_used || {};
       const approvedLeaves = allLeaves.filter(l =>
         l.status === 'approved' &&
         new Date(l.end_date || l.start_date) >= startDate &&
@@ -361,6 +374,12 @@ const PayrollCenter = () => {
           'Free Late':              Math.min(totalLate, LATE_FREE_COUNT),
           'Chargeable Late':        Math.max(0, totalLate - LATE_FREE_COUNT),
           'Absent Days':            r.absent_days ?? '',
+          // Year-to-date balances (not cycle-scoped, unlike the columns above) — how many
+          // PL/Comp-Off days this employee has left and used against their yearly quota.
+          'PL Left (Year)':         plAvailableByEmp[r.employee_id] ?? '',
+          'PL Used (Year)':         plUsedByEmp[r.employee_id] ?? '',
+          'Comp-Off Left':          compOffAvailableByEmp[r.employee_id] ?? (emp.comp_off_balance ?? ''),
+          'Comp-Off Used (Year)':   compOffUsedByEmp[r.employee_id] ?? '',
           'Monthly Salary (₹)':     Number(r.monthly_salary || 0).toFixed(2),
           'Earned Salary (₹)':      r.basic_salary != null ? Number(r.basic_salary).toFixed(2) : '',
           'Overtime (₹)':           Number(r.overtime_amount || 0).toFixed(2),

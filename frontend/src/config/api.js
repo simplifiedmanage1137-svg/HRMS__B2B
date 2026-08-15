@@ -77,6 +77,8 @@ export const API_ENDPOINTS = {
   LEAVE_YEARLY_RESET: ep('/api/leaves/yearly-reset'),
   LEAVE_ON_LEAVE_TODAY: (scope, department) => ep(`/api/leaves/on-leave-today?scope=${scope}${department ? `&department=${encodeURIComponent(department)}` : ''}`),
   LEAVE_USAGE_BY_TYPE: (employeeId) => ep(`/api/leaves/usage-by-type/${employeeId}`),
+  LEAVE_ADJUST_BALANCE: ep('/api/leaves/adjust-balance'),
+  LEAVE_ADJUSTMENT_HISTORY: (employeeId) => ep(`/api/leaves/adjustments/${employeeId}`),
 
   // Attendance
   ATTENDANCE:        ep('/api/attendance'),

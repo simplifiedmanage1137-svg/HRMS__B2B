@@ -155,6 +155,31 @@ class CompOffService {
     }
 
     /**
+     * Comp-off days genuinely consumed via an approved Comp-Off leave this calendar year,
+     * for every employee at once — one query instead of N, for bulk exports (Payroll Excel's
+     * "Comp-Off Used" column). Deliberately scoped to used_for_leave_id IS NOT NULL: rows
+     * marked is_used=true by expireCompOffs() (unused comp-offs that simply expired) leave
+     * used_for_leave_id null, so they're excluded here — "Used" should mean actually taken,
+     * not lapsed. Returns { [employee_id]: count }.
+     */
+    static async getUsedCompOffCountsBulk(year) {
+        const { data, error } = await supabase
+            .from('comp_off_earnings')
+            .select('employee_id')
+            .eq('is_used', true)
+            .not('used_for_leave_id', 'is', null)
+            .gte('used_on', `${year}-01-01`)
+            .lte('used_on', `${year}-12-31`);
+        if (error) throw error;
+
+        const counts = {};
+        (data || []).forEach(row => {
+            counts[row.employee_id] = (counts[row.employee_id] || 0) + 1;
+        });
+        return counts;
+    }
+
+    /**
      * Mark comp-off as used when leave is applied
      */
     static async useCompOff(employee_id, leaveId, days = 1) {

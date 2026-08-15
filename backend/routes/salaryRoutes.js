@@ -16,9 +16,10 @@ router.get('/bulk',            verifyToken, isAdmin, salaryController.getBulkPay
 router.get('/:id', verifyToken, salaryController.getSalarySlipById);
 router.get('/:employee_id/:month/:year', verifyToken, isOwnDataOrAdmin, salaryController.getSalarySlipByMonth);
 
-// SIMPLE FIX: Remove isOwnDataOrAdmin from generate route
-// Only verify token, then let controller handle permission check
-router.post('/generate', verifyToken, salaryController.generateSalarySlip);
+// Self-service: an employee can generate their own slip (isOwnDataOrAdmin enforces the
+// employee_id can't be spoofed to someone else's); the controller itself enforces which
+// months are eligible for a non-admin caller (joining month through last completed cycle).
+router.post('/generate', verifyToken, isOwnDataOrAdmin, salaryController.generateSalarySlip);
 
 // Admin only routes
 router.post('/generate-bulk', verifyToken, isAdmin, salaryController.generateBulkSalarySlips);

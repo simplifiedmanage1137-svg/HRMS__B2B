@@ -1577,6 +1577,42 @@ const fetchAllPages = async (buildQuery) => {
     return { data: all, error: null };
 };
 
+// One shared rule for picking the "real" row out of a set of duplicate attendance rows for
+// the same employee+date — the attendance table has no unique constraint on
+// (employee_id, attendance_date), so duplicates genuinely exist (a nightly-cron placeholder
+// alongside a real punch, or two real punches when someone mis-clocked-in and immediately
+// clocked back in). Used by BOTH getAttendanceReport (admin reports/exports) and
+// getEmployeeAttendanceReport (the employee's own Attendance page) so the two can never
+// disagree about which row is correct — they previously used two different ad-hoc rules
+// ("prefer the later raw clock_out timestamp" vs "prefer higher total_minutes"), which is
+// exactly how B2B260612's 2026-07-28 ended up "Present, 9h49m" on their own Attendance page
+// but "Absent" in the payroll Excel: an accidental 82-minute clock-in/out happened to carry a
+// later raw clock_out timestamp than the real ~9h49m session that followed it minutes later.
+// Priority: an admin-approved regularization always wins > a real punch beats an empty
+// placeholder > between two real punches, more logged minutes wins (the complete session,
+// not a stray short double-punch) > most recently written wins as the final tiebreak.
+const pickBetterAttendanceRow = (existing, record) => {
+    if (!existing) return record;
+
+    const existingRegularized = !!existing.is_regularized;
+    const newRegularized = !!record.is_regularized;
+    if (newRegularized !== existingRegularized) return newRegularized ? record : existing;
+
+    const existingHasClock = !!(existing.clock_in || existing.clock_in_ist);
+    const newHasClock = !!(record.clock_in || record.clock_in_ist);
+    if (newHasClock !== existingHasClock) return newHasClock ? record : existing;
+
+    if (existingHasClock && newHasClock) {
+        const existingMinutes = existing.total_minutes || 0;
+        const newMinutes = record.total_minutes || 0;
+        if (newMinutes !== existingMinutes) return newMinutes > existingMinutes ? record : existing;
+    }
+
+    const existingTime = new Date(existing.updated_at || existing.created_at).getTime() || 0;
+    const newTime = new Date(record.updated_at || record.created_at).getTime() || 0;
+    return newTime > existingTime ? record : existing;
+};
+
 exports.getAttendanceReport = async (req, res) => {
     try {
         const { start, end, employee_id } = req.query;
@@ -1611,45 +1647,7 @@ exports.getAttendanceReport = async (req, res) => {
         (attendance || []).forEach(record => {
             const dateKey = record.attendance_date ? record.attendance_date.split('T')[0] : record.attendance_date;
             const key = `${record.employee_id}-${dateKey}`;
-            const existing = dedupedAttendanceMap[key];
-            if (!existing) {
-                dedupedAttendanceMap[key] = record;
-                return;
-            }
-
-            const existingClockOut = existing.clock_out_ist || existing.clock_out;
-            const newClockOut = record.clock_out_ist || record.clock_out;
-
-            if (newClockOut && !existingClockOut) {
-                dedupedAttendanceMap[key] = record;
-            } else if (newClockOut && existingClockOut) {
-                const existingMs = toUTCMs(existingClockOut);
-                const newMs = toUTCMs(newClockOut);
-                if (newMs > existingMs) {
-                    dedupedAttendanceMap[key] = record;
-                }
-            } else if (!existingClockOut && !newClockOut) {
-                // Neither has clocked out. This is the tie that used to be resolved by an
-                // "is this an Excel import?" guess (no clock_in + a status set) — but that guess
-                // can't tell a genuine Excel-imported correction apart from the daily-absent
-                // cron's placeholder row (cron/absentEmployeeCheck.js creates exactly the same
-                // shape: clock_in null, status 'absent'). That misclassification meant a stale
-                // "absent" placeholder created before the employee clocked in would permanently
-                // beat their real, later clock-in record — hiding currently-working employees.
-                // Recency is a much more reliable signal: whichever row was actually written
-                // most recently reflects the true current state of the day.
-                const existingTime = new Date(existing.updated_at || existing.created_at).getTime() || 0;
-                const newTime = new Date(record.updated_at || record.created_at).getTime() || 0;
-                if (newTime > existingTime) {
-                    dedupedAttendanceMap[key] = record;
-                } else if (newTime === existingTime) {
-                    const existingHasClockIn = !!(existing.clock_in || existing.clock_in_ist);
-                    const newHasClockIn = !!(record.clock_in || record.clock_in_ist);
-                    if (newHasClockIn && !existingHasClockIn) {
-                        dedupedAttendanceMap[key] = record;
-                    }
-                }
-            }
+            dedupedAttendanceMap[key] = pickBetterAttendanceRow(dedupedAttendanceMap[key], record);
         });
 
         // Bulk-fetch break minutes for every employee/date in this report (one query,
@@ -1947,21 +1945,13 @@ exports.getEmployeeAttendanceReport = async (req, res) => {
                 .order('clock_in', { ascending: false, nullsFirst: false }));
         }
 
-        // Deduplicate per date: prefer (1) real clock-in records over ghost import records,
-        // then (2) higher total_minutes — admin-present import sets 540, old absent sets 0.
+        // Same shared rule getAttendanceReport uses (see pickBetterAttendanceRow) — kept
+        // identical on purpose so this employee's own Attendance page can never disagree
+        // with what an admin report/export shows for the same day.
         const dedupedByDate = {};
         (attendance || []).forEach(record => {
             const date = record.attendance_date;
-            const existing = dedupedByDate[date];
-            if (!existing) { dedupedByDate[date] = record; return; }
-            const existingHasClock = !!existing.clock_in;
-            const recHasClock      = !!record.clock_in;
-            if (recHasClock && !existingHasClock) { dedupedByDate[date] = record; return; }
-            if (existingHasClock && !recHasClock) return;
-            // Same clock_in presence → prefer higher total_minutes (admin-present=540 beats absent=0)
-            if ((record.total_minutes || 0) > (existing.total_minutes || 0)) {
-                dedupedByDate[date] = record;
-            }
+            dedupedByDate[date] = pickBetterAttendanceRow(dedupedByDate[date], record);
         });
         const dedupedAttendance = Object.values(dedupedByDate)
             .sort((a, b) => b.attendance_date.localeCompare(a.attendance_date));
@@ -3588,7 +3578,7 @@ exports.adminMarkAttendance = async (req, res) => {
 // duplicate this logic elsewhere; import it from here instead.
 exports._shared = {
     parseShiftTiming, calculateOvertime, recalculateLate, getEffectiveShiftTiming,
-    toUTCMs, istStringToUTCISO, nowIST,
+    toUTCMs, istStringToUTCISO, nowIST, pickBetterAttendanceRow,
 };
 
 module.exports = exports;

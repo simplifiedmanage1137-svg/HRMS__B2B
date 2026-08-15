@@ -100,13 +100,14 @@ const Attendance = () => {
   const [attendanceHistory, setAttendanceHistory] = useState([]);
   const [isSessionValid, setIsSessionValid] = useState(false);
   const [hasIncompleteRecord, setHasIncompleteRecord] = useState(false);
-  // Infinite scroll states
-  const [historyOffset, setHistoryOffset] = useState(0);  // days offset from today
-  const [hasMoreHistory, setHasMoreHistory] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  // Previous/Next 30-day paging — was infinite-scroll (auto-fetching more on every scroll
+  // near the bottom), which meant casually scrolling through a few months of history could
+  // fire off a dozen+ API calls without the employee ever asking for it. Now exactly one
+  // fetch per explicit Next/Previous click, always a fixed 30-day window, nothing appended.
+  const [historyPage, setHistoryPage] = useState(0); // 0 = most recent 30 days
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const tableScrollRef = React.useRef(null);
-  const INITIAL_DAYS = 30;
-  const LOAD_MORE_DAYS = 10;
+  const HISTORY_PAGE_DAYS = 30;
   const [monthlyStats, setMonthlyStats] = useState({
     totalDays: 0,
     presentDays: 0,
@@ -886,7 +887,8 @@ const Attendance = () => {
       setAttachmentError('');
 
       await fetchMissedClockOuts();
-      await fetchAttendanceHistory();
+      setHistoryPage(0);
+      await fetchAttendanceHistory(0);
       await fetchMyRegularizations();
       setMessage({ type: '', text: '' });
 
@@ -1219,16 +1221,19 @@ const Attendance = () => {
     });
   };
 
-  const fetchAttendanceHistory = async (offsetDays = 0, append = false) => {
+  // page 0 = most recent 30 days (ending today), page 1 = the 30 days before that, etc. —
+  // exactly one API call per page, always a fixed 30-day window, never appended to what's
+  // already on screen.
+  const fetchAttendanceHistory = async (page = 0) => {
     try {
-      if (append) setLoadingMore(true);
+      setLoadingHistory(true);
+      const isFirstPage = page === 0;
 
       const today = new Date();
       const endDate = new Date(today);
-      endDate.setDate(endDate.getDate() - offsetDays);
+      endDate.setDate(endDate.getDate() - (page * HISTORY_PAGE_DAYS));
       const startDate = new Date(endDate);
-      const daysToLoad = offsetDays === 0 ? INITIAL_DAYS : LOAD_MORE_DAYS;
-      startDate.setDate(startDate.getDate() - daysToLoad + 1);
+      startDate.setDate(startDate.getDate() - HISTORY_PAGE_DAYS + 1);
 
       const formatDate = (date) => {
         const year = date.getFullYear();
@@ -1238,7 +1243,7 @@ const Attendance = () => {
       };
 
       const startDateStr = formatDate(startDate);
-      const endDateStr = formatDate(offsetDays === 0 ? today : endDate);
+      const endDateStr = formatDate(endDate);
 
       const response = await axios.get(
         API_ENDPOINTS.ATTENDANCE_EMPLOYEE_REPORT(user.employeeId, startDateStr, endDateStr)
@@ -1332,17 +1337,10 @@ const Attendance = () => {
         return result;
       };
 
-      const newRecords = generateDays(history, startDate, offsetDays === 0 ? today : endDate);
+      const newRecords = generateDays(history, startDate, endDate);
+      setAttendanceHistory(newRecords);
 
-      // If less than expected days returned, no more history
-      if (newRecords.length < daysToLoad) setHasMoreHistory(false);
-
-      if (append) {
-        setAttendanceHistory(prev => [...prev, ...newRecords]);
-      } else {
-        setAttendanceHistory(newRecords);
-        setHistoryOffset(INITIAL_DAYS);
-
+      if (isFirstPage) {
         // Sync today's attendance from DB
         const todayStr = formatDate(today);
         const todayRecord = history.find(r => r.attendance_date === todayStr);
@@ -1395,25 +1393,27 @@ const Attendance = () => {
       }
     } catch (error) {
       console.error('❌ Error fetching attendance history:', error);
-      if (!append) {
+      if (page === 0) {
         setAttendanceHistory(generateLast30DaysAttendance([]));
         calculateMonthlyStats([]);
         updateChartData([]);
       }
     } finally {
-      if (append) setLoadingMore(false);
+      setLoadingHistory(false);
     }
   };
 
-  // Infinite scroll handler
-  const handleTableScroll = (e) => {
-    const el = e.target;
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-    if (nearBottom && hasMoreHistory && !loadingMore) {
-      const newOffset = historyOffset + LOAD_MORE_DAYS;
-      setHistoryOffset(newOffset);
-      fetchAttendanceHistory(historyOffset, true);
-    }
+  const handlePreviousPage = () => {
+    if (historyPage === 0) return;
+    const newPage = historyPage - 1;
+    setHistoryPage(newPage);
+    fetchAttendanceHistory(newPage);
+  };
+
+  const handleNextPage = () => {
+    const newPage = historyPage + 1;
+    setHistoryPage(newPage);
+    fetchAttendanceHistory(newPage);
   };
 
   const getCurrentLocation = () => {
@@ -1542,7 +1542,8 @@ const Attendance = () => {
       setHasClockedOutToday(false);
 
       // Refresh history and missed clock-outs; attendance state is already set from API response above
-      await fetchAttendanceHistory();
+      setHistoryPage(0);
+      await fetchAttendanceHistory(0);
       await fetchMissedClockOuts();
 
     } catch (error) {
@@ -1587,7 +1588,8 @@ const Attendance = () => {
       setHasClockedOutToday(false); // Allow Clock In for new shift
 
       await fetchTodayAttendance();
-      await fetchAttendanceHistory();
+      setHistoryPage(0);
+      await fetchAttendanceHistory(0);
       await fetchMissedClockOuts();
 
     } catch (error) {
@@ -1629,7 +1631,8 @@ const Attendance = () => {
       setHasClockedOutToday(true);
       setMissedClockOuts([]);
 
-      await fetchAttendanceHistory();
+      setHistoryPage(0);
+      await fetchAttendanceHistory(0);
       await fetchMissedClockOuts();
 
     } catch (error) {
@@ -1645,7 +1648,8 @@ const Attendance = () => {
         setMissedClockOuts([]);
         await fetchTodayAttendance();
         await fetchMissedClockOuts();
-        await fetchAttendanceHistory();
+        setHistoryPage(0);
+        await fetchAttendanceHistory(0);
       } else if (error.response?.status === 400 && errData?.message?.includes('No active session')) {
         setActiveSession(null);
         clearSessionFromStorage();
@@ -2096,7 +2100,7 @@ const Attendance = () => {
   }, [user]);
 
   useEffect(() => {
-    if (user?.employeeId) fetchAttendanceHistory();
+    if (user?.employeeId) fetchAttendanceHistory(0);
   }, [user?.employeeId]);
 
   useEffect(() => {
@@ -2111,7 +2115,8 @@ const Attendance = () => {
     const handleRegularizationEvent = async () => {
       await fetchTodayAttendance();
       await fetchMissedClockOuts();
-      await fetchAttendanceHistory();
+      setHistoryPage(0);
+      await fetchAttendanceHistory(0);
       await fetchMyRegularizations();
       setActiveSession(null);
       clearSessionFromStorage();
@@ -2451,7 +2456,6 @@ const Attendance = () => {
                   <div
                     className="table-responsive da-scroll"
                     style={{ maxHeight: 560, overflowY: 'auto' }}
-                    onScroll={handleTableScroll}
                     ref={tableScrollRef}
                   >
                     <Table className="mb-0">
@@ -2578,24 +2582,33 @@ const Attendance = () => {
                       </tbody>
                     </Table>
                   </div>
-                  <div className="mt-2 text-muted small">
-                    <FaInfoCircle className="me-1" size={10} />
-                    Showing {attendanceHistory.length} days
-                    {hasMoreHistory && !loadingMore && (
-                      <span className="ms-2 text-primary" style={{ cursor: 'pointer' }}>↓ Scroll for more</span>
-                    )}
+                  <div className="d-flex align-items-center justify-content-between mt-2">
+                    <div className="text-muted small">
+                      <FaInfoCircle className="me-1" size={10} />
+                      Showing {attendanceHistory.length} days
+                    </div>
+                    <div className="d-flex align-items-center gap-2">
+                      {loadingHistory && (
+                        <Spinner animation="border" size="sm" variant="primary" />
+                      )}
+                      <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        disabled={historyPage === 0 || loadingHistory}
+                        onClick={handlePreviousPage}
+                      >
+                        ← Previous 30 Days
+                      </Button>
+                      <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        disabled={loadingHistory}
+                        onClick={handleNextPage}
+                      >
+                        Next 30 Days →
+                      </Button>
+                    </div>
                   </div>
-                  {loadingMore && (
-                    <div className="text-center py-2">
-                      <Spinner animation="border" size="sm" variant="primary" className="me-2" />
-                      <small className="text-muted">Loading more records...</small>
-                    </div>
-                  )}
-                  {!hasMoreHistory && attendanceHistory.length > INITIAL_DAYS && (
-                    <div className="text-center py-2">
-                      <small className="text-muted">All attendance records loaded</small>
-                    </div>
-                  )}
                 </>
               ) : (
                 <>

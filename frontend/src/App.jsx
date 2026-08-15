@@ -36,6 +36,7 @@ const AdminRatings        = lazy(() => import('./components/Admin/AdminRatings')
 const Teams               = lazy(() => import('./components/Admin/Teams'));
 const PayrollCenter       = lazy(() => import('./components/Admin/Payroll/PayrollCenter'));
 const DeductionManager    = lazy(() => import('./components/Admin/DeductionManager'));
+const LeaveBalanceAdjustment = lazy(() => import('./components/Admin/LeaveBalanceAdjustment'));
 const FinanceExport       = lazy(() => import('./components/Admin/FinanceExport'));
 const ManagerTeam         = lazy(() => import('./components/Admin/ManagerTeam'));
 const AdminManagerTeams   = lazy(() => import('./components/Admin/AdminManagerTeams'));
@@ -284,6 +285,13 @@ function AppContent() {
             <Route path="/admin/deductions" element={
               <PrivateRoute allowedRoles={['admin', 'sub_admin', 'hr']}>
                 <DeductionManager />
+              </PrivateRoute>
+            } />
+
+            {/* Leave Balance Adjustment — HR/Admin add or reduce Paid Leave / Comp-Off, no approval flow */}
+            <Route path="/admin/leave-balance" element={
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'hr']}>
+                <LeaveBalanceAdjustment />
               </PrivateRoute>
             } />
 

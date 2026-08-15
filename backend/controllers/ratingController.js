@@ -394,30 +394,32 @@ const getAllRatings = async (req, res) => {
             }
         }
 
+        // Batch-fetch every employee/rater referenced across all ratings in ONE query instead
+        // of two separate per-rating lookups (this endpoint has no default date filter, so an
+        // admin loading this page with no filters applied was triggering up to 2×N queries —
+        // hundreds of sequential round trips once the company has a year or two of monthly
+        // ratings on file).
+        const involvedIds = [...new Set(
+            (ratings || []).flatMap(r => [r.employee_id, r.manager_id]).filter(Boolean)
+        )];
+        const employeeMap = {};
+        if (involvedIds.length > 0) {
+            const { data: involvedEmployees, error: empLookupError } = await supabase
+                .from('employees')
+                .select('employee_id, first_name, last_name, department, reporting_manager, role')
+                .in('employee_id', involvedIds);
+            if (empLookupError) {
+                console.error('Error batch-fetching employees for ratings:', empLookupError);
+            } else {
+                (involvedEmployees || []).forEach(e => { employeeMap[e.employee_id] = e; });
+            }
+        }
+
         // Fetch employee and rater details for each rating
         const formattedRatings = [];
         for (const rating of (ratings || [])) {
-            // Fetch employee details
-            const { data: employee, error: empError } = await supabase
-                .from('employees')
-                .select('first_name, last_name, department, reporting_manager')
-                .eq('employee_id', rating.employee_id)
-                .maybeSingle();
-
-            if (empError) {
-                console.error(`Error fetching employee ${rating.employee_id}:`, empError);
-            }
-
-            // Fetch rater details
-            const { data: rater, error: mgrError } = await supabase
-                .from('employees')
-                .select('first_name, last_name, role')
-                .eq('employee_id', rating.manager_id)
-                .maybeSingle();
-
-            if (mgrError) {
-                console.error(`Error fetching rater ${rating.manager_id}:`, mgrError);
-            }
+            const employee = employeeMap[rating.employee_id] || null;
+            const rater = employeeMap[rating.manager_id] || null;
 
             // Determine month and year
             const ratingMonth = rating.rating_month;
