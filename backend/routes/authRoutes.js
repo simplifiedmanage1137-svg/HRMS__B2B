@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { sendPasswordResetOtpEmail } = require('../services/emailService');
+const { evaluateNetworkGate } = require('../utils/housekeeperNetworkGate');
 require('dotenv').config();
 
 const loginLimiter = rateLimit({
@@ -114,6 +115,20 @@ router.post('/login', loginLimiter, async (req, res) => {
         if (user.is_active === false) {
             console.log(`❌ [LOGIN] account deactivated — employeeId=${user.employee_id}`);
             return res.status(403).json({ success: false, message: 'Your account is deactivated. Please contact admin.' });
+        }
+
+        // Housekeeper IP allowlist — fails open on any internal error, see
+        // backend/utils/housekeeperNetworkGate.js. Blocks the session before a token is
+        // ever issued; the same gate re-checks on every attendance API call so a session
+        // already in progress is cut off the moment the device leaves the network.
+        const gateResult = await evaluateNetworkGate(req, user.employee_id, user.role);
+        if (gateResult.decision === 'blocked') {
+            console.log(`🚫 [LOGIN] blocked by network gate — employeeId=${user.employee_id} ip=${gateResult.ip}`);
+            return res.status(403).json({
+                success: false,
+                message: 'This account can only be used from an approved office network.',
+                code: 'IP_BLOCKED',
+            });
         }
 
         const payload = { id: user.id, email: user.email, role: user.role || 'employee', employeeId: user.employee_id };

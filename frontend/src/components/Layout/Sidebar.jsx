@@ -6,7 +6,7 @@ import {
   FaUserCircle, FaSignOutAlt, FaFingerprint, FaClock,
   FaBell, FaPaperPlane, FaEdit, FaUserTie,
   FaBullhorn, FaStar, FaChevronRight, FaLayerGroup, FaDesktop, FaChartLine, FaMinusCircle, FaFileExcel,
-  FaTicketAlt, FaReceipt, FaFileInvoiceDollar, FaCoins, FaEnvelope
+  FaTicketAlt, FaReceipt, FaFileInvoiceDollar, FaCoins, FaEnvelope, FaShieldAlt
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -202,7 +202,7 @@ const Sidebar = () => {
             <div className="hrms-sidebar__logo-text">
               <div className="hrms-sidebar__logo-title">EMS Portal</div>
               <div className="hrms-sidebar__logo-sub">
-                {user?.role === 'admin' ? 'Admin Dashboard' : user?.role === 'hr' ? 'HR Dashboard' : user?.role === 'sub_admin' ? 'Manager Dashboard' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'manager' ? 'TL Dashboard' : user?.role === 'finance' ? 'Finance Dashboard' : 'Employee Dashboard'}
+                {user?.role === 'admin' ? 'Admin Dashboard' : user?.role === 'hr' ? 'HR Dashboard' : user?.role === 'sub_admin' ? 'Manager Dashboard' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'manager' ? 'TL Dashboard' : user?.role === 'finance' ? 'Finance Dashboard' : user?.role === 'housekeeper' ? 'Housekeeper Dashboard' : 'Employee Dashboard'}
               </div>
             </div>
           )}
@@ -249,6 +249,7 @@ const Sidebar = () => {
               />
               <NavItem to="/admin/broadcast" icon={<FaBullhorn />} label="Broadcast" />
               <NavItem to="/admin/email" icon={<FaEnvelope />} label="Email" />
+              <NavItem to="/admin/network-security" icon={<FaShieldAlt />} label="IP Access Control" />
             </>
           ) : user?.role === 'sub_admin' ? (
             <>
@@ -280,6 +281,7 @@ const Sidebar = () => {
               />
               <NavItem to="/admin/broadcast" icon={<FaBullhorn />} label="Broadcast" />
               <NavItem to="/admin/email" icon={<FaEnvelope />} label="Email" />
+              <NavItem to="/admin/network-security" icon={<FaShieldAlt />} label="IP Access Control" />
               <Section label="My Team" />
               <NavItem to="/manager/my-team" icon={<FaUserTie />} label="My Team" />
               <Section label="My Attendance" />
@@ -345,7 +347,7 @@ const Sidebar = () => {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="hrms-sidebar__user-name">{employeeName}</div>
                 <div className="hrms-sidebar__user-role">
-                  {user?.role === 'admin' ? 'Admin' : user?.role === 'hr' ? 'HR' : user?.role === 'sub_admin' ? 'Manager' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'manager' ? 'TL' : user?.role === 'finance' ? 'Finance' : `ID: ${user?.employeeId}`}
+                  {user?.role === 'admin' ? 'Admin' : user?.role === 'hr' ? 'HR' : user?.role === 'sub_admin' ? 'Manager' : user?.role === 'desktop_support' ? 'Desktop Support' : user?.role === 'manager' ? 'TL' : user?.role === 'finance' ? 'Finance' : user?.role === 'housekeeper' ? 'Housekeeper' : `ID: ${user?.employeeId}`}
                 </div>
               </div>
               <button className="hrms-logout-btn" onClick={logout} title="Logout">

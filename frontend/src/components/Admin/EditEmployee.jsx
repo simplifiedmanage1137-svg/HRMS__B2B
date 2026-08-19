@@ -54,6 +54,7 @@ const EditEmployee = () => {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [managers, setManagers] = useState([]);
+    const [hrEmployees, setHrEmployees] = useState([]);
 
     // Change password states
     const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -105,8 +106,12 @@ const EditEmployee = () => {
 
     const fetchManagers = async () => {
         try {
-            const res = await axios.get(API_ENDPOINTS.TEAMS_MANAGERS_LIST);
-            setManagers(res.data.managers || []);
+            const [tlRes, hrRes] = await Promise.all([
+                axios.get(API_ENDPOINTS.TEAMS_MANAGERS_LIST),
+                axios.get(API_ENDPOINTS.TEAMS_HR_LIST),
+            ]);
+            setManagers(tlRes.data.managers || []);
+            setHrEmployees(hrRes.data.managers || []);
         } catch (err) {
             console.error('Error fetching managers:', err);
         }
@@ -626,6 +631,7 @@ const EditEmployee = () => {
                                             <option value="hr">HR</option>
                                             <option value="desktop_support">Desktop Support</option>
                                             <option value="finance">Finance</option>
+                                            <option value="housekeeper">Housekeeper</option>
                                         </Form.Select>
                                     </Form.Group>
                                 </Col>
@@ -820,14 +826,30 @@ const EditEmployee = () => {
                                         size="sm"
                                     >
                                         <option value="">-- No TL --</option>
-                                        {managers.map(m => {
-                                            const fullName = `${m.first_name} ${m.last_name}`.trim();
-                                            return (
-                                                <option key={m.employee_id} value={fullName}>
-                                                    {fullName} ({m.designation})
-                                                </option>
-                                            );
-                                        })}
+                                        {managers.length > 0 && (
+                                            <optgroup label="Team Leaders">
+                                                {managers.map(m => {
+                                                    const fullName = `${m.first_name} ${m.last_name}`.trim();
+                                                    return (
+                                                        <option key={m.employee_id} value={fullName}>
+                                                            {fullName} ({m.designation})
+                                                        </option>
+                                                    );
+                                                })}
+                                            </optgroup>
+                                        )}
+                                        {hrEmployees.length > 0 && (
+                                            <optgroup label="HR">
+                                                {hrEmployees.map(m => {
+                                                    const fullName = `${m.first_name} ${m.last_name}`.trim();
+                                                    return (
+                                                        <option key={m.employee_id} value={fullName}>
+                                                            {fullName} ({m.designation})
+                                                        </option>
+                                                    );
+                                                })}
+                                            </optgroup>
+                                        )}
                                     </Form.Select>
                                 </Form.Group>
                             </Col>

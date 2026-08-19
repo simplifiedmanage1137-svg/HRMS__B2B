@@ -9,6 +9,7 @@ export const ROLE_LABELS = {
   employee:        'Employee',
   desktop_support: 'Desktop Support',
   hr:              'HR',
+  housekeeper:     'Housekeeper',
 };
 
 /** Returns the display label for a role key. Falls back to the raw key. */
@@ -22,4 +23,5 @@ export const ROLE_OPTIONS = [
   { value: 'admin',            label: 'Admin' },
   { value: 'hr',                label: 'HR' },
   { value: 'desktop_support',  label: 'Desktop Support' },
+  { value: 'housekeeper',      label: 'Housekeeper' },
 ];

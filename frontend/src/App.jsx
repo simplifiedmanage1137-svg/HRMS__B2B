@@ -10,6 +10,7 @@ import Navbar from './components/Layout/Navbar';
 import Sidebar from './components/Layout/Sidebar';
 import Login from './components/Auth/Login';
 import Unauthorized from './components/Auth/Unauthorized';
+import NetworkBlocked from './components/Auth/NetworkBlocked';
 
 // Context
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -42,6 +43,7 @@ const FinanceExport       = lazy(() => import('./components/Admin/FinanceExport'
 const ManagerTeam         = lazy(() => import('./components/Admin/ManagerTeam'));
 const AdminManagerTeams   = lazy(() => import('./components/Admin/AdminManagerTeams'));
 const EditSlip            = lazy(() => import('./components/Admin/EditSlip'));
+const HousekeeperNetworkSecurity = lazy(() => import('./components/Admin/HousekeeperNetworkSecurity'));
 
 // Manager — lazy loaded
 const ManagerDashboard = lazy(() => import('./components/Manager/Dashboard'));
@@ -123,6 +125,7 @@ function AppContent() {
   const location = useLocation();
   const isLoginPage = location.pathname === '/login';
   const isUnauthorizedPage = location.pathname === '/unauthorized';
+  const isNetworkBlockedPage = location.pathname === '/network-blocked';
   const isOnboardingPage = location.pathname.startsWith('/onboarding/');
 
   // Public onboarding pages — render immediately, no auth check needed
@@ -159,6 +162,7 @@ function AppContent() {
   // If on login/unauthorized page, render without layout
   if (isLoginPage) return <Login />;
   if (isUnauthorizedPage) return <Unauthorized />;
+  if (isNetworkBlockedPage) return <NetworkBlocked />;
 
 
   // For all other pages, render with sidebar and navbar
@@ -193,7 +197,7 @@ function AppContent() {
           <Routes>
             {/* Dashboard Route - Conditional based on role */}
             <Route path="/" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'employee', 'desktop_support', 'finance', 'hr']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'employee', 'desktop_support', 'finance', 'hr', 'housekeeper']}>
                 {user?.role === 'admin' || user?.role === 'desktop_support' || user?.role === 'hr' ? <AdminDashboard /> : user?.role === 'sub_admin' ? <AdminDashboard /> : user?.role === 'manager' ? <ManagerDashboard /> : user?.role === 'finance' ? <FinanceExport /> : <EmployeeDashboard />}
               </PrivateRoute>
             } />
@@ -319,7 +323,7 @@ function AppContent() {
 
             {/* Admin Update Routes */}
             <Route path="/employee/update-info/:requestId" element={
-              <PrivateRoute allowedRoles={['employee']}>
+              <PrivateRoute allowedRoles={['employee', 'housekeeper']}>
                 <EmployeeUpdateForm />
               </PrivateRoute>
             } />
@@ -343,55 +347,62 @@ function AppContent() {
               </PrivateRoute>
             } />
             
+            {/* Housekeeper IP Access Control */}
+            <Route path="/admin/network-security" element={
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'hr']}>
+                <HousekeeperNetworkSecurity />
+              </PrivateRoute>
+            } />
+
             {/* old routes redirect */}
             <Route path="/admin/announcements" element={<Navigate to="/admin/broadcast" replace />} />
             <Route path="/admin/send-notice" element={<Navigate to="/admin/broadcast" replace />} />
 
             {/* Employee Routes */}
             <Route path="/employee/dashboard" element={
-              <PrivateRoute allowedRoles={['employee', 'manager', 'admin', 'hr']}>
+              <PrivateRoute allowedRoles={['employee', 'manager', 'admin', 'hr', 'housekeeper']}>
                 <EmployeeDashboard />
               </PrivateRoute>
             } />
 
             <Route path="/profile" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'employee', 'hr']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'employee', 'hr', 'housekeeper']}>
                 <Profile />
               </PrivateRoute>
             } />
 
             <Route path="/profile/edit" element={
-              <PrivateRoute allowedRoles={['employee', 'manager']}>
+              <PrivateRoute allowedRoles={['employee', 'manager', 'housekeeper']}>
                 <ProfileEdit />
               </PrivateRoute>
             } />
 
             <Route path="/employee/update-requests" element={
-              <PrivateRoute allowedRoles={['employee', 'manager']}>
+              <PrivateRoute allowedRoles={['employee', 'manager', 'housekeeper']}>
                 <EmployeeUpdateRequests />
               </PrivateRoute>
             } />
 
             <Route path="/apply-leave" element={
-              <PrivateRoute allowedRoles={['employee', 'manager']}>
+              <PrivateRoute allowedRoles={['employee', 'manager', 'housekeeper']}>
                 <ApplyLeave />
               </PrivateRoute>
             } />
 
             <Route path="/salary-slip" element={
-              <PrivateRoute allowedRoles={['employee', 'manager']}>
+              <PrivateRoute allowedRoles={['employee', 'manager', 'housekeeper']}>
                 <SalarySlip />
               </PrivateRoute>
             } />
 
             <Route path="/employee/deductions" element={
-              <PrivateRoute allowedRoles={['employee', 'manager']}>
+              <PrivateRoute allowedRoles={['employee', 'manager', 'housekeeper']}>
                 <EmployeeDeductions />
               </PrivateRoute>
             } />
 
             <Route path="/attendance" element={
-              <PrivateRoute allowedRoles={['employee', 'manager', 'sub_admin']}>
+              <PrivateRoute allowedRoles={['employee', 'manager', 'sub_admin', 'housekeeper']}>
                 <Attendance />
               </PrivateRoute>
             } />
@@ -414,7 +425,7 @@ function AppContent() {
               </PrivateRoute>
             } />
             <Route path="/performance/history" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'employee', 'hr']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'employee', 'hr', 'housekeeper']}>
                 <PerformanceHistory />
               </PrivateRoute>
             } />
@@ -442,7 +453,7 @@ function AppContent() {
 
             {/* Support Tickets — all authenticated roles */}
             <Route path="/tickets" element={
-              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'employee', 'hr']}>
+              <PrivateRoute allowedRoles={['admin', 'sub_admin', 'manager', 'employee', 'hr', 'housekeeper']}>
                 <TicketList />
               </PrivateRoute>
             } />

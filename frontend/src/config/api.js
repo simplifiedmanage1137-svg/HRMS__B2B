@@ -211,6 +211,13 @@ export const API_ENDPOINTS = {
   SHIFTS:       ep('/api/shifts'),
   SHIFT_BY_ID:  (id) => ep(`/api/shifts/${id}`),
 
+  // Housekeeper IP Access Control (admin-only)
+  HOUSEKEEPER_NETWORK_POLICY:       ep('/api/admin/housekeeper-network/policy'),
+  HOUSEKEEPER_NETWORK_ALLOWLIST:    ep('/api/admin/housekeeper-network/allowlist'),
+  HOUSEKEEPER_NETWORK_ALLOWLIST_BY_ID: (id) => ep(`/api/admin/housekeeper-network/allowlist/${id}`),
+  HOUSEKEEPER_NETWORK_WHOAMI:       ep('/api/admin/housekeeper-network/whoami'),
+  ATTENDANCE_NETWORK_STATUS:        ep('/api/attendance/network-status'),
+
   // Teams
   TEAMS:                  ep('/api/teams'),
   TEAM_BY_ID:             (id) => ep(`/api/teams/${id}`),
@@ -219,6 +226,7 @@ export const API_ENDPOINTS = {
   TEAMS_HIERARCHY:        ep('/api/teams/hierarchy'),
   TEAMS_MANAGER_SETTINGS: (id) => ep(`/api/teams/manager-settings/${id}`),
   TEAMS_SUB_ADMINS_LIST:  ep('/api/teams/sub-admins/list'),
+  TEAMS_HR_LIST:          ep('/api/teams/hr/list'),
 
   // Onboarding (self-service)
   ONBOARDING_GENERATE:          ep('/api/onboarding/generate'),

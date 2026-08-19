@@ -85,6 +85,7 @@ const EmployeeDashboard = () => {
   const [message, setMessage] = useState({ type: '', text: '' });
   const [canClockOut, setCanClockOut] = useState(false);
   const [showClockOutConfirm, setShowClockOutConfirm] = useState(false);
+  const [networkBlocked, setNetworkBlocked] = useState(false);
 
   // Tickets the employee raised that the team has marked resolved and is now waiting on
   // THEM to confirm (status 'resolved_pending') — surfaced as a popup on dashboard load
@@ -115,6 +116,29 @@ const EmployeeDashboard = () => {
     const timer = setTimeout(() => setCanClockOut(true), 3000);
     return () => clearTimeout(timer);
   }, [attendance?.clock_in, attendance?.clock_out, !!activeSession]);
+
+  // Housekeeper-only: proactively hide the clock in/out button (instead of letting them
+  // click it and hit a 403) when the device isn't on an allowlisted network. Polled so a
+  // Housekeeper who switches off office Wi-Fi mid-session sees the button disappear without
+  // needing to refresh — see backend/utils/housekeeperNetworkGate.js for the server-side gate.
+  useEffect(() => {
+    if (user?.role !== 'housekeeper') return;
+
+    let cancelled = false;
+    const checkNetwork = async () => {
+      try {
+        await axios.get(API_ENDPOINTS.ATTENDANCE_NETWORK_STATUS);
+        if (!cancelled) setNetworkBlocked(false);
+      } catch (err) {
+        if (cancelled) return;
+        setNetworkBlocked(err.response?.data?.code === 'IP_BLOCKED');
+      }
+    };
+
+    checkNetwork();
+    const interval = setInterval(checkNetwork, 45000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [user?.role]);
 
   const formatTimeIST = (datetime) => {
     if (!datetime) return '--:--';
@@ -175,6 +199,7 @@ const EmployeeDashboard = () => {
       saveSession(session);
       setMessage({ type: 'success', text: response.data.message || 'Clocked in successfully!' });
     } catch (error) {
+      if (error.response?.data?.code === 'IP_BLOCKED') setNetworkBlocked(true);
       setMessage({ type: 'danger', text: error.response?.data?.message || 'Failed to clock in' });
     } finally {
       setClockLoading(false);
@@ -211,6 +236,7 @@ const EmployeeDashboard = () => {
       clearSession();
       setMessage({ type: 'success', text: response.data.message || 'Clocked out successfully!' });
     } catch (error) {
+      if (error.response?.data?.code === 'IP_BLOCKED') setNetworkBlocked(true);
       setMessage({ type: 'danger', text: error.response?.data?.message || 'Failed to clock out' });
     } finally {
       setClockLoading(false);
@@ -954,7 +980,7 @@ const EmployeeDashboard = () => {
   return (
     <div className="p-2 p-md-3 p-lg-4" style={{ backgroundColor: '#f0f2f5', minHeight: '100vh' }}>
 
-      <WelcomeBanner name={employee?.first_name} roleLabel="Employee Dashboard" onRefresh={refreshData} refreshing={refreshing} />
+      <WelcomeBanner name={employee?.first_name} roleLabel={user?.role === 'housekeeper' ? 'Housekeeper Dashboard' : 'Employee Dashboard'} onRefresh={refreshData} refreshing={refreshing} />
 
       <div className="d-flex flex-wrap gap-2 align-items-center mb-3">
         <span className="text-muted small">{employee?.designation || 'Employee'} • {employee?.department || 'Department'}</span>
@@ -983,7 +1009,9 @@ const EmployeeDashboard = () => {
         onClockIn={handleClockIn}
         onRequestClockOut={() => setShowClockOutConfirm(true)}
         clockLoading={clockLoading}
-        disabledMobile={isMobileDevice}
+        readOnly={networkBlocked}
+        readOnlyMessage="Please connect to the company Wi-Fi to clock in/out."
+        disabledMobile={user?.role === 'housekeeper' ? false : isMobileDevice}
         canClockOut={canClockOut}
         shiftTiming={employee?.shift_timing}
         unlimitedBreaks={(employee?.department || '').trim().toLowerCase() === 'sales'}

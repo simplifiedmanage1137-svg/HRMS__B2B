@@ -83,6 +83,16 @@ axiosInstance.interceptors.response.use(
     const code = error.response?.data?.code;
     const message = error.response?.data?.message || '';
 
+    // Attendance-surface calls (clock in/out, the network-status probe) are handled
+    // inline by the dashboard — it hides the clock in/out button and shows a message
+    // instead of yanking the user off the page. Any other IP_BLOCKED response (e.g. one
+    // slipping through elsewhere) still hard-redirects as a safety net.
+    const isAttendanceCall = (originalRequest?.url || '').includes('/api/attendance');
+    if (status === 403 && code === 'IP_BLOCKED' && !isAttendanceCall && window.location.pathname !== '/network-blocked') {
+      window.location.href = '/network-blocked';
+      return Promise.reject(error);
+    }
+
     const isTokenExpired =
       status === 401 &&
       (code === 'TOKEN_EXPIRED' ||

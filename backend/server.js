@@ -45,9 +45,11 @@ const ticketRoutes        = require('./routes/ticketRoutes');
 const wishesRoutes        = require('./routes/wishesRoutes');
 const postsRoutes         = require('./routes/postsRoutes');
 const emailRoutes         = require('./routes/emailRoutes');
+const housekeeperNetworkRoutes = require('./routes/housekeeperNetworkRoutes');
 
 const attendanceController = require('./controllers/attendanceController');
 const cronRoutes           = require('./routes/cronRoutes');
+const housekeeperNetworkGate = require('./middleware/housekeeperNetworkGate');
 
 const app = express();
 
@@ -198,7 +200,7 @@ app.use('/api/onboarding',  onboardingRoutes);
 // ─── Protected routes ─────────────────────────────────────────────────────────
 app.use('/api/employees',        authenticateToken, employeeRoutes);
 app.use('/api/leaves',           authenticateToken, leaveRoutes);
-app.use('/api/attendance',       authenticateToken, attendanceRoutes(supabase, authenticateToken, requireAdmin));
+app.use('/api/attendance',       authenticateToken, housekeeperNetworkGate, attendanceRoutes(supabase, authenticateToken, requireAdmin));
 app.use('/api/salary',           authenticateToken, salaryRoutes);
 app.use('/api/notifications',    authenticateToken, notificationRoutes);
 app.use('/api/admin-updates',    authenticateToken, adminUpdateRoutes);
@@ -215,6 +217,7 @@ app.use('/api/tickets',          authenticateToken, ticketRoutes(supabase, authe
 app.use('/api/wishes',           authenticateToken, wishesRoutes(supabase, authenticateToken));
 app.use('/api/posts',            authenticateToken, postsRoutes(supabase, authenticateToken));
 app.use('/api/email',            authenticateToken, emailRoutes);
+app.use('/api/admin/housekeeper-network', authenticateToken, housekeeperNetworkRoutes);
 
 // ─── Utility endpoints ────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({

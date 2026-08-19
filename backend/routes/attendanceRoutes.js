@@ -19,6 +19,12 @@ const regularizationUpload = multer({
 // Note: This module exports a function that takes supabase, authenticateToken, and requireAdmin
 module.exports = (supabase, authenticateToken, requireAdmin) => {
 
+    // Lightweight probe the dashboard polls to decide whether to show/hide the clock
+    // in-out button. The Housekeeper network gate is mounted on this whole /api/attendance
+    // router in server.js — if the caller is off-network it already 403s before this
+    // handler ever runs, so reaching here at all means "on network, safe to clock in/out".
+    router.get('/network-status', (req, res) => res.json({ success: true }));
+
     // Clock in/out endpoints
     router.post('/clock-in', attendanceController.clockIn);
     router.post('/clock-out', attendanceController.clockOut);

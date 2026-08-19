@@ -152,6 +152,24 @@ router.get('/sub-admins/list', verifyToken, async (req, res) => {
     }
 });
 
+// GET /api/teams/hr/list — HR employees; open to all authenticated users so admins can
+// pick an HR person as a reporting manager (e.g. Add/Edit Employee's Reporting Manager field).
+router.get('/hr/list', verifyToken, async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('employees')
+            .select('employee_id, first_name, last_name, designation, department, role')
+            .eq('role', 'hr')
+            .eq('is_active', true)
+            .order('first_name');
+        if (error) throw error;
+        res.json({ success: true, managers: data || [] });
+    } catch (err) {
+        console.error('Error fetching HR employees:', err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 // GET /api/teams/employees/unassigned — employees not yet in any team
 router.get('/employees/unassigned', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
     try {

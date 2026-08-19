@@ -71,6 +71,7 @@ const AddEmployee = () => {
   const [debugInfo, setDebugInfo] = useState(null);
   const [employeeId, setEmployeeId] = useState('');
   const [managers, setManagers] = useState([]);
+  const [hrEmployees, setHrEmployees] = useState([]);
 
   // Track completed tabs
   const [completedTabs, setCompletedTabs] = useState({
@@ -151,8 +152,12 @@ const AddEmployee = () => {
   useEffect(() => {
     const fetchManagers = async () => {
       try {
-        const res = await axios.get(API_ENDPOINTS.TEAMS_MANAGERS_LIST);
-        setManagers(res.data.managers || []);
+        const [tlRes, hrRes] = await Promise.all([
+          axios.get(API_ENDPOINTS.TEAMS_MANAGERS_LIST),
+          axios.get(API_ENDPOINTS.TEAMS_HR_LIST),
+        ]);
+        setManagers(tlRes.data.managers || []);
+        setHrEmployees(hrRes.data.managers || []);
       } catch (err) {
         console.error('Error fetching managers:', err);
       }
@@ -957,14 +962,30 @@ const AddEmployee = () => {
                         size="sm"
                       >
                         <option value="">-- Select Reporting Manager --</option>
-                        {managers.map(m => {
-                          const fullName = `${m.first_name} ${m.last_name}`.trim();
-                          return (
-                            <option key={m.employee_id} value={fullName}>
-                              {fullName} ({m.designation})
-                            </option>
-                          );
-                        })}
+                        {managers.length > 0 && (
+                          <optgroup label="Team Leaders">
+                            {managers.map(m => {
+                              const fullName = `${m.first_name} ${m.last_name}`.trim();
+                              return (
+                                <option key={m.employee_id} value={fullName}>
+                                  {fullName} ({m.designation})
+                                </option>
+                              );
+                            })}
+                          </optgroup>
+                        )}
+                        {hrEmployees.length > 0 && (
+                          <optgroup label="HR">
+                            {hrEmployees.map(m => {
+                              const fullName = `${m.first_name} ${m.last_name}`.trim();
+                              return (
+                                <option key={m.employee_id} value={fullName}>
+                                  {fullName} ({m.designation})
+                                </option>
+                              );
+                            })}
+                          </optgroup>
+                        )}
                       </Form.Select>
                     </Form.Group>
                   </Col>
