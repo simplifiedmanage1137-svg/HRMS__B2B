@@ -1010,7 +1010,7 @@ const EmployeeDashboard = () => {
         onRequestClockOut={() => setShowClockOutConfirm(true)}
         clockLoading={clockLoading}
         readOnly={networkBlocked}
-        readOnlyMessage="Please connect to the company Wi-Fi to clock in/out."
+        readOnlyMessage="Please connect to company Wi-Fi for clock in."
         disabledMobile={user?.role === 'housekeeper' ? false : isMobileDevice}
         canClockOut={canClockOut}
         shiftTiming={employee?.shift_timing}

@@ -12,7 +12,7 @@ const housekeeperNetworkGateMiddleware = async (req, res, next) => {
     if (result.decision === 'blocked') {
         return res.status(403).json({
             success: false,
-            message: 'This account can only be used from an approved office network.',
+            message: 'Please connect to company Wi-Fi for clock in.',
             code: 'IP_BLOCKED',
         });
     }
