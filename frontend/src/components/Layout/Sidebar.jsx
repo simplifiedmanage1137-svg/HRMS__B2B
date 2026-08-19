@@ -231,6 +231,7 @@ const Sidebar = () => {
               <NavItem to="/performance/reviews"      icon={<FaChartLine />}   label="Performance Reviews" />
               <NavItem to="/admin/payroll"            icon={<FaMoneyBill />}   label="Payroll" />
               <NavItem to="/admin/deductions"         icon={<FaReceipt />} label="Deductions" />
+              <NavItem to="/manager/panel"            icon={<FaClock />}       label="Team Shifts" />
               {user?.role === 'admin' && (
                 <NavItem to="/editslip" icon={<FaFileInvoiceDollar />} label="Manual Salary Slip" />
               )}
@@ -264,6 +265,7 @@ const Sidebar = () => {
               <NavItem to="/performance/reviews"      icon={<FaChartLine />}   label="Performance Reviews" />
               <NavItem to="/admin/payroll"            icon={<FaMoneyBill />}   label="Payroll" />
               <NavItem to="/admin/deductions"         icon={<FaReceipt />} label="Deductions" />
+              <NavItem to="/manager/panel"            icon={<FaClock />}       label="Team Shifts" />
               <NavItem to="/tickets"                  icon={<FaTicketAlt />}   label="Support Tickets" />
               <Section label="Admin Tools" />
               <NavItem to="/admin/teams"          icon={<FaLayerGroup />}  label="TL Teams" />

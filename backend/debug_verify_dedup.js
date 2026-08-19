@@ -64,4 +64,4 @@ const toUTCMs = (val) => {
     console.log(id, '->', r ? { id: r.id, clock_in: r.clock_in_ist || r.clock_in, clock_out: r.clock_out_ist || r.clock_out, status: r.status } : 'NOT FOUND');
   }
   process.exit(0);
-})();
+})(); 

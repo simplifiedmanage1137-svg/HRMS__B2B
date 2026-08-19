@@ -397,7 +397,7 @@ function AppContent() {
             } />
 
             <Route path="/manager/panel" element={
-              <PrivateRoute allowedRoles={['employee', 'manager', 'admin', 'hr']}>
+              <PrivateRoute allowedRoles={['employee', 'manager', 'admin', 'hr', 'sub_admin']}>
                 <ManagerPanel />
               </PrivateRoute>
             } />
