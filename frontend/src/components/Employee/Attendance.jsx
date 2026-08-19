@@ -83,6 +83,7 @@ const Attendance = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isMobileDevice = useMobileDevice();
+  const [networkBlocked, setNetworkBlocked] = useState(false);
   const [attendance, setAttendance] = useState(null);
   const [activeSession, setActiveSession] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -1549,6 +1550,7 @@ const Attendance = () => {
     } catch (error) {
       console.error('❌ Clock-in error:', error);
       const errorData = error.response?.data;
+      if (errorData?.code === 'IP_BLOCKED') setNetworkBlocked(true);
 
       if (errorData?.has_missed_clockout && errorData?.attendance_date) {
         setMessage({
@@ -1638,6 +1640,7 @@ const Attendance = () => {
     } catch (error) {
       console.error('❌ Clock-out error:', error);
       const errData = error.response?.data;
+      if (errData?.code === 'IP_BLOCKED') setNetworkBlocked(true);
       if (errData?.too_early) {
         setMessage({ type: 'warning', text: errData.message });
       } else if (errData?.already_clocked_out || error.response?.status === 404) {
@@ -1743,6 +1746,29 @@ const Attendance = () => {
     const timer = setTimeout(() => setCanClockOut(true), 3000);
     return () => clearTimeout(timer);
   }, [attendance?.clock_in, attendance?.clock_out, !!activeSession]);
+
+  // Housekeeper-only: same network gate as the main dashboard — hide the clock in/out
+  // button (instead of letting them click it and hit a 403) when off an allowlisted
+  // network. See Employee/Dashboard.jsx for the twin implementation and
+  // backend/utils/housekeeperNetworkGate.js for the server-side gate.
+  useEffect(() => {
+    if (user?.role !== 'housekeeper') return;
+
+    let cancelled = false;
+    const checkNetwork = async () => {
+      try {
+        await axios.get(API_ENDPOINTS.ATTENDANCE_NETWORK_STATUS);
+        if (!cancelled) setNetworkBlocked(false);
+      } catch (err) {
+        if (cancelled) return;
+        setNetworkBlocked(err.response?.data?.code === 'IP_BLOCKED');
+      }
+    };
+
+    checkNetwork();
+    const interval = setInterval(checkNetwork, 45000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [user?.role]);
 
   useEffect(() => {
     // Only create virtual session for TODAY's incomplete record
@@ -1875,7 +1901,23 @@ const Attendance = () => {
   };
 
   const renderClockButton = () => {
-    if (isMobileDevice) {
+    if (networkBlocked) {
+      return (
+        <div className="text-center">
+          <Button variant="secondary" size="lg" className="w-100 py-3" disabled style={{ cursor: 'not-allowed', opacity: 0.65 }}>
+            <FaSignOutAlt className="me-2" /> Clock In / Clock Out
+          </Button>
+          <small className="d-block mt-2" style={{ color: '#ef4444', fontWeight: 500 }}>
+            Please connect to company Wi-Fi for clock in.
+          </small>
+        </div>
+      );
+    }
+
+    // Housekeepers are allowed to clock in/out from mobile (that's the point of the
+    // role — see Employee/Dashboard.jsx) as long as they're on an allowlisted network,
+    // checked above. Every other role stays desktop-only here.
+    if (isMobileDevice && user?.role !== 'housekeeper') {
       return (
         <div className="text-center">
           <Button variant="secondary" size="lg" className="w-100 py-3" disabled style={{ cursor: 'not-allowed', opacity: 0.65 }}>
