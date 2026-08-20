@@ -66,8 +66,8 @@ export const AuthProvider = ({ children }) => {
       }
 
       try {
-        // Try to verify the access token
-        const res = await axiosInstance.post(API_ENDPOINTS.VERIFY, null, {
+        // Try to verify the access token    // Changes by pratik for /verify api
+        const res = await axiosInstance.post(API_ENDPOINTS.VERIFY, {}, {
           headers: { Authorization: `Bearer ${savedToken}` },
         });
 
@@ -80,19 +80,21 @@ export const AuthProvider = ({ children }) => {
           logout();
         }
       } catch (err) {
-        // If verify fails with 401, the axios interceptor will auto-refresh.
-        // If even that fails, the auth:logout event fires → logout() is called below.
-        // If it succeeded after silent refresh, we just restore from storage again.
-        const refreshed = loadFromStorage();
-        if (refreshed.token && refreshed.user) {
-          setUser(refreshed.user);
-          setToken(refreshed.token);
-        } else {
-          logout();
-        }
-      } finally {
-        setLoading(false);
-      }
+  console.error("AUTH VERIFY FAILED:", err);
+  console.error("STATUS:", err.response?.status);
+  console.error("RESPONSE:", err.response?.data);
+
+  const refreshed = loadFromStorage();
+
+  if (refreshed.token && refreshed.user) {
+    setUser(refreshed.user);
+    setToken(refreshed.token);
+  } else {
+    logout();
+  }
+} finally {
+  setLoading(false);
+}
     };
 
     init();
