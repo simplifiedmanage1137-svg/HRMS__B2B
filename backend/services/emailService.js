@@ -8,7 +8,7 @@ const { Resend } = require('resend');
 // (confirmed live via resend.domains.list()). Sending "from" an address on a subdomain that
 // wasn't itself separately verified gets a 403 from Resend even though the apex is verified,
 // which is exactly the bug this default used to have (and EMAIL_FROM was set to match it).
-const DEFAULT_FROM  = 'HRMS <noreply@hrms.b2bindemand.agency>';
+const DEFAULT_FROM = 'HRMS <noreply@b2bindemand.agency>';
 const DEFAULT_FRONT = 'https://hrms.b2bindemand.agency';
 
 
