@@ -244,12 +244,29 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
                 }
             }
 
-            const { data, error } = await supabase.from('employee_breaks').insert([{
+            // Sales-only: an optional note explaining what the break is for, so it can be
+            // traced later. Trimmed/empty note is stored as null rather than ''.
+            const break_note = isSales && req.body.note && String(req.body.note).trim()
+                ? String(req.body.note).trim().slice(0, 500)
+                : null;
+
+            let { data, error } = await supabase.from('employee_breaks').insert([{
                 employee_id: employeeId,
                 attendance_date: att.attendance_date,
                 break_start: new Date().toISOString(),
                 break_type,
+                break_note,
             }]).select().single();
+
+            // break_note column not migrated yet on this DB — fall back so break-start still works.
+            if (error && /break_note|does not exist|schema cache/i.test(error.message || '')) {
+                ({ data, error } = await supabase.from('employee_breaks').insert([{
+                    employee_id: employeeId,
+                    attendance_date: att.attendance_date,
+                    break_start: new Date().toISOString(),
+                    break_type,
+                }]).select().single());
+            }
             if (error) throw error;
 
             const label = isSales ? 'Break' : BREAK_TYPES[break_type].label;
@@ -342,11 +359,18 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
             }
 
             // All breaks since this clock-in
-            const { data: sessionBreaks, error } = await supabase.from('employee_breaks')
-                .select('id, break_type, break_start, break_end, break_duration_minutes, attendance_date')
+            let { data: sessionBreaks, error } = await supabase.from('employee_breaks')
+                .select('id, break_type, break_start, break_end, break_duration_minutes, attendance_date, break_note')
                 .eq('employee_id', employeeId)
                 .gte('break_start', att.clock_in)
                 .order('break_start', { ascending: true });
+            if (error && /break_note|does not exist|schema cache/i.test(error.message || '')) {
+                ({ data: sessionBreaks, error } = await supabase.from('employee_breaks')
+                    .select('id, break_type, break_start, break_end, break_duration_minutes, attendance_date')
+                    .eq('employee_id', employeeId)
+                    .gte('break_start', att.clock_in)
+                    .order('break_start', { ascending: true }));
+            }
             if (error) throw error;
 
             const used_break_types = (sessionBreaks || []).filter(b => b.break_end).map(b => b.break_type);
@@ -471,14 +495,23 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
             const endOfDay   = new Date(todayIST + 'T23:59:59+05:30').toISOString();
 
             let query = supabase.from('employee_breaks')
-                .select('id, employee_id, break_start, break_end, break_duration_minutes, break_type, attendance_date')
+                .select('id, employee_id, break_start, break_end, break_duration_minutes, break_type, attendance_date, break_note')
                 .gte('break_start', startOfDay)
                 .lte('break_start', endOfDay)
                 .order('break_start', { ascending: true });
 
             if (employeeIds !== null) query = query.in('employee_id', employeeIds);
 
-            const { data: breaks, error } = await query;
+            let { data: breaks, error } = await query;
+            if (error && /break_note|does not exist|schema cache/i.test(error.message || '')) {
+                let fallbackQuery = supabase.from('employee_breaks')
+                    .select('id, employee_id, break_start, break_end, break_duration_minutes, break_type, attendance_date')
+                    .gte('break_start', startOfDay)
+                    .lte('break_start', endOfDay)
+                    .order('break_start', { ascending: true });
+                if (employeeIds !== null) fallbackQuery = fallbackQuery.in('employee_id', employeeIds);
+                ({ data: breaks, error } = await fallbackQuery);
+            }
             if (error) throw error;
 
             const ids = [...new Set((breaks || []).map(b => b.employee_id))];

@@ -193,7 +193,14 @@ function BreakDropdown({ activeBreak, usedTypes, canInteract, acting, error, onS
 }
 
 // ── Simple unlimited Start/End break control (Sales department) ───────────────
-function SimpleBreakControl({ activeBreak, canInteract, acting, error, totalSeconds, onStart, onEnd }) {
+// Starting a break here always goes through a note popover first — so every
+// Sales break can be traced back to what it was for, not just a timestamp range.
+function SimpleBreakControl({ activeBreak, canInteract, acting, error, totalSeconds, breaks, onStart, onEnd }) {
+    const [open, setOpen] = useState(false);
+    const [note, setNote] = useState('');
+    const [showHistory, setShowHistory] = useState(false);
+    const completedCount = (breaks || []).filter(b => b.break_end).length;
+
     const btnBase = {
         display: 'flex', alignItems: 'center', gap: 6,
         padding: '8px 16px', borderRadius: 10, border: 'none',
@@ -201,23 +208,44 @@ function SimpleBreakControl({ activeBreak, canInteract, acting, error, totalSeco
         whiteSpace: 'nowrap',
     };
 
+    const openNoteModal = () => {
+        if (acting || !canInteract) return;
+        setNote('');
+        setOpen(true);
+    };
+
+    const confirmStart = () => {
+        setOpen(false);
+        onStart(note.trim());
+    };
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
             {activeBreak ? (
-                <button onClick={onEnd} disabled={acting} style={{
-                    ...btnBase, background: '#f97316', color: '#fff', gap: 8,
-                    cursor: acting ? 'not-allowed' : 'pointer', opacity: acting ? 0.7 : 1,
-                }}>
-                    {acting ? <Spinner size="sm" animation="border" /> : <Square size={14} />}
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Clock size={13} />
-                        {fmtDuration(activeBreak.break_start)}
-                    </span>
-                    <span style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.5)' }} />
-                    <span style={{ fontWeight: 700 }}>End Break</span>
-                </button>
+                <>
+                    <button onClick={onEnd} disabled={acting} style={{
+                        ...btnBase, background: '#f97316', color: '#fff', gap: 8,
+                        cursor: acting ? 'not-allowed' : 'pointer', opacity: acting ? 0.7 : 1,
+                    }}>
+                        {acting ? <Spinner size="sm" animation="border" /> : <Square size={14} />}
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Clock size={13} />
+                            {fmtDuration(activeBreak.break_start)}
+                        </span>
+                        <span style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.5)' }} />
+                        <span style={{ fontWeight: 700 }}>End Break</span>
+                    </button>
+                    {activeBreak.break_note && (
+                        <div style={{
+                            fontSize: 10, color: 'rgba(255,255,255,0.85)', fontStyle: 'italic',
+                            maxWidth: 200, textAlign: 'center', marginTop: 2,
+                        }}>
+                            "{activeBreak.break_note}"
+                        </div>
+                    )}
+                </>
             ) : (
-                <button onClick={onStart} disabled={acting || !canInteract} style={{
+                <button onClick={openNoteModal} disabled={acting || !canInteract} style={{
                     ...btnBase,
                     background: '#f4a46b', color: '#fff',
                     cursor: (acting || !canInteract) ? 'not-allowed' : 'pointer',
@@ -227,9 +255,47 @@ function SimpleBreakControl({ activeBreak, canInteract, acting, error, totalSeco
                     Start Break
                 </button>
             )}
+
+            {open && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ background: '#fff', borderRadius: 18, padding: '32px 28px', boxShadow: '0 24px 64px rgba(0,0,0,0.22)', textAlign: 'center', maxWidth: 340, width: '90%' }}>
+                        <div style={{ fontSize: 44, marginBottom: 10 }}>☕</div>
+                        <div style={{ fontWeight: 700, fontSize: 18, color: '#111827', marginBottom: 8 }}>Add a note for this break</div>
+                        <div style={{ color: '#6b7280', fontSize: 14, marginBottom: 16 }}>Optional — helps your manager see what the break was for.</div>
+                        <textarea
+                            autoFocus
+                            value={note}
+                            onChange={e => setNote(e.target.value)}
+                            placeholder="e.g. client call, quick errand..."
+                            maxLength={500}
+                            rows={3}
+                            style={{
+                                width: '100%', resize: 'vertical', fontSize: 13, textAlign: 'left',
+                                border: '1px solid #e5e7eb', borderRadius: 10, padding: '10px 12px',
+                                marginBottom: 20, fontFamily: 'inherit',
+                            }}
+                        />
+                        <div style={{ display: 'flex', gap: 10 }}>
+                            <button
+                                onClick={confirmStart}
+                                style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: '#f97316', color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
+                            >
+                                Start Break
+                            </button>
+                            <button
+                                onClick={() => setOpen(false)}
+                                style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid #e5e7eb', background: '#fff', color: '#374151', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div style={{
                 marginTop: 4, background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.25)',
-                borderRadius: 10, padding: '2px 4px', textAlign: 'center', minWidth: 180,
+                borderRadius: 10, padding: '2px 4px 4px', textAlign: 'center', minWidth: 180,
             }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     Today's Break
@@ -237,8 +303,66 @@ function SimpleBreakControl({ activeBreak, canInteract, acting, error, totalSeco
                 <div style={{ fontSize: 14, fontWeight: 800, color: '#fff', marginTop: 1 }}>
                     Total Break Time: {fmtHMS(totalSeconds)}
                 </div>
+                {completedCount > 0 && (
+                    <button onClick={() => setShowHistory(true)} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4,
+                        background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.3)',
+                        borderRadius: 8, padding: '3px 10px', fontSize: 10, fontWeight: 700,
+                        color: '#fff', cursor: 'pointer',
+                    }}>
+                        <History size={11} /> View History ({completedCount})
+                    </button>
+                )}
             </div>
             {error && <div style={{ fontSize: 10, color: '#ef4444' }}>{error}</div>}
+
+            {showHistory && <BreakHistoryModal breaks={breaks} onClose={() => setShowHistory(false)} />}
+        </div>
+    );
+}
+
+// ── Today's break history — centered modal (same visual pattern as the
+// clock-out confirmation and the start-break note prompt above) ──────────────
+function BreakHistoryModal({ breaks, onClose }) {
+    const done = (breaks || []).filter(b => b.break_end).sort((a, b) => new Date(a.break_start) - new Date(b.break_start));
+    return (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: '#fff', borderRadius: 18, padding: '28px 24px', boxShadow: '0 24px 64px rgba(0,0,0,0.22)', maxWidth: 380, width: '90%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                    <div style={{ fontSize: 40, marginBottom: 8 }}>📋</div>
+                    <div style={{ fontWeight: 700, fontSize: 18, color: '#111827' }}>Today's Break History</div>
+                    <div style={{ color: '#6b7280', fontSize: 13, marginTop: 2 }}>{done.length} break{done.length === 1 ? '' : 's'} completed today</div>
+                </div>
+
+                <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+                    {done.length === 0 ? (
+                        <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 13, padding: '16px 0' }}>No breaks completed yet today.</div>
+                    ) : done.map(b => (
+                        <div key={b.id} style={{ border: '1px solid #f3f4f6', borderRadius: 10, padding: '10px 12px', textAlign: 'left', background: '#fafafa' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>
+                                    ☕ {fmtTime(b.break_start)} → {fmtTime(b.break_end)}
+                                </span>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: '#f97316' }}>
+                                    {fmtMins(b.break_duration_minutes)}
+                                </span>
+                            </div>
+                            {b.break_note && (
+                                <div style={{ fontSize: 12, color: '#6b7280', fontStyle: 'italic', marginTop: 4 }}>
+                                    "{b.break_note}"
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+
+                <button
+                    onClick={onClose}
+                    style={{ padding: '10px 0', borderRadius: 10, border: '1px solid #e5e7eb', background: '#fff', color: '#374151', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
+                >
+                    Close
+                </button>
+            </div>
         </div>
     );
 }
@@ -296,6 +420,11 @@ function TeamPanel({ todayBreaks, loading }) {
                             : <><span style={{ color: '#d1d5db' }}>·</span><span>{fmtTime(b.break_start)} → {fmtTime(b.break_end)}</span></>
                         }
                     </div>
+                    {b.break_note && (
+                        <div style={{ fontSize: 10, color: '#9ca3af', fontStyle: 'italic', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            "{b.break_note}"
+                        </div>
+                    )}
                 </div>
                 {live
                     ? <span style={{ fontSize: 9, background: '#fef3c7', color: '#92400e', borderRadius: 99, padding: '2px 7px', fontWeight: 700, flexShrink: 0 }}>LIVE</span>
@@ -417,10 +546,10 @@ export default function BreakWidget({ isClockedIn = false, isClockedOut = false,
         return () => clearInterval(timerRef.current);
     }, [activeBreak, todayBreaks, mode]);
 
-    const handleStart = async (breakType) => {
+    const handleStart = async (breakType, note) => {
         setActing(true); setError('');
         try {
-            const res = await axios.post(API_ENDPOINTS.BREAK_START, { break_type: breakType });
+            const res = await axios.post(API_ENDPOINTS.BREAK_START, { break_type: breakType, note });
             setActiveBreak(res.data.break);
             await fetchStatus();
         } catch (err) {
@@ -455,7 +584,8 @@ export default function BreakWidget({ isClockedIn = false, isClockedOut = false,
                         acting={acting}
                         error={error}
                         totalSeconds={totalBreakSecondsToday + liveElapsedSeconds}
-                        onStart={() => handleStart()}
+                        breaks={sessionBreaks}
+                        onStart={(note) => handleStart(undefined, note)}
                         onEnd={handleEnd}
                     />
                 ) : (
