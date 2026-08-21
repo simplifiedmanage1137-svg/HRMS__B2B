@@ -11,7 +11,7 @@ export const useAuth = () => {
   return context;
 };
 
-// ─── token helpers ────────────────────────────────────────────────────────────
+// ─── token helpers ────
 
 const loadFromStorage = () => {
   try {

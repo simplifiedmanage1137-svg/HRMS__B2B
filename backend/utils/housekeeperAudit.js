@@ -3,7 +3,7 @@
 // backend/routes/employeeRoutes.js) — one row per event, no update/delete.
 
 const supabase = require('../config/supabase');
-const { sendEmail } = require('../services/emailService');
+// const { sendEmail } = require('../services/emailService');
 
 const SPIKE_THRESHOLD = 10;
 const SPIKE_WINDOW_MS = 15 * 60 * 1000;
@@ -72,9 +72,9 @@ async function notifyAdmins(blockedCount) {
       if needed, update the allowlist or start an emergency override.</p>
     `;
 
-    for (const admin of admins) {
-        sendEmail({ to: admin.email, subject, html }).catch(() => {});
-    }
+    // for (const admin of admins) {
+    //     sendEmail({ to: admin.email, subject, html }).catch(() => {});
+    // }
 }
 
 module.exports = { logAuditEvent };
