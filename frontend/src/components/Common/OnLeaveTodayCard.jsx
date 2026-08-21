@@ -5,18 +5,25 @@ import API_ENDPOINTS from '../../config/api';
 import Avatar from './Avatar';
 import { QA, QA_CARD_STYLE, QA_CARD_TITLE_STYLE } from './quickAccessTheme';
 
-export default function OnLeaveTodayCard({ scope = 'department', department }) {
+export default function OnLeaveTodayCard({ scope = 'department', department, managerId }) {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    axios.get(API_ENDPOINTS.LEAVE_ON_LEAVE_TODAY(scope, department))
+    setLoading(true);
+    // Manager Dashboard "View Team" filter: an explicit manager_id forces team scope
+    // (resolved server-side against that manager, not the caller) instead of scope.
+    const effectiveScope = managerId && managerId !== 'ALL' ? 'team' : scope;
+    const url = managerId && managerId !== 'ALL'
+      ? `${API_ENDPOINTS.LEAVE_ON_LEAVE_TODAY(effectiveScope, department)}&manager_id=${managerId}`
+      : API_ENDPOINTS.LEAVE_ON_LEAVE_TODAY(effectiveScope, department);
+    axios.get(url)
       .then(res => { if (!cancelled && res.data?.success) setEmployees(res.data.employees || []); })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [scope, department]);
+  }, [scope, department, managerId]);
 
   return (
     <div className="qa-hover-lift" style={QA_CARD_STYLE}>

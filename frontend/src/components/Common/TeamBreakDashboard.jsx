@@ -39,7 +39,7 @@ const Avatar = ({ first, last, size = 34 }) => (
   </div>
 );
 
-export default function TeamBreakDashboard() {
+export default function TeamBreakDashboard({ managerId } = {}) {
   const [data,        setData]        = useState(null);
   const [loading,     setLoading]     = useState(true);
   const [, setTick]                   = useState(0);
@@ -50,14 +50,18 @@ export default function TeamBreakDashboard() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await axios.get(API_ENDPOINTS.BREAK_TEAM_STATS);
+      const url = managerId && managerId !== 'ALL'
+        ? `${API_ENDPOINTS.BREAK_TEAM_STATS}?manager_id=${managerId}`
+        : API_ENDPOINTS.BREAK_TEAM_STATS;
+      const res = await axios.get(url);
       if (res.data?.success) setData(res.data);
     } catch { /* silent */ } finally { setLoading(false); }
-  }, []);
+  }, [managerId]);
 
-  // Fetch once on mount only — no background poll. Use the refresh button in the header
+  // Manager Dashboard "View Team" filter changing re-fetches; otherwise this only
+  // fetches once on mount — no background poll. Use the refresh button in the header
   // to pull fresh data on demand instead of hitting the DB every 30s from every open tab.
-  useEffect(() => { fetchStats(); }, [fetchStats]);
+  useEffect(() => { setLoading(true); fetchStats(); }, [fetchStats]);
 
   useEffect(() => {
     const hasActive = data?.today_breaks?.some(b => !b.break_end);

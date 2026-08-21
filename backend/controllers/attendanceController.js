@@ -1,7 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const supabase = require('../config/supabase');
 const { holidays } = require('../data/holidays');
-const { normalizeName, getEmployeeById, getTeamEmployeeIdsByManagerName, employeeHasDirectReports } = require('../utils/employeeLookup');
+const { normalizeName, getEmployeeById, getTeamEmployeeIdsByManagerName, getTeamEmployeeIdsByEmployeeId, employeeHasDirectReports } = require('../utils/employeeLookup');
 const { isFlexibleShiftEnabled, getFlexibleShiftStatus } = require('../utils/flexibleShift');
 
 // Generate unique session ID
@@ -1615,10 +1615,26 @@ const pickBetterAttendanceRow = (existing, record) => {
 
 exports.getAttendanceReport = async (req, res) => {
     try {
-        const { start, end, employee_id } = req.query;
+        const { start, end, employee_id, manager_id } = req.query;
         if (!start || !end) {
             return res.status(400).json({ success: false, message: 'Start and end dates are required' });
         }
+
+        // Manager Dashboard "View Team" filter — resolves manager_id (an employee_id) to
+        // that manager's direct reports. null = no scope (company-wide); [] = manager has
+        // no direct reports, so return an empty report rather than falling through to
+        // company-wide data.
+        let teamIds = null;
+        if (manager_id) {
+            teamIds = await getTeamEmployeeIdsByEmployeeId(manager_id);
+            if (teamIds && teamIds.length === 0) {
+                return res.json({
+                    success: true, attendance: [],
+                    stats: { total: 0, present: 0, half_day: 0, absent: 0, total_working_minutes: 0, total_working_hours: 0, total_working_hours_display: '0h 0m' },
+                });
+            }
+        }
+
         const buildQuery = () => {
             let q = supabase
                 .from('attendance')
@@ -1626,6 +1642,7 @@ exports.getAttendanceReport = async (req, res) => {
                 .gte('attendance_date', start)
                 .lte('attendance_date', end);
             if (employee_id) q = q.eq('employee_id', employee_id);
+            if (teamIds) q = q.in('employee_id', teamIds);
             return q.order('attendance_date', { ascending: false });
         };
         let { data: attendance, error: attendanceError } = await fetchAllPages(buildQuery);
@@ -1637,6 +1654,7 @@ exports.getAttendanceReport = async (req, res) => {
                     .gte('attendance_date', start)
                     .lte('attendance_date', end);
                 if (employee_id) q = q.eq('employee_id', employee_id);
+                if (teamIds) q = q.in('employee_id', teamIds);
                 return q.order('attendance_date', { ascending: false });
             };
             ({ data: attendance, error: attendanceError } = await fetchAllPages(buildFallbackQuery));

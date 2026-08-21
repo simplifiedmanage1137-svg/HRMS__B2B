@@ -57,6 +57,7 @@ const router  = express.Router();
 const notificationService = require('../services/notificationService');
 const emailService = require('../services/emailService');
 const { AGE_THRESHOLDS_HOURS } = require('../config/ticketPolicy');
+const { getTeamEmployeeIdsByEmployeeId } = require('../utils/employeeLookup');
 const ROLES_CAN_RESOLVE = ['admin', 'sub_admin', 'manager', 'hr'];
 
 module.exports = (supabase, authenticateToken) => {
@@ -142,14 +143,19 @@ module.exports = (supabase, authenticateToken) => {
         }
     });
 
-    const visibleTicketsQuery = async (user) => {
+    const visibleTicketsQuery = async (user, managerId) => {
         const { employeeId, role } = user;
 
         if (ROLES_SEE_ALL.includes(role)) {
-            // admin / sub_admin / hr — see everything
-            return supabase.from('support_tickets')
-                .select('*')
-                .order('created_at', { ascending: false });
+            // admin / sub_admin / hr — see everything by default. Manager Dashboard
+            // "View Team" filter: narrow to tickets raised by one specific TL/Manager's team.
+            let query = supabase.from('support_tickets').select('*').order('created_at', { ascending: false });
+            if (managerId && managerId !== 'ALL') {
+                const teamIds = await getTeamEmployeeIdsByEmployeeId(managerId);
+                if (!teamIds || teamIds.length === 0) return { data: [], error: null };
+                query = query.in('raised_by', teamIds);
+            }
+            return query;
         }
 
         // Everyone else: own raised tickets + any ticket tagged to their own
@@ -183,7 +189,7 @@ module.exports = (supabase, authenticateToken) => {
     // ── GET /api/tickets ──────────────────────────────────────────────────
     router.get('/', authenticateToken, async (req, res) => {
         try {
-            const { data, error } = await visibleTicketsQuery(req.user);
+            const { data, error } = await visibleTicketsQuery(req.user, req.query.manager_id);
             if (error) throw error;
             return res.json({ success: true, tickets: data || [] });
         } catch (err) {
@@ -202,7 +208,7 @@ module.exports = (supabase, authenticateToken) => {
     // the rest are additive for the new dashboard KPI widget.
     router.get('/count', authenticateToken, async (req, res) => {
         try {
-            const { data, error } = await visibleTicketsQuery(req.user);
+            const { data, error } = await visibleTicketsQuery(req.user, req.query.manager_id);
             if (error) throw error;
             const tickets = data || [];
             const open = tickets.filter(t => t.status === 'open').length;

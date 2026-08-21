@@ -8,6 +8,7 @@ const { uploadFile, deleteFile, folderForField } = require('../lib/supabaseStora
 const { sendShiftChangeEmail } = require('../services/emailService');
 const { createOnboardingTickets } = require('../utils/onboardingTickets');
 const { createProfilePhotoPost } = require('../utils/profilePhotoPost');
+const { getTeamEmployeeIdsByEmployeeId } = require('../utils/employeeLookup');
 
 // Memory storage — files are uploaded to Supabase Storage (no local disk in serverless)
 const upload = multer({
@@ -1030,11 +1031,26 @@ router.get('/profile/:employeeId', async (req, res) => {
 // Get all employees (returns array directly)
 router.get('/', async (req, res) => {
     try {
-        const { department, search, active } = req.query;
+        const { department, search, active, manager_id } = req.query;
+
+        // Manager Dashboard "View Team" filter — manager_id is an employee_id, resolved
+        // to that manager's direct reports via reporting_manager name matching (same
+        // primitive used by /manager/team and the team-report/regularization endpoints).
+        let teamIds = null;
+        if (manager_id) {
+            teamIds = await getTeamEmployeeIdsByEmployeeId(manager_id);
+            if (teamIds && teamIds.length === 0) {
+                return res.json([]); // resolved manager has no direct reports — empty state, not company-wide
+            }
+        }
 
         let query = supabase
             .from('employees')
             .select('*');
+
+        if (teamIds) {
+            query = query.in('employee_id', teamIds);
+        }
 
         if (department) {
             query = query.eq('department', department);

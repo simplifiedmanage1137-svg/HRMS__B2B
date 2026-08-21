@@ -1,6 +1,7 @@
 const supabase = require('../config/supabase');
 const { sendLeaveStatusEmail, sendLeaveAppliedEmail } = require('../services/emailService');
 const { HR_ROLES } = require('../config/roleGroups');
+const { getTeamEmployeeIdsByEmployeeId } = require('../utils/employeeLookup');
 const {
     PAID_LEAVE_ELIGIBILITY_MONTHS,
     MONTHLY_ACCRUAL_RATE,
@@ -547,23 +548,28 @@ exports.getLeaves = async (req, res) => {
             .from('leaves')
             .select('*, employees!inner(first_name, last_name, department, designation, profile_image)');
 
-        const isAdmin = (userRole === 'admin' || userRole === 'desktop_support' || userRole === 'hr') && req.query.all === 'true';
-        // sub_admin/manager share the /admin/leave-requests page (which always calls ?all=true),
-        // but unlike full admin/hr they must only see their own team + leaves tagged to them —
-        // never the whole company's leaves.
+        // sub_admin ("Manager" UI role) is treated as an unrestricted/company-wide viewer
+        // everywhere else in this app (see /manager/team, ticket counts, break-team-stats) —
+        // folded in here too so the Manager Dashboard's "All" option is actually company-wide,
+        // consistent with every other card on that page. Only `manager` (TL) stays
+        // self-team-scoped below, since TLs don't get the dashboard team-filter dropdown.
+        const isAdmin = (userRole === 'admin' || userRole === 'desktop_support' || userRole === 'hr' || userRole === 'sub_admin') && req.query.all === 'true';
         const isReportingManager = req.query.reporting_manager === 'true'
-            || (req.query.all === 'true' && !isAdmin && (userRole === 'sub_admin' || userRole === 'manager'));
+            || (req.query.all === 'true' && !isAdmin && userRole === 'manager');
 
         console.log('🔍 Query flags:', { isAdmin, isReportingManager });
 
         if (isAdmin) {
-            // Admin: all leaves or filtered leaves
-            console.log('🔍 Admin requesting all leaves');
-            // Show all leaves for admin (no filtering by team leader)
-            if (req.query.employee_id) {
+            // Manager Dashboard "View Team" filter — an explicit target manager_id takes
+            // priority over the plain employee_id filter (mutually exclusive use cases).
+            if (req.query.manager_id && req.query.manager_id !== 'ALL') {
+                const teamIds = await getTeamEmployeeIdsByEmployeeId(req.query.manager_id);
+                if (!teamIds || teamIds.length === 0) return res.json([]);
+                query = query.in('employee_id', teamIds);
+            } else if (req.query.employee_id) {
                 query = query.eq('employee_id', req.query.employee_id);
             }
-            // No additional filtering for admin when all=true
+            // else: no additional filtering — full company-wide
         } else if (isReportingManager) {
             // Reporting manager: leaves where reporting_manager matches OR
             // employee's reporting_manager in employees table matches (for old leaves with null reporting_manager)
@@ -853,7 +859,7 @@ exports.getLeaveTypes = async (req, res) => {
 exports.getOnLeaveToday = async (req, res) => {
     try {
         const { employeeId, role } = req.user;
-        let { scope = 'department', department } = req.query;
+        let { scope = 'department', department, manager_id } = req.query;
 
         const { data: caller, error: callerErr } = await supabase
             .from('employees')
@@ -887,12 +893,24 @@ exports.getOnLeaveToday = async (req, res) => {
             .in('employee_id', empIds);
         if (empsErr) throw empsErr;
 
-        const callerName = `${caller?.first_name || ''} ${caller?.last_name || ''}`.trim().toLowerCase();
+        // Manager Dashboard "View Team" filter — an explicit target manager overrides whose
+        // team gets matched below, instead of always resolving to the caller's own name.
+        let teamManagerName = `${caller?.first_name || ''} ${caller?.last_name || ''}`.trim().toLowerCase();
+        if (manager_id && manager_id !== 'ALL' && ['admin', 'sub_admin', 'hr'].includes(role)) {
+            const { data: targetManager } = await supabase
+                .from('employees').select('first_name, last_name')
+                .eq('employee_id', manager_id).maybeSingle();
+            if (targetManager) {
+                teamManagerName = `${targetManager.first_name} ${targetManager.last_name}`.trim().toLowerCase();
+                scope = 'team';
+            }
+        }
+
         const targetDept = (department || caller?.department || '').toLowerCase();
 
         const scoped = (emps || []).filter(e => {
             if (scope === 'team') {
-                return (e.reporting_manager || '').trim().toLowerCase() === callerName;
+                return (e.reporting_manager || '').trim().toLowerCase() === teamManagerName;
             }
             if (scope === 'company') return true;
             return (e.department || '').toLowerCase() === targetDept;

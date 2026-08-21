@@ -84,7 +84,7 @@ const getStatusBadge = (status) => {
   return <Badge bg="secondary">{status}</Badge>;
 };
 
-export default function RegularizationPanel({ embedded = false, onRequestCountChange }) {
+export default function RegularizationPanel({ embedded = false, onRequestCountChange, managerId }) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -117,6 +117,7 @@ export default function RegularizationPanel({ embedded = false, onRequestCountCh
       if (typeFilter) params.request_type = typeFilter;
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo) params.date_to = dateTo;
+      if (managerId && managerId !== 'ALL') params.manager_id = managerId;
       const response = await axios.get(API_ENDPOINTS.ATTENDANCE_PENDING_REGULARIZATIONS, { params });
       const requestsData = response.data.requests || [];
       setRequests(requestsData);
@@ -130,7 +131,7 @@ export default function RegularizationPanel({ embedded = false, onRequestCountCh
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, typeFilter, dateFrom, dateTo]);
+  }, [filter, typeFilter, dateFrom, dateTo, managerId]);
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 

@@ -200,13 +200,57 @@ const AdminDashboard = () => {
   const [showClockOutConfirm, setShowClockOutConfirm] = useState(false);
   const [perfAnalytics, setPerfAnalytics] = useState(null);
 
+  // Manager Dashboard "View Team" filter — 'ALL' = company-wide (default, reproduces
+  // the pre-filter dashboard exactly). Any other value is a Team Leader/Manager's
+  // employee_id, and every fetch below appends it as manager_id so the whole dashboard
+  // (not just one card) scopes to that person's team via the existing reporting_manager
+  // relationship — see backend/utils/employeeLookup.js getTeamEmployeeIdsByEmployeeId.
+  const [selectedManagerId, setSelectedManagerId] = useState('ALL');
+  const [managerOptions, setManagerOptions] = useState([]);
+  const [managerOptionsLoading, setManagerOptionsLoading] = useState(false);
+  const canFilterByTeam = ['admin', 'sub_admin', 'hr'].includes(user?.role);
+  const managerIdParam = selectedManagerId !== 'ALL' ? `&manager_id=${selectedManagerId}` : '';
+
+  useEffect(() => {
+    fetchTodayEvents();
+  }, []);
+
+  // Re-fetches everything whenever the "View Team" selection changes (including the
+  // initial mount, where selectedManagerId is still 'ALL' — same as the old mount-only
+  // effect this replaces).
   useEffect(() => {
     fetchDashboardData();
-    fetchTodayEvents();
-    axios.get(API_ENDPOINTS.PERFORMANCE_ANALYTICS)
+    axios.get(`${API_ENDPOINTS.PERFORMANCE_ANALYTICS}${selectedManagerId !== 'ALL' ? `?manager_id=${selectedManagerId}` : ''}`)
       .then(r => { if (r.data.success) setPerfAnalytics(r.data.analytics); })
       .catch(() => {});
-  }, []);
+    // Leave Balances table is loaded on-demand (its own button) — clear it on filter
+    // change so a stale company-wide (or other team's) load never displays under a
+    // newly selected team.
+    setLeaveBalancesLoaded(false);
+    setEmployeeLeaveBalances([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedManagerId]);
+
+  // Manager list for the dropdown — Team Leaders (role 'manager') + Managers (role
+  // 'sub_admin'), same endpoints/employee_id convention as Add/Edit Employee's
+  // Reporting Manager picker. Fetched once; only relevant to roles that can actually
+  // see a company-wide dashboard to begin with.
+  useEffect(() => {
+    if (!canFilterByTeam) return;
+    setManagerOptionsLoading(true);
+    Promise.all([
+      axios.get(API_ENDPOINTS.TEAMS_MANAGERS_LIST),
+      axios.get(API_ENDPOINTS.TEAMS_SUB_ADMINS_LIST),
+    ])
+      .then(([tlRes, saRes]) => {
+        const tls = tlRes.data.success ? tlRes.data.managers || [] : [];
+        const sas = saRes.data.success ? saRes.data.managers || [] : [];
+        setManagerOptions([...tls, ...sas].sort((a, b) => (a.first_name || '').localeCompare(b.first_name || '')));
+      })
+      .catch(() => {})
+      .finally(() => setManagerOptionsLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canFilterByTeam]);
 
   // Admin / Sub-admin (UI "Manager") / HR: fetch own today's attendance on mount —
   // TL (role 'manager') and Employee don't get the clock-in widget on this dashboard.
@@ -335,9 +379,9 @@ const AdminDashboard = () => {
       const today = new Date().toISOString().split('T')[0];
 
       const [employeesRes, attendanceRes, leavesRes] = await Promise.all([
-        axios.get(API_ENDPOINTS.EMPLOYEES),
-        axios.get(`${API_ENDPOINTS.ATTENDANCE_REPORT}?start=${today}&end=${today}`),
-        axios.get(`${API_ENDPOINTS.LEAVES}?all=true`)
+        axios.get(`${API_ENDPOINTS.EMPLOYEES}${selectedManagerId !== 'ALL' ? `?manager_id=${selectedManagerId}` : ''}`),
+        axios.get(`${API_ENDPOINTS.ATTENDANCE_REPORT}?start=${today}&end=${today}${managerIdParam}`),
+        axios.get(`${API_ENDPOINTS.LEAVES}?all=true${managerIdParam}`)
       ]);
 
       // Process employees
@@ -577,7 +621,7 @@ const AdminDashboard = () => {
   const refreshAttendanceData = async () => {
     try {
       const today = new Date().toISOString().split('T')[0];
-      const attendanceRes = await axios.get(`${API_ENDPOINTS.ATTENDANCE_REPORT}?start=${today}&end=${today}`);
+      const attendanceRes = await axios.get(`${API_ENDPOINTS.ATTENDANCE_REPORT}?start=${today}&end=${today}${managerIdParam}`);
       const attendanceData = attendanceRes.data.attendance || [];
       const clockedInData = attendanceData.filter(a => a.clock_in);
       setTodayAttendance(clockedInData);
@@ -592,7 +636,7 @@ const AdminDashboard = () => {
   const refreshLeaveRequests = async () => {
     try {
       console.log('🔄 Fetching pending leave requests for admin dashboard...');
-      const leavesRes = await axios.get(`${API_ENDPOINTS.LEAVES}?all=true`);
+      const leavesRes = await axios.get(`${API_ENDPOINTS.LEAVES}?all=true${managerIdParam}`);
       console.log('📊 Leave requests response:', leavesRes.data);
 
       let allLeaves = [];
@@ -621,7 +665,7 @@ const AdminDashboard = () => {
   const loadLeaveBalances = async () => {
     try {
       setLeaveBalancesLoading(true);
-      const employeesRes = await axios.get(API_ENDPOINTS.EMPLOYEES);
+      const employeesRes = await axios.get(`${API_ENDPOINTS.EMPLOYEES}${selectedManagerId !== 'ALL' ? `?manager_id=${selectedManagerId}` : ''}`);
       let employees = [];
       if (employeesRes.data) {
         if (Array.isArray(employeesRes.data)) employees = employeesRes.data;
@@ -756,7 +800,7 @@ const AdminDashboard = () => {
     setExporting(true);
     try {
       if (exportType === 'attendance') {
-        const res = await axios.get(`${API_ENDPOINTS.ATTENDANCE_REPORT}?start=${exportDateRange.start}&end=${exportDateRange.end}`);
+        const res = await axios.get(`${API_ENDPOINTS.ATTENDANCE_REPORT}?start=${exportDateRange.start}&end=${exportDateRange.end}${managerIdParam}`);
         const records = res.data.attendance || [];
         const rows = records.map((r, i) => ({
           'Sr No': i + 1,
@@ -776,7 +820,7 @@ const AdminDashboard = () => {
         XLSX.writeFile(wb, `attendance_${exportDateRange.start}_to_${exportDateRange.end}.xlsx`);
 
       } else if (exportType === 'leave') {
-        const res = await axios.get(`${API_ENDPOINTS.LEAVES}?all=true`);
+        const res = await axios.get(`${API_ENDPOINTS.LEAVES}?all=true${managerIdParam}`);
         const leaves = (res.data || []).filter(l => {
           const d = l.start_date;
           return d >= exportDateRange.start && d <= exportDateRange.end;
@@ -800,7 +844,7 @@ const AdminDashboard = () => {
         XLSX.writeFile(wb, `leave_${exportDateRange.start}_to_${exportDateRange.end}.xlsx`);
 
       } else if (exportType === 'employees') {
-        const res = await axios.get(API_ENDPOINTS.EMPLOYEES);
+        const res = await axios.get(`${API_ENDPOINTS.EMPLOYEES}${selectedManagerId !== 'ALL' ? `?manager_id=${selectedManagerId}` : ''}`);
         const emps = Array.isArray(res.data) ? res.data : res.data?.data || [];
         const rows = emps.map((e, i) => ({
           'Sr No': i + 1,
@@ -926,6 +970,28 @@ const AdminDashboard = () => {
         onRefresh={() => { fetchDashboardData(); setLeaveBalancesLoaded(false); setEmployeeLeaveBalances([]); }}
         refreshing={loading}
         onExport={() => setShowExportModal(true)}
+        headerExtra={canFilterByTeam && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.15)', borderRadius: 16, padding: '4px 10px 4px 12px' }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap' }}>View Team:</span>
+            <select
+              value={selectedManagerId}
+              onChange={(e) => setSelectedManagerId(e.target.value)}
+              disabled={managerOptionsLoading}
+              title="Filter the whole dashboard by Team Leader/Manager"
+              style={{
+                background: 'transparent', color: '#fff', border: 'none', fontSize: 12, fontWeight: 700,
+                cursor: managerOptionsLoading ? 'not-allowed' : 'pointer', outline: 'none', maxWidth: 160,
+              }}
+            >
+              <option value="ALL" style={{ color: '#111827' }}>All</option>
+              {managerOptions.map(m => (
+                <option key={m.employee_id} value={m.employee_id} style={{ color: '#111827' }}>
+                  {m.first_name} {m.last_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       />
 
       {['admin', 'sub_admin', 'hr'].includes(user?.role) && subAdminClockMessage.text && (
@@ -947,7 +1013,7 @@ const AdminDashboard = () => {
 
       <DashboardQuickAccess
         employeeId={user?.employeeId}
-        onLeaveScope="company"
+        onLeaveScope={selectedManagerId !== 'ALL' ? 'team' : 'company'}
         attendance={subAdminAttendance}
         activeSession={subAdminSession}
         onClockIn={handleSubAdminClockIn}
@@ -955,9 +1021,10 @@ const AdminDashboard = () => {
         clockLoading={subAdminClockLoading}
         readOnly={!['admin', 'sub_admin', 'hr'].includes(user?.role)}
         unlimitedBreaks={(user?.department || '').trim().toLowerCase() === 'sales'}
+        managerId={selectedManagerId}
       />
 
-      <TicketSummaryWidget />
+      <TicketSummaryWidget managerId={selectedManagerId} />
 
       {/* Tab Navigation */}
       <div className="mb-4 admin-dash-tabnav">
@@ -1010,6 +1077,7 @@ const AdminDashboard = () => {
       {activeTab === 'regularization' && (
         <RegularizationPanel
           onRequestCountChange={setRegularizationCount}
+          managerId={selectedManagerId}
         />
       )}
 
@@ -1857,7 +1925,7 @@ const AdminDashboard = () => {
           </Row>
 
           {/* Team Break Dashboard */}
-          <TeamBreakDashboard />
+          <TeamBreakDashboard managerId={selectedManagerId} />
 
           {/* Pending Leave Requests */}
           <Card className="mb-4 border-0 shadow-sm">

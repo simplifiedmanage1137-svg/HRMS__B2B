@@ -15,7 +15,7 @@ const BUCKETS = [
   { key: 'critical',         label: 'Critical',     color: '#ef4444', bg: '#fef2f2' },
 ];
 
-export default function TicketSummaryWidget() {
+export default function TicketSummaryWidget({ managerId } = {}) {
   const navigate = useNavigate();
   const [counts, setCounts] = useState(null);
 
@@ -23,15 +23,19 @@ export default function TicketSummaryWidget() {
     let cancelled = false;
     const load = async () => {
       try {
-        const res = await axios.get(API_ENDPOINTS.TICKET_COUNT);
+        const url = managerId && managerId !== 'ALL'
+          ? `${API_ENDPOINTS.TICKET_COUNT}?manager_id=${managerId}`
+          : API_ENDPOINTS.TICKET_COUNT;
+        const res = await axios.get(url);
         if (!cancelled && res.data?.success) setCounts(res.data);
       } catch { /* silent */ }
     };
-    // Fetch once on mount — no 60s poll. Clicking any bucket navigates to the full ticket
-    // list, which fetches its own fresh data.
+    // Fetch once on mount — no 60s poll (re-fetches when the Manager Dashboard "View
+    // Team" filter changes). Clicking any bucket navigates to the full ticket list,
+    // which fetches its own fresh data.
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [managerId]);
 
   const goTo = (bucket) => {
     if (bucket.key === 'overdue' || bucket.key === 'critical') {

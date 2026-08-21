@@ -192,9 +192,9 @@ exports.listMyRequests = async (req, res) => {
 // ── GET /regularization/pending (generalized: role-scoped + filterable list) ──
 exports.listRequests = async (req, res) => {
     try {
-        const { status, department, employee_id, request_type, date_from, date_to, page = 1, limit = 50 } = req.query;
+        const { status, department, employee_id, request_type, date_from, date_to, page = 1, limit = 50, manager_id } = req.query;
 
-        const scopedIds = await buildScopedEmployeeIds(req.user); // null = unrestricted (HR/Admin)
+        const scopedIds = await buildScopedEmployeeIds(req.user, manager_id); // null = unrestricted (HR/Admin)
         let query = supabase.from('regularization_requests').select('*', { count: 'exact' });
         if (scopedIds) {
             query = query.or(`employee_id.in.(${scopedIds.join(',')}),pending_with_employee_id.eq.${req.user.employeeId}`);
@@ -434,7 +434,7 @@ exports.cancelRequest = async (req, res) => {
 // ── GET /regularization/stats (dashboard widgets) ───────────────────────────────
 exports.getStats = async (req, res) => {
     try {
-        const scopedIds = await buildScopedEmployeeIds(req.user); // null = unrestricted
+        const scopedIds = await buildScopedEmployeeIds(req.user, req.query.manager_id); // null = unrestricted
         const me = await getEmployeeById(req.user.employeeId);
         const hasReports = ELEVATED_ROLES.includes(req.user.role) || await employeeHasDirectReports(fullName(me));
 

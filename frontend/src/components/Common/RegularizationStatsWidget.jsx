@@ -17,18 +17,22 @@ function Tile({ label, value, color }) {
 // auto-detects scope (manager-style tiles for anyone with direct reports or an
 // elevated role, employee-style tiles otherwise), so this component just renders
 // whatever shape comes back.
-export default function RegularizationStatsWidget() {
+export default function RegularizationStatsWidget({ managerId } = {}) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    axios.get(API_ENDPOINTS.ATTENDANCE_REGULARIZATION_STATS)
+    setLoading(true);
+    const url = managerId && managerId !== 'ALL'
+      ? `${API_ENDPOINTS.ATTENDANCE_REGULARIZATION_STATS}?manager_id=${managerId}`
+      : API_ENDPOINTS.ATTENDANCE_REGULARIZATION_STATS;
+    axios.get(url)
       .then(res => { if (!cancelled) setStats(res.data); })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [managerId]);
 
   return (
     <div style={QA_CARD_STYLE}>

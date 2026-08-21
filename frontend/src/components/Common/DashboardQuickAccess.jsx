@@ -49,6 +49,7 @@ export default function DashboardQuickAccess({
   shiftTiming,
   footerExtra,
   unlimitedBreaks = false,
+  managerId,
 }) {
   return (
     <div className="dash-quick-access">
@@ -68,10 +69,10 @@ export default function DashboardQuickAccess({
           footerExtra={footerExtra}
           unlimitedBreaks={unlimitedBreaks}
         />
-        <RegularizationStatsWidget />
+        <RegularizationStatsWidget managerId={managerId} />
         <HolidayCountdownCard />
         <LeaveBalanceRingsCard employeeId={employeeId} />
-        <OnLeaveTodayCard scope={onLeaveScope} department={department} />
+        <OnLeaveTodayCard scope={onLeaveScope} department={department} managerId={managerId} />
       </div>
       <div className="dash-quick-access__right">
         <PostComposerCard />

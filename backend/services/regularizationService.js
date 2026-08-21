@@ -4,7 +4,7 @@
 // payroll-lock enforcement. Reuses existing shared helpers rather than reinventing them.
 
 const supabase = require('../config/supabase');
-const { normalizeName, getEmployeeById, getTeamEmployeeIdsByManagerName } = require('../utils/employeeLookup');
+const { normalizeName, getEmployeeById, getTeamEmployeeIdsByManagerName, getTeamEmployeeIdsByEmployeeId } = require('../utils/employeeLookup');
 const {
     parseShiftTiming, calculateOvertime, recalculateLate, getEffectiveShiftTiming,
     toUTCMs, istStringToUTCISO,
@@ -53,8 +53,16 @@ function canActOnRequest(user, request) {
 
 // ── 3. Scoped employee-id list for role-scoped LIST queries ────────────────────
 // Returns null for elevated roles (no restriction — see everything).
-async function buildScopedEmployeeIds(user) {
-    if (ELEVATED_ROLES.includes(user.role)) return null;
+// managerId: Manager Dashboard "View Team" override — only meaningful for elevated
+// roles (who'd otherwise get `null`/unrestricted). Resolves to that manager's own
+// employee_id + their direct reports, same shape as the self-scoped branch below.
+async function buildScopedEmployeeIds(user, managerId) {
+    if (ELEVATED_ROLES.includes(user.role)) {
+        if (!managerId || managerId === 'ALL') return null;
+        const teamIds = await getTeamEmployeeIdsByEmployeeId(managerId);
+        if (!teamIds) return null;
+        return [...new Set([managerId, ...teamIds])];
+    }
     const me = await getEmployeeById(user.employeeId);
     const myName = me ? `${me.first_name} ${me.last_name}` : '';
     const teamIds = await getTeamEmployeeIdsByManagerName(myName);

@@ -16,7 +16,7 @@ const dayOfYear = (d) => Math.floor((d - new Date(d.getFullYear(), 0, 0)) / (100
 
 const greeting = (hour) => (hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening');
 
-export default function WelcomeBanner({ name, roleLabel, onRefresh, onExport, refreshing = false }) {
+export default function WelcomeBanner({ name, roleLabel, onRefresh, onExport, refreshing = false, headerExtra = null }) {
   const now = new Date();
   const quote = QUOTES[dayOfYear(now) % QUOTES.length];
 
@@ -32,8 +32,9 @@ export default function WelcomeBanner({ name, roleLabel, onRefresh, onExport, re
       <div style={{ position: 'absolute', bottom: -50, right: 160, width: 100, height: 100, borderRadius: '50%', background: 'rgba(255,255,255,0.06)', pointerEvents: 'none' }} />
       <div style={{ position: 'absolute', top: 20, right: 220, width: 50, height: 50, borderRadius: '50%', background: 'rgba(255,255,255,0.10)', pointerEvents: 'none' }} />
 
-      {(onRefresh || onExport) && (
-        <div style={{ position: 'absolute', top: 18, right: 20, display: 'flex', gap: 8, zIndex: 1 }}>
+      {(onRefresh || onExport || headerExtra) && (
+        <div style={{ position: 'absolute', top: 18, right: 20, display: 'flex', alignItems: 'center', gap: 8, zIndex: 1 }}>
+          {headerExtra}
           {onRefresh && (
             <button onClick={onRefresh} disabled={refreshing} title="Refresh" style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.15)', color: '#fff', cursor: refreshing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <FaSyncAlt size={12} style={{ animation: refreshing ? 'welcomeBannerSpin 0.8s linear infinite' : 'none' }} />

@@ -34,6 +34,7 @@ export default function GenerateLinkModal({ show, onHide, onGenerated }) {
 
     useEffect(() => {
         if (!show) return;
+
         setForm(EMPTY_FORM);
         setError('');
         setGenerated(null);
@@ -41,20 +42,35 @@ export default function GenerateLinkModal({ show, onHide, onGenerated }) {
         setShowCcPopup(false);
         setCc([]);
         setSendEmailResult(null);
-        fetch(API_ENDPOINTS.TEAMS_MANAGERS_LIST, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-        })
-            .then(r => r.json())
-            .then(d => { if (d.success) setManagers(d.managers || []); })
-            .catch(() => {});
+
+        const authHeaders = { Authorization: `Bearer ${localStorage.getItem('token')}` };
+
+        Promise.all([
+            fetch(API_ENDPOINTS.TEAMS_MANAGERS_LIST, { headers: authHeaders }).then(r => r.json()),
+            fetch(API_ENDPOINTS.TEAMS_SUB_ADMINS_LIST, { headers: authHeaders }).then(r => r.json()),
+            fetch(API_ENDPOINTS.TEAMS_HR_LIST, { headers: authHeaders }).then(r => r.json()),
+        ])
+            .then(([managerData, subAdminData, hrData]) => {
+                const managers  = managerData.success  ? managerData.managers  || [] : [];
+                const subAdmins = subAdminData.success ? subAdminData.managers || [] : [];
+                const hr        = hrData.success       ? hrData.managers      || [] : [];
+                setManagers([...managers, ...subAdmins, ...hr]);
+            })
+            .catch(err => {
+                console.error('Failed to load managers/sub-admins/HR:', err);
+            });
     }, [show]);
 
     const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
+    // API responses key each manager by `employee_id` (there is no numeric `id` field —
+    // see backend/routes/teamRoutes.js). Using `m.id` here would always be undefined,
+    // silently breaking this select (the option's value falls back to its visible text,
+    // which never matches anything, so reporting_manager was always saved as '').
     const handleManagerChange = (e) => {
-        const id = e.target.value;
-        const mgr = managers.find(m => m.id === id);
-        setForm(f => ({ ...f, reporting_manager_id: id, reporting_manager: mgr ? `${mgr.first_name} ${mgr.last_name}`.trim() : '' }));
+        const employeeId = e.target.value;
+        const mgr = managers.find(m => m.employee_id === employeeId);
+        setForm(f => ({ ...f, reporting_manager_id: employeeId, reporting_manager: mgr ? `${mgr.first_name} ${mgr.last_name}`.trim() : '' }));
     };
 
     // Shared by the "Generate Link" button and the "Send Email" flow (which must generate
@@ -230,7 +246,7 @@ export default function GenerateLinkModal({ show, onHide, onGenerated }) {
                                 <Form.Select size="sm" value={form.reporting_manager_id} onChange={handleManagerChange} style={{ borderRadius: 8 }}>
                                     <option value="">Select manager (optional)</option>
                                     {managers.map(m => (
-                                        <option key={m.id} value={m.id}>{m.first_name} {m.last_name} — {m.designation || m.role}</option>
+                                        <option key={m.employee_id} value={m.employee_id}>{m.first_name} {m.last_name} — {m.designation || m.role}</option>
                                     ))}
                                 </Form.Select>
                             </Form.Group>

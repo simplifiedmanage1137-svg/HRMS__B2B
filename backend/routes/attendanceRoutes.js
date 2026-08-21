@@ -548,15 +548,28 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
     // Returns per-break-type usage stats + full employee lists for admin/manager dashboards.
     router.get('/break/team-stats', authenticateToken, async (req, res) => {
         const { employeeId, role } = req.user;
+        const { manager_id } = req.query;
         try {
             let teamEmployees = [];
 
-            // admin and sub_admin (Manager) see ALL employees; manager (TL) sees their team only
+            // admin and sub_admin (Manager) see ALL employees by default; manager (TL) always
+            // sees their team only. Manager Dashboard "View Team" filter: an elevated caller
+            // can pass manager_id to narrow to one specific TL/Manager's team instead.
             if (role === 'admin' || role === 'sub_admin' || role === 'hr') {
                 const { data: allEmps } = await supabase.from('employees')
-                    .select('employee_id, first_name, last_name, designation, department')
+                    .select('employee_id, first_name, last_name, designation, department, reporting_manager')
                     .eq('is_active', true);
-                teamEmployees = allEmps || [];
+                if (manager_id && manager_id !== 'ALL') {
+                    const target = (allEmps || []).find(e => e.employee_id === manager_id);
+                    const targetName = target ? `${target.first_name} ${target.last_name}`.trim().toLowerCase() : null;
+                    teamEmployees = targetName
+                        ? (allEmps || []).filter(e => (e.reporting_manager || '').trim().toLowerCase() === targetName)
+                        : [];
+                    if (teamEmployees.length === 0)
+                        return res.json({ success: true, team_size: 0, today_breaks: [], break_stats: {} });
+                } else {
+                    teamEmployees = allEmps || [];
+                }
             } else {
                 const { data: me } = await supabase.from('employees')
                     .select('first_name, last_name')

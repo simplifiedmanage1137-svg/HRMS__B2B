@@ -1,5 +1,6 @@
 // backend/controllers/performanceController.js
 const supabase = require('../config/supabase');
+const { getTeamEmployeeIdsByEmployeeId } = require('../utils/employeeLookup');
 
 // Internal role → the role it can review
 const REVIEWABLE_ROLE = {
@@ -385,12 +386,26 @@ const getAnalytics = async (req, res) => {
     const month = now.getMonth() + 1;
     const year  = now.getFullYear();
 
+    // Manager Dashboard "View Team" filter — null = no scope (company-wide).
+    let teamIds = null;
+    if (req.query.manager_id) {
+      teamIds = await getTeamEmployeeIdsByEmployeeId(req.query.manager_id);
+      if (teamIds && teamIds.length === 0) {
+        return res.json({
+          success: true,
+          analytics: { total_employees: 0, reviewed: 0, pending: 0, avg_rating: null, pip_count: 0, termination_count: 0, top_rated_count: 0, month_name: now.toLocaleString('default', { month: 'long' }), year },
+        });
+      }
+    }
+
     // All reviews this month
-    const { data: monthReviews } = await supabase
+    let reviewsQuery = supabase
       .from('performance_reviews')
       .select('employee_id, rating, employee_role')
       .eq('review_month', month)
       .eq('review_year',  year);
+    if (teamIds) reviewsQuery = reviewsQuery.in('employee_id', teamIds);
+    const { data: monthReviews } = await reviewsQuery;
 
     const reviews = monthReviews || [];
     const totalReviewed = reviews.length;
@@ -409,10 +424,12 @@ const getAnalytics = async (req, res) => {
       ? ['sub_admin', 'manager', 'employee']
       : ['manager', 'employee'];
 
-    const { data: allEmployees } = await supabase
+    let employeesQuery = supabase
       .from('employees')
       .select('employee_id, role')
       .in('role', targetRoles);
+    if (teamIds) employeesQuery = employeesQuery.in('employee_id', teamIds);
+    const { data: allEmployees } = await employeesQuery;
 
     const totalEmployees = (allEmployees || []).length;
     const reviewedIds    = new Set(reviews.map(r => r.employee_id));
