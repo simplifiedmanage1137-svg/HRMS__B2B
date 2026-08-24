@@ -4,7 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const attendanceController = require('../controllers/attendanceController');
 const regularizationController = require('../controllers/regularizationController');
-const { isAdminOrDesktopSupport, isAdminOrFinance } = require('../middleware/auth');
+const { isAdminOrFinanceOrDesktopSupport } = require('../middleware/auth');
 
 // Same 4MB cap + extension whitelist as the onboarding attachment upload.
 const regularizationUpload = multer({
@@ -43,8 +43,10 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
     router.post('/regularization/:employee_id/request', authenticateToken, regularizationUpload.single('attachment'), regularizationController.createRequest);
     router.get('/regularization/mine/:employee_id', authenticateToken, regularizationController.listMyRequests);
 
-    // Admin-only attendance report (also allowed for desktop_support and finance)
-    router.get('/report', authenticateToken, isAdminOrFinance, attendanceController.getAttendanceReport);
+    // Admin-only attendance report (also allowed for desktop_support and finance) — the
+    // comment always said desktop_support was meant to have access, but isAdminOrFinance
+    // never actually included that role, so IT got 403'd loading the Admin Dashboard.
+    router.get('/report', authenticateToken, isAdminOrFinanceOrDesktopSupport, attendanceController.getAttendanceReport);
 
     // ✅ NEW: Team attendance report for managers
     router.get('/team-report', authenticateToken, attendanceController.getTeamAttendanceReport);

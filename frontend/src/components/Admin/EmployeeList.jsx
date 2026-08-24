@@ -5,7 +5,7 @@ import {
   FaEdit, FaEye, FaPlus, FaDownload, FaFilePdf, FaFileImage, FaFileAlt,
   FaSearch, FaTimes, FaSyncAlt, FaArrowLeft, FaCheckCircle, FaUserSlash,
   FaUser, FaEnvelope, FaPhone, FaBuilding, FaBriefcase, FaCalendarAlt, FaUserTie,
-  FaClock, FaCreditCard, FaUsers, FaLink,
+  FaClock, FaCreditCard, FaUsers, FaLink, FaKey,
 } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';
@@ -124,6 +124,35 @@ const EmpQuickView = ({ emp, onClose, navigate, user, onToggleStatus, togglingSt
   const [leaveBalance, setLeaveBalance] = useState(null);
   const [dataLoading, setDataLoading] = useState(false);
 
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
+
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault();
+    setPasswordError('');
+    setPasswordSuccess('');
+    if (!newPassword) return setPasswordError('New password is required');
+    if (newPassword.length < 6) return setPasswordError('Password must be at least 6 characters');
+    if (newPassword !== confirmPassword) return setPasswordError('Passwords do not match');
+
+    setPasswordSaving(true);
+    try {
+      await axios.post(API_ENDPOINTS.EMPLOYEE_RESET_PASSWORD(emp.id), { newPassword });
+      setPasswordSuccess('Password updated successfully!');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => { setShowPasswordModal(false); setPasswordSuccess(''); }, 1500);
+    } catch (err) {
+      setPasswordError(err.response?.data?.message || 'Failed to update password');
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
+
   const name = getFullName(emp);
   const ini = getInitials(emp);
   const pct = getProfilePct(emp);
@@ -134,7 +163,15 @@ const EmpQuickView = ({ emp, onClose, navigate, user, onToggleStatus, togglingSt
     setTab('overview');
     setAttSummary(null);
     setLeaveBalance(null);
+    setShowPasswordModal(false);
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordError('');
+    setPasswordSuccess('');
     if (!emp.employee_id) return;
+    // IT (desktop_support) gets a compact, action-only view with no attendance/leave
+    // tabs — skip fetching data it'll never display.
+    if (user?.role === 'desktop_support') return;
     setDataLoading(true);
     const today = new Date();
     const yr = today.getFullYear(), mo = today.getMonth();
@@ -174,6 +211,138 @@ const EmpQuickView = ({ emp, onClose, navigate, user, onToggleStatus, togglingSt
     { id: 'payroll', label: 'Payroll' },
     { id: 'documents', label: 'Documents' },
   ];
+
+  const passwordModal = (
+    <Modal show={showPasswordModal} onHide={() => setShowPasswordModal(false)} centered size="sm">
+      <Modal.Header closeButton className="bg-warning py-2">
+        <Modal.Title as="h6" className="mb-0 d-flex align-items-center">
+          <FaKey className="me-2" size={14} />
+          Update Password — {name}
+        </Modal.Title>
+      </Modal.Header>
+      <Form onSubmit={handleUpdatePassword}>
+        <Modal.Body className="p-3">
+          {passwordError && <div style={{ fontSize: 12, color: '#991b1b', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>{passwordError}</div>}
+          {passwordSuccess && <div style={{ fontSize: 12, color: '#065f46', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>{passwordSuccess}</div>}
+
+          <Form.Group className="mb-3">
+            <Form.Label className="fw-semibold small">New Password <span className="text-danger">*</span></Form.Label>
+            <Form.Control
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Min 6 characters"
+              size="sm"
+              required
+            />
+          </Form.Group>
+
+          <Form.Group className="mb-1">
+            <Form.Label className="fw-semibold small">Confirm Password <span className="text-danger">*</span></Form.Label>
+            <Form.Control
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter password"
+              size="sm"
+              required
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer className="py-2">
+          <Button variant="secondary" size="sm" onClick={() => setShowPasswordModal(false)} disabled={passwordSaving}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="warning" size="sm" disabled={passwordSaving}>
+            {passwordSaving ? (
+              <><Spinner size="sm" animation="border" className="me-1" /> Saving...</>
+            ) : (
+              <><FaKey className="me-1" size={11} /> Update Password</>
+            )}
+          </Button>
+        </Modal.Footer>
+      </Form>
+    </Modal>
+  );
+
+  // ── IT (desktop_support): compact, action-only panel — no tabs, no attendance/
+  // leave/payroll data, just enough identity info plus the two actions IT actually
+  // needs (Update Password, Activate/Deactivate). Professional and space-efficient
+  // instead of reusing the full admin/HR tabbed view.
+  if (user?.role === 'desktop_support') {
+    return (
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#fff' }}>
+        <div style={{ padding: '18px 16px', borderBottom: '1px solid #e5e7eb', position: 'relative', flexShrink: 0 }}>
+          <button onClick={onClose} style={{
+            position: 'absolute', top: 12, right: 12, background: '#f1f5f9',
+            border: 'none', color: '#6b7280', borderRadius: 6, width: 26, height: 26,
+            cursor: 'pointer', fontSize: 16, lineHeight: '24px', textAlign: 'center', padding: 0,
+          }}>×</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 46, height: 46, borderRadius: '50%', background: avatarColor,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 16, fontWeight: 800, color: '#fff', flexShrink: 0,
+            }}>
+              {emp.profile_image
+                ? <img src={emp.profile_image} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                : ini}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                <span style={{ background: '#f1f5f9', color: '#475569', borderRadius: 20, padding: '1px 8px', fontSize: 9, fontWeight: 700 }}>{emp.employee_id}</span>
+                <span style={{ background: isActive ? '#dcfce7' : '#fee2e2', color: isActive ? '#16a34a' : '#dc2626', borderRadius: 20, padding: '1px 8px', fontSize: 9, fontWeight: 700 }}>
+                  {isActive ? '● Active' : '● Inactive'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
+          <div style={{ background: '#f8fafc', borderRadius: 10, padding: '4px 12px' }}>
+            <InfoRow icon={FaEnvelope} label="Email" value={emp.email} />
+            <InfoRow icon={FaPhone} label="Phone" value={emp.phone} />
+            <InfoRow icon={FaBuilding} label="Department" value={emp.department} />
+            <InfoRow icon={FaUserTie} label="Designation" value={emp.designation} />
+            <InfoRow icon={FaUser} label="Reports To" value={emp.reporting_manager} />
+            <InfoRow icon={FaCalendarAlt} label="Joining Date" value={fmtDate(emp.joining_date)} />
+          </div>
+        </div>
+
+        <div style={{ padding: 14, borderTop: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
+          <button
+            onClick={() => {
+              setNewPassword(''); setConfirmPassword(''); setPasswordError(''); setPasswordSuccess('');
+              setShowPasswordModal(true);
+            }}
+            style={{ width: '100%', background: '#d97706', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+          >
+            <FaKey size={12} /> Update Password
+          </button>
+          <button
+            onClick={() => onToggleStatus(emp)}
+            disabled={togglingStatus === emp.id}
+            style={{
+              width: '100%', border: `1px solid ${isActive ? '#fde68a' : '#bbf7d0'}`, borderRadius: 8,
+              background: isActive ? '#fffbeb' : '#f0fdf4', color: isActive ? '#d97706' : '#16a34a',
+              padding: '10px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}
+          >
+            {togglingStatus === emp.id
+              ? <Spinner size="sm" animation="border" />
+              : isActive
+                ? <><FaUserSlash size={12} /> Deactivate Account</>
+                : <><FaCheckCircle size={12} /> Activate Account</>}
+          </button>
+        </div>
+
+        {passwordModal}
+      </div>
+    );
+  }
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#f8fafc' }}>
@@ -273,13 +442,27 @@ const EmpQuickView = ({ emp, onClose, navigate, user, onToggleStatus, togglingSt
             <div style={{ background: '#fff', borderRadius: 12, padding: '12px 14px', marginBottom: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', marginBottom: 10 }}>Quick Actions</div>
               <div style={{ display: 'flex', gap: 5 }}>
-                <QuickActionBtn icon={FaEye} label="View Full Profile" color="#6366f1" onClick={() => navigate(`/admin/employees/${emp.employee_id}`)} />
-                {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'desktop_support' || user?.role === 'hr') && (
+                {user?.role !== 'desktop_support' && (
+                  <QuickActionBtn icon={FaEye} label="View Full Profile" color="#6366f1" onClick={() => navigate(`/admin/employees/${emp.employee_id}`)} />
+                )}
+                {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'hr') && (
                   <QuickActionBtn icon={FaEdit} label="Edit Details" color="#0ea5e9" onClick={() => navigate(`/admin/edit-employee/${emp.id}`)} />
                 )}
-                <QuickActionBtn icon={FaClock} label="Attendance" color="#22c55e" onClick={() => navigate(`/admin/employees/${emp.employee_id}`)} />
-                <QuickActionBtn icon={FaCreditCard} label="Salary / Payroll" color="#f97316" onClick={() => navigate('/admin/payroll')} />
-                <QuickActionBtn icon={FaFileAlt} label="Documents" color="#8b5cf6" onClick={() => onViewDocs(emp)} />
+                {user?.role !== 'desktop_support' && (
+                  <QuickActionBtn icon={FaClock} label="Attendance" color="#22c55e" onClick={() => navigate(`/admin/employees/${emp.employee_id}`)} />
+                )}
+                {user?.role !== 'desktop_support' && (
+                  <QuickActionBtn icon={FaCreditCard} label="Salary / Payroll" color="#f97316" onClick={() => navigate('/admin/payroll')} />
+                )}
+                {user?.role !== 'desktop_support' && (
+                  <QuickActionBtn icon={FaFileAlt} label="Documents" color="#8b5cf6" onClick={() => onViewDocs(emp)} />
+                )}
+                {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'desktop_support' || user?.role === 'hr') && (
+                  <QuickActionBtn icon={FaKey} label="Update Password" color="#d97706" onClick={() => {
+                    setNewPassword(''); setConfirmPassword(''); setPasswordError(''); setPasswordSuccess('');
+                    setShowPasswordModal(true);
+                  }} />
+                )}
               </div>
             </div>
 
@@ -300,7 +483,7 @@ const EmpQuickView = ({ emp, onClose, navigate, user, onToggleStatus, togglingSt
             </div>
 
             {/* Activate / Deactivate */}
-            {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'manager' || user?.role === 'hr') && (
+            {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'manager' || user?.role === 'hr' || user?.role === 'desktop_support') && (
               <button
                 onClick={() => onToggleStatus(emp)}
                 disabled={togglingStatus === emp.id}
@@ -403,6 +586,8 @@ const EmpQuickView = ({ emp, onClose, navigate, user, onToggleStatus, togglingSt
         )}
 
       </div>
+
+      {passwordModal}
     </div>
   );
 };

@@ -54,6 +54,17 @@ const isAdminOrFinance = (req, res, next) => {
     next();
 };
 
+// Attendance report is shared by the Admin/Manager/HR/Finance/IT dashboard widget
+// (Admin/Dashboard.jsx calls GET /api/attendance/report on mount for every role that
+// can land on that page) — isAdminOrFinance alone excluded desktop_support (IT),
+// even though the frontend already routes IT to that same dashboard.
+const isAdminOrFinanceOrDesktopSupport = (req, res, next) => {
+    if (!['admin', 'sub_admin', 'finance', 'desktop_support', 'hr'].includes(req.user?.role)) {
+        return res.status(403).json({ success: false, message: 'Admin, Finance, or IT access required' });
+    }
+    next();
+};
+
 const isOwnDataOrAdmin = (req, res, next) => {
     const userRole = req.user?.role;
     const userEmployeeId = req.user?.employeeId;
@@ -72,4 +83,4 @@ const isOwnDataOrAdmin = (req, res, next) => {
     return res.status(403).json({ success: false, message: 'Access denied: You can only access your own data' });
 };
 
-module.exports = { verifyToken, isAdmin, isAdminOrManager, isAdminOrDesktopSupport, isAdminOrFinance, isOwnDataOrAdmin };
+module.exports = { verifyToken, isAdmin, isAdminOrManager, isAdminOrDesktopSupport, isAdminOrFinance, isAdminOrFinanceOrDesktopSupport, isOwnDataOrAdmin };

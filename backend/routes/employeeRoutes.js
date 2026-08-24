@@ -786,7 +786,10 @@ router.post('/:id/reset-profile', verifyToken, isAdmin, async (req, res) => {
 });
 
 // Admin toggles whether an employee must fill the profile completion form
-router.post('/:id/toggle-profile-form', verifyToken, isAdmin, async (req, res) => {
+// EmployeeList.jsx's bulk "Form" button (require/skip profile completion) is shown to
+// desktop_support (IT) too — see the role check around the header action buttons — so
+// this must accept that role, not just isAdmin.
+router.post('/:id/toggle-profile-form', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
     try {
         const { id } = req.params;
         // Read current value then flip it
@@ -820,7 +823,7 @@ router.post('/:id/toggle-profile-form', verifyToken, isAdmin, async (req, res) =
 router.patch('/:id/toggle-status', verifyToken, async (req, res) => {
     try {
         const { role, employeeId: callerEmpId } = req.user;
-        const allowed = ['admin', 'sub_admin', 'manager', 'hr'];
+        const allowed = ['admin', 'sub_admin', 'manager', 'hr', 'desktop_support'];
         if (!allowed.includes(role)) {
             return res.status(403).json({ success: false, message: 'Access denied' });
         }
@@ -865,8 +868,11 @@ router.patch('/:id/toggle-status', verifyToken, async (req, res) => {
     }
 });
 
-// Update employee (Admin only)
-router.put('/:id', verifyToken, isAdmin, async (req, res) => {
+// Update employee — EditEmployee.jsx's "Edit Details" action is shown to desktop_support
+// (IT) too, so this must accept that role. Role-change itself stays admin/sub_admin/hr
+// only via the inline check just below (`if ('role' in updates && !isAdmin...) delete
+// updates.role`), which already anticipated a broader caller set than isAdmin alone.
+router.put('/:id', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
     try {
         const { id } = req.params;
         const updates = req.body;
