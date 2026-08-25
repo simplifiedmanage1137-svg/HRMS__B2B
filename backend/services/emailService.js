@@ -50,7 +50,7 @@ const getFront = () => envStr('FRONTEND_URL', DEFAULT_FRONT).replace(/\/$/, '');
 // cc/bcc are optional string[] — omitted entirely from the Resend payload when empty,
 // rather than passed as `[]`, since Resend treats an empty array differently from a
 // missing field in some SDK versions.
-const sendEmail = async ({ to, subject, html, text, cc, bcc }) => {
+const sendEmail = async ({ to, subject, html, text, cc, bcc, attachments }) => {
     const from       = getFrom();
     const frontendUrl = getFront();
     const resend     = process.env.RESEND_API_KEY
@@ -79,6 +79,7 @@ const sendEmail = async ({ to, subject, html, text, cc, bcc }) => {
         const payload = { from, to, subject, html, text };
         if (cc?.length)  payload.cc  = cc;
         if (bcc?.length) payload.bcc = bcc;
+        if (attachments?.length) payload.attachments = attachments;
         const result = await resend.emails.send(payload);
         console.log('✅ Resend response:', JSON.stringify(result));
         if (result.error) {
@@ -188,12 +189,17 @@ const sendPasswordResetOtpEmail = async (employee, otp, expiryMinutes) => {
 // The temp password is plain text here ONLY because it's genuinely one-time/temporary —
 // the employee is expected to change it on first login, same as it's already shown
 // once on the submission-success screen; this is not the employee's real password.
-const sendEmployeeCredentialsEmail = async (employee, credentials) => {
+// `offerLetter` is optional — { pdfBase64, filename } — passed only when the onboarding
+// flow (backend/routes/onboardingRoutes.js) successfully generated a complete offer letter
+// for this employee. Every existing call site omits it, so behavior there is unchanged.
+const sendEmployeeCredentialsEmail = async (employee, credentials, offerLetter) => {
     const { to, name } = resolveRecipient(employee);
     const { employeeId, tempPassword } = credentials || {};
     const frontendUrl = getFront();
+    const hasOfferLetter = !!offerLetter?.pdfBase64;
+    const subject = hasOfferLetter ? 'Welcome to HRMS – Your Login Details & Offer Letter' : 'Your HRMS Login Details';
 
-    const html = shell('Your HRMS Login Details', `
+    const html = shell(subject, `
         ${h2(`🎉 Welcome to the team, ${name}!`)}
         ${para('Your employee account has been created. Use the credentials below to log in to HRMS.')}
         ${tbl(
@@ -202,15 +208,40 @@ const sendEmployeeCredentialsEmail = async (employee, credentials) => {
             row('Temporary Password', `<span style="font-family:monospace;font-weight:700;">${tempPassword}</span>`)
         )}
         ${para('For security, please log in and change this temporary password as soon as possible.')}
+        ${hasOfferLetter ? para('Your offer/appointment letter is attached to this email — please review it and reach out to HR with any questions.') : ''}
         ${btn('Log In to HRMS', `${frontendUrl}/login`)}
         ${para('If you did not expect this email, please contact HR immediately.')}
     `);
 
     return sendEmail({
         to,
-        subject: 'Your HRMS Login Details',
+        subject,
         html,
         text: `Hi ${name}, your HRMS account is ready.\n\nEmployee ID: ${employeeId}\nEmail: ${to}\nTemporary Password: ${tempPassword}\n\nPlease log in and change your password as soon as possible: ${frontendUrl}/login`,
+        attachments: hasOfferLetter ? [{ filename: offerLetter.filename, content: offerLetter.pdfBase64 }] : undefined,
+    });
+};
+
+// ─── 13. GENERATED OFFER LETTER (Flow A — HR-triggered from /admin/employees) ───────
+const sendOfferLetterEmail = async (employee, { pdfBase64, filename, additionalEmail, designation, companyName, hrEmail }) => {
+    const { to, name } = resolveRecipient(employee);
+    if (!to) return { success: false, reason: 'no_recipient' };
+
+    const recipients = [...new Set([to, additionalEmail].filter(Boolean).map(e => e.toLowerCase()))];
+
+    const html = shell('Your Offer Letter', `
+        ${h2(`🎉 Congratulations, ${name}!`)}
+        ${para(`We're delighted to share your offer letter for the position of <strong>${escapeHtml(designation || '')}</strong> at ${escapeHtml(companyName || '')}. Please find the appointment letter attached as a PDF.`)}
+        ${para('Kindly review the terms and conditions carefully. Reach out to HR if you have any questions.')}
+        ${hrEmail ? para(`HR Contact: ${escapeHtml(hrEmail)}`) : ''}
+    `);
+
+    return sendEmail({
+        to: recipients,
+        subject: `Offer Letter – ${name} – ${companyName || ''}`,
+        html,
+        text: `Hi ${name}, congratulations! Please find your offer letter for ${designation} attached.`,
+        attachments: [{ filename, content: pdfBase64 }],
     });
 };
 
@@ -685,4 +716,5 @@ module.exports = {
     sendTicketStatusEmail,
     sendManualEmail,
     sendOfferLinkEmail,
+    sendOfferLetterEmail,
 };

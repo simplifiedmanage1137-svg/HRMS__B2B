@@ -14,6 +14,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
 import GenerateLinkModal from './GenerateLinkModal';
 import OfferLinksManager from './OfferLinksManager';
+import SendOfferLetterModal from './SendOfferLetterModal';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const getInitials = (emp) =>
@@ -125,6 +126,7 @@ const EmpQuickView = ({ emp, onClose, navigate, user, onToggleStatus, togglingSt
   const [dataLoading, setDataLoading] = useState(false);
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showOfferLetterModal, setShowOfferLetterModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
@@ -448,6 +450,9 @@ const EmpQuickView = ({ emp, onClose, navigate, user, onToggleStatus, togglingSt
                 {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'hr') && (
                   <QuickActionBtn icon={FaEdit} label="Edit Details" color="#0ea5e9" onClick={() => navigate(`/admin/edit-employee/${emp.id}`)} />
                 )}
+                {(user?.role === 'admin' || user?.role === 'sub_admin' || user?.role === 'hr') && (
+                  <QuickActionBtn icon={FaFilePdf} label="Send Offer Letter" color="#dc2626" onClick={() => setShowOfferLetterModal(true)} />
+                )}
                 {user?.role !== 'desktop_support' && (
                   <QuickActionBtn icon={FaClock} label="Attendance" color="#22c55e" onClick={() => navigate(`/admin/employees/${emp.employee_id}`)} />
                 )}
@@ -588,6 +593,11 @@ const EmpQuickView = ({ emp, onClose, navigate, user, onToggleStatus, togglingSt
       </div>
 
       {passwordModal}
+      <SendOfferLetterModal
+        show={showOfferLetterModal}
+        employee={emp}
+        onHide={() => setShowOfferLetterModal(false)}
+      />
     </div>
   );
 };

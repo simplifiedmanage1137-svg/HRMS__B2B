@@ -2519,7 +2519,12 @@ const Attendance = () => {
                           const hasPendingRegularization = myRegularizations.some(
                             r => r.status === 'pending' && String(r.attendance_id) === String(record.id)
                           );
-                          const canRegularize = !record.isWeeklyOff && !isToday && !record.is_regularized;
+                          // A fully-present day (status "present" with 9+ worked hours) has
+                          // nothing to regularize — hide the button rather than offer an action
+                          // that wouldn't change anything.
+                          const workedHours = parseFloat(record.total_hours) || 0;
+                          const isFullyPresent = record.status === 'present' && workedHours >= 9;
+                          const canRegularize = !record.isWeeklyOff && !isToday && !record.is_regularized && !isFullyPresent;
                           const isBirthday = isBirthdayDate(record.date);
 
                           return (

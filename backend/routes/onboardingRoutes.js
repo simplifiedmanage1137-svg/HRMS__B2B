@@ -10,6 +10,7 @@ const { verifyToken, isAdmin, isAdminOrDesktopSupport } = require('../middleware
 const { uploadFile } = require('../lib/supabaseStorage');
 const { createOnboardingTickets } = require('../utils/onboardingTickets');
 const emailService = require('../services/emailService');
+const { generateAndStoreOfferLetter } = require('../services/offerLetterService');
 
 const BUCKET = 'hrms-documents';
 
@@ -74,7 +75,34 @@ const createEmployeeAccountFromSubmission = async (offer, sub) => {
 
     if (empErr) throw empErr;
 
-    return { employee: emp, employeeId: newEmployeeId, tempPassword };
+    // Best-effort offer-letter generation — the onboarding form + offer link already collect
+    // everything the letter needs (name/email/address/joining date/designation/department/
+    // salary), so this should normally succeed. If it doesn't (missing data, PDF/storage
+    // error), log and continue: the credentials email below still sends without an
+    // attachment, and HR can complete/send the letter afterward from /admin/employees.
+    let offerLetterAttachment = null;
+    try {
+        const { pdfBuffer } = await generateAndStoreOfferLetter({
+            employee: emp,
+            formInput: {
+                designation: offer.designation,
+                department: offer.department,
+                employmentType: offer.employment_type,
+                dateOfJoining: emp.joining_date,
+                reportingManager: offer.reporting_manager,
+                annualCTC: offer.salary != null ? Math.round(Number(offer.salary) * 12) : null,
+                monthlyGross: offer.salary != null ? Number(offer.salary) : null,
+            },
+            generatedBy: null,
+            generatedByName: 'System (Onboarding Auto-Approval)',
+        });
+        const safeName = `${emp.first_name || 'employee'}-${emp.last_name || ''}`.replace(/[^a-z0-9]+/gi, '-');
+        offerLetterAttachment = { pdfBase64: pdfBuffer.toString('base64'), filename: `${safeName}-Offer-Letter.pdf` };
+    } catch (offerErr) {
+        console.warn('[onboarding] offer letter not attached to credentials email (will need to be sent separately from Admin > Employees):', offerErr.message);
+    }
+
+    return { employee: emp, employeeId: newEmployeeId, tempPassword, offerLetterAttachment };
 };
 
 // 4 MB per file — keeps each multipart request well under Vercel's 4.5 MB payload cap.
@@ -299,9 +327,9 @@ router.patch('/links/:id/approve', verifyToken, isAdmin, async (req, res) => {
             .from('employee_onboarding_submissions').select('*').eq('offer_id', req.params.id).maybeSingle();
         if (!sub) return res.status(404).json({ success: false, message: 'No submission found for this offer' });
 
-        const { employee: emp, employeeId: newEmployeeId, tempPassword } = await createEmployeeAccountFromSubmission(offer, sub);
+        const { employee: emp, employeeId: newEmployeeId, tempPassword, offerLetterAttachment } = await createEmployeeAccountFromSubmission(offer, sub);
 
-        emailService.sendEmployeeCredentialsEmail(emp, { employeeId: newEmployeeId, tempPassword })
+        emailService.sendEmployeeCredentialsEmail(emp, { employeeId: newEmployeeId, tempPassword }, offerLetterAttachment)
             .catch(e => console.error('❌ Failed to send employee-credentials email:', e.message));
 
         await createOnboardingTickets(supabase, { employee: emp, actor: req.user });
@@ -589,14 +617,15 @@ router.post('/:token/submit', async (req, res) => {
             // Step 1 — create the employee account. This is the part that actually matters
             // for "auto-approve" — everything after this is bookkeeping, so a failure here
             // (and only here) should fall back to the old manual-review state.
-            const { employee: emp, employeeId: newEmployeeId, tempPassword } =
+            const { employee: emp, employeeId: newEmployeeId, tempPassword, offerLetterAttachment } =
                 await createEmployeeAccountFromSubmission(offer, submissionRow);
             credentials = { employee_id: newEmployeeId, temp_password: tempPassword, email: emp.email };
 
-            // Fire-and-forget: email the new employee their own credentials — never blocks
-            // the response, and a failure here must not undo the account/tickets created
-            // around it (the candidate also sees these credentials on-screen regardless).
-            emailService.sendEmployeeCredentialsEmail(emp, { employeeId: newEmployeeId, tempPassword })
+            // Fire-and-forget: email the new employee their own credentials (+ their offer
+            // letter, when generation succeeded above) — never blocks the response, and a
+            // failure here must not undo the account/tickets created around it (the
+            // candidate also sees these credentials on-screen regardless).
+            emailService.sendEmployeeCredentialsEmail(emp, { employeeId: newEmployeeId, tempPassword }, offerLetterAttachment)
                 .catch(e => console.error('❌ Failed to send employee-credentials email:', e.message));
 
             // Step 2 — raise onboarding tickets. Never throws (see onboardingTickets.js),

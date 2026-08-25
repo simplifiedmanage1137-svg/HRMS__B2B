@@ -745,21 +745,30 @@ exports.clockIn = async (req, res) => {
             attendanceData.late_display = lateDisplay;
         }
 
-        // Insert attendance record
+        // A placeholder row for today may already exist (e.g. inserted by the 23:59 IST
+        // absent-marking cron — backend/cron/absentEmployeeCheck.js — before this employee
+        // clocked in) with clock_in left NULL. `attendance` has no unique constraint on
+        // (employee_id, attendance_date), so inserting a fresh row here — as this used to do
+        // unconditionally — creates a SECOND row: the real clock-in data lands there while the
+        // original NULL placeholder row is left behind looking like a broken/missing punch to
+        // anyone querying the table directly. Update the placeholder in place instead.
+        const placeholderRow = (existingAttendance && existingAttendance.length > 0 && !existingAttendance[0].clock_in)
+            ? existingAttendance[0]
+            : null;
+
+        const writeAttendance = (data) => placeholderRow
+            ? supabase.from('attendance').update(data).eq('id', placeholderRow.id).select()
+            : supabase.from('attendance').insert([data]).select();
+
+        // Insert (or update the placeholder) attendance record
         let insertedAttendance, insertError;
-        ({ data: insertedAttendance, error: insertError } = await supabase
-            .from('attendance')
-            .insert([attendanceData])
-            .select());
+        ({ data: insertedAttendance, error: insertError } = await writeAttendance(attendanceData));
 
         // If late_display column doesn't exist, retry without it
         if (insertError && insertError.message && insertError.message.includes('late_display')) {
             console.log('⚠️ late_display column missing, retrying without it...');
             const { late_display: _removed, ...dataWithoutLateDisplay } = attendanceData;
-            ({ data: insertedAttendance, error: insertError } = await supabase
-                .from('attendance')
-                .insert([dataWithoutLateDisplay])
-                .select());
+            ({ data: insertedAttendance, error: insertError } = await writeAttendance(dataWithoutLateDisplay));
         }
 
         if (insertError) {

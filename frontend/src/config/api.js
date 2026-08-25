@@ -244,6 +244,12 @@ export const API_ENDPOINTS = {
   ONBOARDING_PRESIGN:           (token) => ep(`/api/onboarding/${token}/presign`),
   ONBOARDING_SUBMIT:            (token) => ep(`/api/onboarding/${token}/submit`),
 
+  OFFER_LETTER_DATA:            (employeeId) => ep(`/api/offer-letters/employee/${employeeId}/data`),
+  OFFER_LETTER_HISTORY:         (employeeId) => ep(`/api/offer-letters/employee/${employeeId}/history`),
+  OFFER_LETTER_PREVIEW:         (employeeId) => ep(`/api/offer-letters/employee/${employeeId}/preview`),
+  OFFER_LETTER_SEND:            (id) => ep(`/api/offer-letters/${id}/send`),
+  OFFER_LETTER_RESEND:          (id) => ep(`/api/offer-letters/${id}/resend`),
+
   // Break management
   BREAK_START:        ep('/api/attendance/break/start'),
   BREAK_END:          ep('/api/attendance/break/end'),
