@@ -898,7 +898,6 @@ const ApplyLeave = () => {
                         size="sm"
                         className="al-form-control"
                         isInvalid={!!errors.start_date}
-                        min={formData.leave_type === 'Birthday' ? undefined : new Date().toISOString().split('T')[0]}
                         readOnly={formData.leave_type === 'Birthday'}
                         style={formData.leave_type === 'Birthday' ? { background: '#f0fdf4', cursor: 'not-allowed' } : {}}
                       />
@@ -924,7 +923,7 @@ const ApplyLeave = () => {
                         className="al-form-control"
                         isInvalid={!!errors.end_date}
                         disabled={formData.leave_duration === 'Half Day' || formData.leave_type === 'Birthday'}
-                        min={formData.start_date || new Date().toISOString().split('T')[0]}
+                        min={formData.start_date || undefined}
                         style={formData.leave_type === 'Birthday' ? { background: '#f0fdf4', cursor: 'not-allowed' } : {}}
                       />
                       {errors.end_date && (

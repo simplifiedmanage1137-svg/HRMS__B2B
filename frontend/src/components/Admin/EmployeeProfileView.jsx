@@ -21,6 +21,7 @@ import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useNavigate, useParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
+import AttendanceCalendar from './AttendanceCalendar';
 
 ChartJS.register(
   CategoryScale, LinearScale, BarElement,
@@ -716,8 +717,18 @@ const EmployeeProfileView = () => {
                 </button>
               </div>
 
-             
+
             </div>
+
+            {/* Mark Attendance — lets Admin/HR set a day's status (Present, Absent, Comp
+                Off, Paid Leave, etc.) directly on this employee's record. Reuses the same
+                AttendanceCalendar component/endpoints already used in Payroll Center's
+                attendance review, so behavior (balance checks, Excel export columns) stays
+                identical everywhere it appears. */}
+            <AttendanceCalendar
+              employee={employee}
+              onAttendanceSaved={() => loadAttendanceFiltered(employee.employee_id)}
+            />
 
             {/* Charts row */}
             <Row className="g-3 mb-3">
