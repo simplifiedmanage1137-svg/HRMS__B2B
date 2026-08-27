@@ -8,7 +8,7 @@ import { Row, Col } from 'react-bootstrap';
 import { FaCalendarAlt } from 'react-icons/fa';
 import {
   MONTHS, fmtNum, fmtCurrency, numberToWords, getDeductionBreakdown, getAmounts,
-  isPropCulture, COMPANY,
+  resolveCompanyCode, COMPANY,
 } from '../../utils/salarySlipTemplate';
 
 const fmtDate = (d) =>
@@ -39,7 +39,10 @@ const SalaryRow = ({ label, value, bold, accent, last }) => (
 // total_working_days, per_day_salary, overtime_amount/hours, dt, custom_deduction, ...)
 // employee: the employee record (first_name, last_name, employee_id, designation, department,
 // joining_date, account_number, pan_number, pf_amount, pt_amount, professional_tax_amount)
-const SalarySlipView = ({ slip, employee }) => {
+// `companyOverride` ('b2b' | 'pc', optional): forces which company branding to render,
+// bypassing the pf_amount-based auto-detection — see resolveCompanyCode() for why EditSlip.jsx
+// needs this.
+const SalarySlipView = ({ slip, employee, companyOverride }) => {
   const a = getAmounts(slip, employee);
   const bd = getDeductionBreakdown(slip, employee);
   const pfAmt = bd.pf;
@@ -50,7 +53,9 @@ const SalarySlipView = ({ slip, employee }) => {
   const cycleLabel = slip.cycle_start_date && slip.cycle_end_date
     ? `${fmtDate(slip.cycle_start_date)} – ${fmtDate(slip.cycle_end_date)}`
     : `${monthName} ${slip.year}`;
-  const co = isPropCulture(employee) ? COMPANY.pc : COMPANY.b2b;
+  const coCode = resolveCompanyCode(employee, companyOverride);
+  const isPC = coCode === 'pc';
+  const co = COMPANY[coCode];
 
   return (
     <div style={{ fontFamily: 'system-ui, -apple-system, Arial, sans-serif' }}>
@@ -58,7 +63,7 @@ const SalarySlipView = ({ slip, employee }) => {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `2px solid ${co.accent}`, paddingBottom: 18, marginBottom: 20 }}>
         <div>
-          {isPropCulture(employee) ? (
+          {isPC ? (
             <div style={{ fontSize: 22, fontWeight: 900, color: co.accent, letterSpacing: 1, marginBottom: 6 }}>{co.name}</div>
           ) : (
             <img

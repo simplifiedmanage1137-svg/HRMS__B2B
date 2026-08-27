@@ -93,6 +93,15 @@ export const getAmounts = (slip, emp) => {
 // PropCulture employees have pf_amount explicitly set to 0
 export const isPropCulture = (emp) => emp?.pf_amount != null && parseInt(emp.pf_amount) === 0;
 
+// Resolves which company branding a slip should use. `override` ('b2b' | 'pc'), when given,
+// always wins over the pf_amount-based auto-detection below — needed by EditSlip.jsx, whose
+// manual PF input field defaults to 0 (including for real employees whose actual pf_amount is
+// null), which would otherwise get misread as "this is a PropCulture employee" by
+// isPropCulture(). SalarySlipManager.jsx/GeneratedSlipsTab.jsx pass real DB-backed employee
+// records and can safely omit `override` to keep using auto-detection.
+export const resolveCompanyCode = (emp, override) =>
+  (override === 'b2b' || override === 'pc') ? override : (isPropCulture(emp) ? 'pc' : 'b2b');
+
 export const COMPANY = {
   b2b: {
     accent: '#1e3a5f',
@@ -107,14 +116,16 @@ export const COMPANY = {
 };
 
 // ── PDF HTML template ──────────────────────────────────────────────────────────
-export const buildPDFHTML = (slip, emp, a, monthName, logoBase64) => {
+export const buildPDFHTML = (slip, emp, a, monthName, logoBase64, companyOverride) => {
   const bd = getDeductionBreakdown(slip, emp);
   const pfAmt = bd.pf;
   const ptAmt = bd.pt;
   const professionalTaxAmt = bd.professionalTax || 0;
   const dtAmt = bd.dt !== null ? bd.dt : a.deduction;
   const customDed = parseFloat(slip?.custom_deduction || 0);
-  const co = isPropCulture(emp) ? COMPANY.pc : COMPANY.b2b;
+  const coCode = resolveCompanyCode(emp, companyOverride);
+  const isPC = coCode === 'pc';
+  const co = COMPANY[coCode];
   const cycleLabel = slip.cycle_start_date && slip.cycle_end_date
     ? `${new Date(slip.cycle_start_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} – ${new Date(slip.cycle_end_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`
     : `${monthName} ${slip.year}`;
@@ -123,7 +134,7 @@ export const buildPDFHTML = (slip, emp, a, monthName, logoBase64) => {
     <div style="border:1px solid #e2e8f0;padding:32px 36px;font-size:13px;color:#1e293b;font-family:Arial,sans-serif;">
       <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid ${co.accent};padding-bottom:20px;margin-bottom:20px;">
         <div>
-          ${!isPropCulture(emp) && logoBase64
+          ${!isPC && logoBase64
             ? `<img src="data:image/jpeg;base64,${logoBase64}" style="height:52px;width:auto;object-fit:contain;" />`
             : `<div style="font-size:22px;font-weight:900;color:${co.accent};letter-spacing:1px;">${co.name}</div>`}
           <div style="font-size:11px;color:#64748b;margin-top:6px;max-width:280px;">${co.address}</div>
@@ -227,25 +238,28 @@ export const buildPDFHTML = (slip, emp, a, monthName, logoBase64) => {
 // Renders buildPDFHTML off-screen, rasterizes it, and saves as a PDF — the single
 // download path shared by SalarySlipManager.jsx and EditSlip.jsx so a downloaded
 // slip always looks identical regardless of where it was generated from.
-export const downloadSalarySlipPDF = async (slip, employee, filenamePrefix = 'Salary_Slip') => {
+export const downloadSalarySlipPDF = async (slip, employee, filenamePrefix = 'Salary_Slip', companyOverride) => {
   const a = getAmounts(slip, employee);
   const monthName = MONTHS[Number(slip.month) - 1];
 
   let logoBase64 = '';
-  try {
-    const r    = await fetch('/images/b2bindemand_logo.jfif');
-    const blob = await r.blob();
-    logoBase64 = await new Promise((res, rej) => {
-      const reader = new FileReader();
-      reader.onloadend = () => res(reader.result.split(',')[1]);
-      reader.onerror  = rej;
-      reader.readAsDataURL(blob);
-    });
-  } catch { /* logo optional */ }
+  // Only the B2BinDemand template uses a logo image — skip the fetch entirely for PropCulture.
+  if (resolveCompanyCode(employee, companyOverride) === 'b2b') {
+    try {
+      const r    = await fetch('/images/b2bindemand_logo.jfif');
+      const blob = await r.blob();
+      logoBase64 = await new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onloadend = () => res(reader.result.split(',')[1]);
+        reader.onerror  = rej;
+        reader.readAsDataURL(blob);
+      });
+    } catch { /* logo optional */ }
+  }
 
   const div = document.createElement('div');
   div.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;background:#fff;';
-  div.innerHTML = buildPDFHTML(slip, employee, a, monthName, logoBase64);
+  div.innerHTML = buildPDFHTML(slip, employee, a, monthName, logoBase64, companyOverride);
   document.body.appendChild(div);
 
   const canvas = await html2canvas(div, {

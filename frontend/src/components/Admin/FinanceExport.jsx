@@ -64,20 +64,29 @@ export default function FinanceExport() {
       const emps = (empRes.data || []).filter(e => e.is_active !== false && e.role !== 'finance' && e.role !== 'admin' && e.role !== 'sub_admin' && e.role !== 'desktop_support' && e.role !== 'hr');
       const attRecords = attRes.data?.attendance || attRes.data || [];
 
-      // Build per-employee stats
+      // Build per-employee stats.
+      // Bucketing must mirror adminMarkAttendance's typeMap (attendanceController.js) —
+      // the DB never stores 'on_leave'/'weekend' in `status` (only present/absent/half_day),
+      // so those two checks used to be dead code and every Week Off/Holiday day fell into
+      // the `else` branch and got miscounted as Absent. Week Off/Holiday/Paid-Leave/Comp-Off
+      // are distinguished via is_holiday/holiday_name/attendance_type instead.
       const perEmp = {};
       for (const r of attRecords) {
         const eid = r.employee_id;
-        if (!perEmp[eid]) perEmp[eid] = { present:0, half_day:0, on_leave:0, absent:0, weekend:0, late_count:0, overtime_hours:0, overtime_amount:0 };
+        if (!perEmp[eid]) perEmp[eid] = { present:0, half_day:0, paid_leave:0, comp_off:0, on_leave:0, absent:0, weekend:0, holiday:0, late_count:0, overtime_hours:0, overtime_amount:0 };
+        const p = perEmp[eid];
         const s = r.status;
-        if (s === 'present' || s === 'working') perEmp[eid].present++;
-        else if (s === 'half_day') { perEmp[eid].present += 0.5; perEmp[eid].half_day++; }
-        else if (s === 'on_leave') perEmp[eid].on_leave++;
-        else if (s === 'weekend')  perEmp[eid].weekend++;
-        else perEmp[eid].absent++;
-        if (r.is_late)            perEmp[eid].late_count++;
-        if (r.overtime_hours)     perEmp[eid].overtime_hours  += parseFloat(r.overtime_hours) || 0;
-        if (r.overtime_amount)    perEmp[eid].overtime_amount += parseFloat(r.overtime_amount) || 0;
+        if (r.attendance_type === 'paid_leave') { p.present++; p.paid_leave++; }
+        else if (r.attendance_type === 'comp_off') { p.present++; p.comp_off++; }
+        else if (r.is_holiday && r.holiday_name === 'Week Off') p.weekend++;
+        else if (r.is_holiday && r.holiday_name === 'Holiday') p.holiday++;
+        else if (r.holiday_name === 'Leave') p.on_leave++;
+        else if (s === 'present' || s === 'working') p.present++;
+        else if (s === 'half_day') { p.present += 0.5; p.half_day++; }
+        else p.absent++;
+        if (r.is_late)            p.late_count++;
+        if (r.overtime_hours)     p.overtime_hours  += parseFloat(r.overtime_hours) || 0;
+        if (r.overtime_amount)    p.overtime_amount += parseFloat(r.overtime_amount) || 0;
       }
 
       setEmployees(emps);
@@ -133,8 +142,11 @@ export default function FinanceExport() {
         'Current Address':          addr,
         'Present Days':             s.present || 0,
         'Half Days':                s.half_day || 0,
+        'Paid Leave Days':          s.paid_leave || 0,
+        'Comp Off Days':            s.comp_off || 0,
         'Leave Days':               s.on_leave || 0,
         'Weekend Off':              s.weekend || 0,
+        'Holiday':                  s.holiday || 0,
         'Absent Days':              s.absent || 0,
         'Late Count':               s.late_count || 0,
         'Overtime Hours':           fmt2(s.overtime_hours),
@@ -256,6 +268,7 @@ export default function FinanceExport() {
                     <th>Department</th>
                     <th>Designation</th>
                     <th className="text-center">Present</th>
+                    <th className="text-center">Paid Leave</th>
                     <th className="text-center">Absent</th>
                     <th className="text-center">Leave</th>
                     <th className="text-center">Late</th>
@@ -276,6 +289,7 @@ export default function FinanceExport() {
                       <td>{emp.department || '—'}</td>
                       <td>{emp.designation || '—'}</td>
                       <td className="text-center"><Badge bg="success" style={{ fontSize: 10 }}>{s.present || 0}</Badge></td>
+                      <td className="text-center"><Badge bg="primary" style={{ fontSize: 10 }}>{s.paid_leave || 0}</Badge></td>
                       <td className="text-center"><Badge bg="danger"  style={{ fontSize: 10 }}>{s.absent  || 0}</Badge></td>
                       <td className="text-center"><Badge bg="info"    style={{ fontSize: 10 }}>{s.on_leave|| 0}</Badge></td>
                       <td className="text-center"><Badge bg="warning" text="dark" style={{ fontSize: 10 }}>{s.late_count||0}</Badge></td>
@@ -290,12 +304,12 @@ export default function FinanceExport() {
                     </tr>
                   ))}
                   {rows.length === 0 && (
-                    <tr><td colSpan={15} className="text-center text-muted py-4">No employees found</td></tr>
+                    <tr><td colSpan={16} className="text-center text-muted py-4">No employees found</td></tr>
                   )}
                 </tbody>
                 <tfoot style={{ background: '#f0fdf4', fontWeight: 700 }}>
                   <tr>
-                    <td colSpan={11} className="text-end pe-3">Total Net Payable:</td>
+                    <td colSpan={12} className="text-end pe-3">Total Net Payable:</td>
                     <td className="text-end" style={{ color: '#16a34a' }}>
                       ₹{totalNet.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                     </td>

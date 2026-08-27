@@ -114,7 +114,7 @@ const getEmployeeDetails = async (employeeId) => {
 const getAttendanceRecords = async (employeeId, startDateStr, endDateStr) => {
     const { data: attendance, error } = await supabase
         .from('attendance')
-        .select('attendance_date, clock_in, clock_out, clock_in_ist, clock_out_ist, status, total_minutes, late_minutes, overtime_hours, overtime_amount, is_holiday, holiday_name, is_regularized, created_at, updated_at')
+        .select('attendance_date, clock_in, clock_out, clock_in_ist, clock_out_ist, status, attendance_type, total_minutes, late_minutes, overtime_hours, overtime_amount, is_holiday, holiday_name, is_regularized, created_at, updated_at')
         .eq('employee_id', employeeId)
         .gte('attendance_date', startDateStr)
         .lte('attendance_date', endDateStr)
@@ -241,6 +241,12 @@ const calculateAttendanceSummary = (attendanceRecords, leaves, startDateStr, end
             // employee even though every screen they can see shows "Present".
             if (attendance.is_regularized) {
                 presentDays++;
+            } else if (dbStatus === 'present' && attendance.attendance_type === 'paid_leave') {
+                // Marked "Paid Leave" directly on the Attendance Calendar (adminMarkAttendance)
+                // rather than via an approved leave request — still a paid day (feeds
+                // totalPaidDays the same as presentDays), but must be reported as Paid Leave,
+                // not folded silently into Present, so the slip/preview reflects it.
+                paidLeaveDays++;
             } else if (dbStatus === 'present') {
                 presentDays++;
             } else if (dbStatus === 'half_day') {

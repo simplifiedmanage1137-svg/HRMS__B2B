@@ -41,6 +41,45 @@ const getManualPaidAdjustmentTotal = async (employee_id, leave_year) => {
     return (data || []).reduce((sum, a) => sum + (parseFloat(a.adjustment_days) || 0), 0);
 };
 
+// Days marked as Paid Leave directly on the Attendance Calendar (adminMarkAttendance,
+// attendance.attendance_type = 'paid_leave') never create a row in `leaves` — they're a
+// straight attendance-table edit, not a leave request. getLeaveBalance's `used` figure must
+// count them too, otherwise every balance fetch after a calendar PL-mark recomputes `used`
+// from `leaves` alone (unchanged), overwrites leave_balance.current_balance with that stale
+// number, and the deduction adminMarkAttendance just wrote is erased instantly.
+const getAttendancePaidLeaveCount = async (employee_id, leave_year) => {
+    const { data, error } = await supabase
+        .from('attendance')
+        .select('id')
+        .eq('employee_id', employee_id)
+        .eq('attendance_type', 'paid_leave')
+        .gte('attendance_date', `${leave_year}-01-01`)
+        .lte('attendance_date', `${leave_year}-12-31`);
+    if (error) {
+        if (/does not exist|schema cache/i.test(error.message || '')) return 0;
+        throw error;
+    }
+    return (data || []).length;
+};
+
+// Bulk version of getAttendancePaidLeaveCount, for getLeaveBalanceBulk — one query for every
+// employee instead of N. Returns { [employee_id]: countOfCalendarMarkedPaidLeaveDays }.
+const getAttendancePaidLeaveCountsBulk = async (leave_year) => {
+    const { data, error } = await supabase
+        .from('attendance')
+        .select('employee_id')
+        .eq('attendance_type', 'paid_leave')
+        .gte('attendance_date', `${leave_year}-01-01`)
+        .lte('attendance_date', `${leave_year}-12-31`);
+    if (error) {
+        if (/does not exist|schema cache/i.test(error.message || '')) return {};
+        throw error;
+    }
+    const counts = {};
+    (data || []).forEach(r => { counts[r.employee_id] = (counts[r.employee_id] || 0) + 1; });
+    return counts;
+};
+
 // Same as above, but for every employee at once — one query instead of N, for
 // getLeaveBalanceBulk. Returns { [employee_id]: totalAdjustmentDays }.
 const getManualPaidAdjustmentTotalsBulk = async (leave_year) => {
@@ -119,9 +158,14 @@ exports.getLeaveBalance = async (req, res) => {
         if (usedError) throw usedError;
 
         // Paid leaves used (excludes Unpaid, Comp-Off & Birthday)
-        const used = usedLeaves
+        const leaveRequestsUsed = usedLeaves
             ?.filter(l => l.leave_type !== 'Unpaid' && l.leave_type !== 'Comp-Off' && l.leave_type !== 'Birthday')
             ?.reduce((sum, l) => sum + (parseFloat(l.days_count) || 0), 0) || 0;
+
+        // Plus days marked "Paid Leave" straight on the Attendance Calendar — see
+        // getAttendancePaidLeaveCount above for why these must be folded in here.
+        const attendancePaidLeaveUsed = await getAttendancePaidLeaveCount(employee_id, currentYear);
+        const used = leaveRequestsUsed + attendancePaidLeaveUsed;
 
         // Unpaid leaves used separately
         const unpaidUsed = usedLeaves
@@ -261,6 +305,11 @@ exports.getLeaveBalanceBulk = async (req, res) => {
         // with the single-employee balance for anyone HR has adjusted.
         const adjustmentTotals = await getManualPaidAdjustmentTotalsBulk(currentYear);
 
+        // Same attendance-calendar-marked Paid Leave offset getLeaveBalance applies — see
+        // getAttendancePaidLeaveCount for why; without it this bulk endpoint disagrees with
+        // the single-employee balance for anyone whose PL was marked via the calendar.
+        const attendancePLCounts = await getAttendancePaidLeaveCountsBulk(currentYear);
+
         // `balances` is the pre-existing shape (employee_id -> available days as a string) —
         // kept exactly as-is since AttendanceReports.jsx's export already depends on it.
         // Everything else here is new/additive.
@@ -278,7 +327,7 @@ exports.getLeaveBalanceBulk = async (req, res) => {
 
             const currentYearAccrual = calculateCurrentYearAccruedLeaves(joiningDate, today);
             const empLeaves = leavesByEmployee[emp.employee_id] || [];
-            const usedDays = sumDays(empLeaves, 'approved');
+            const usedDays = sumDays(empLeaves, 'approved') + (attendancePLCounts[emp.employee_id] || 0);
             const pending = sumDays(empLeaves, 'pending');
             const manualAdjustment = adjustmentTotals[emp.employee_id] || 0;
             balances[emp.employee_id] = Math.max(0, currentYearAccrual + manualAdjustment - usedDays - pending).toFixed(1);

@@ -92,6 +92,12 @@ const EditSlip = () => {
   const [pt, setPt] = useState('0');
   const [otherDeductions, setOtherDeductions] = useState('0');
 
+  // Which company template to render — explicit, since this tool's own PF field defaults to
+  // 0 (even for real employees whose actual pf_amount is null), which would otherwise get
+  // misread by the shared template's pf_amount===0 "is PropCulture" auto-detection. Defaulted
+  // from the REAL selected employee record below (before PF/PT edits), then user-overridable.
+  const [companyOverride, setCompanyOverride] = useState('b2b');
+
   const [draftExists, setDraftExists] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
@@ -176,6 +182,9 @@ const EditSlip = () => {
   // ── When employee or month changes: flush previous draft (if dirty), then load/init ──
   const applyDraftOrDefaults = useCallback((emp, monthKey) => {
     if (!emp) return;
+    // Default from the real employee record's actual pf_amount (before it gets flattened into
+    // the manual PF field's own 0-default below) — admin can still override with the toggle.
+    setCompanyOverride(emp.pf_amount != null && parseInt(emp.pf_amount) === 0 ? 'pc' : 'b2b');
     const drafts = loadAllDrafts();
     const existing = drafts[draftKey(emp.employee_id, monthKey)];
     const [keyYear, keyMonth] = monthKey.split('-').map(Number);
@@ -331,7 +340,7 @@ const EditSlip = () => {
     if (!generatedSlip) return;
     setDownloading(true);
     try {
-      await downloadSalarySlipPDF(generatedSlip.slip, generatedSlip.employee, `Salary_Slip_${generatedSlip.employee.employee_id}_MANUAL`);
+      await downloadSalarySlipPDF(generatedSlip.slip, generatedSlip.employee, `Salary_Slip_${generatedSlip.employee.employee_id}_MANUAL`, companyOverride);
       showNotification('PDF downloaded successfully', 'success');
     } catch {
       showNotification('Failed to download PDF', 'danger');
@@ -387,6 +396,7 @@ const EditSlip = () => {
       showNotification('That employee could not be found in the current employee list.', 'danger');
       return;
     }
+    setCompanyOverride(emp.pf_amount != null && parseInt(emp.pf_amount) === 0 ? 'pc' : 'b2b');
     const [y, m] = d.salaryMonth.split('-').map(Number);
     const { workingDays: wd, startDate, endDate } = getCycleRange(y, m);
     const absentDays = Math.max(0, wd - (d.presentDays || 0) - (d.halfDays || 0));
@@ -682,7 +692,34 @@ const EditSlip = () => {
           </Modal.Title>
         </Modal.Header>
         <Modal.Body style={{ padding: 24 }}>
-          {generatedSlip && <SalarySlipView slip={generatedSlip.slip} employee={generatedSlip.employee} />}
+          {generatedSlip && (
+            <>
+              {/* Company template toggle — overrides the auto-detected branding (see
+                  resolveCompanyCode in salarySlipTemplate.js) for this manual/local slip. */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Company Format:
+                </span>
+                <div style={{ display: 'inline-flex', border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+                  {[['b2b', 'B2BinDemand'], ['pc', 'PropCulture']].map(([code, label]) => (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() => setCompanyOverride(code)}
+                      style={{
+                        padding: '6px 14px', fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
+                        background: companyOverride === code ? (code === 'pc' ? '#0d7b6f' : '#1e3a5f') : '#fff',
+                        color: companyOverride === code ? '#fff' : '#475569',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <SalarySlipView slip={generatedSlip.slip} employee={generatedSlip.employee} companyOverride={companyOverride} />
+            </>
+          )}
         </Modal.Body>
         <Modal.Footer style={{ border: 'none', background: '#f8fafc', gap: 8, padding: '12px 22px' }}>
           <Button variant="light" size="sm" onClick={() => setShowGenerateModal(false)} style={{ fontSize: 12, borderRadius: 8, fontWeight: 600 }}>Close</Button>

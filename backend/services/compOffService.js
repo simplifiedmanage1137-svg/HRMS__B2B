@@ -148,10 +148,33 @@ class CompOffService {
 
     /**
      * Get actual valid comp-off count (for balance display)
+     * Subtracts days marked "Comp Off" directly on the Attendance Calendar
+     * (attendance.attendance_type = 'comp_off') — those never touch comp_off_earnings,
+     * so without this the earnings-ledger count alone would ignore that usage and
+     * getLeaveBalance would overwrite employees.comp_off_balance back to a stale, too-high
+     * number right after adminMarkAttendance decremented it.
      */
     static async getValidCompOffCount(employee_id) {
         const available = await this.getAvailableCompOffs(employee_id);
-        return available.length;
+        const manuallyMarked = await this.getManualCompOffMarkCount(employee_id);
+        return Math.max(0, available.length - manuallyMarked);
+    }
+
+    /**
+     * Count of attendance rows where this employee's Comp-Off was marked directly via the
+     * Attendance Calendar (not through the comp_off_earnings ledger). See getValidCompOffCount.
+     */
+    static async getManualCompOffMarkCount(employee_id) {
+        const { data, error } = await supabase
+            .from('attendance')
+            .select('id')
+            .eq('employee_id', employee_id)
+            .eq('attendance_type', 'comp_off');
+        if (error) {
+            if (/does not exist|schema cache/i.test(error.message || '')) return 0;
+            throw error;
+        }
+        return (data || []).length;
     }
 
     /**
@@ -176,6 +199,22 @@ class CompOffService {
         (data || []).forEach(row => {
             counts[row.employee_id] = (counts[row.employee_id] || 0) + 1;
         });
+
+        // Add Comp-Off days marked directly on the Attendance Calendar — those are never
+        // linked to a comp_off_earnings row (see getManualCompOffMarkCount), so without this
+        // they'd be invisible to the payroll export's "Comp-Off Used" column.
+        const { data: manualRows, error: manualErr } = await supabase
+            .from('attendance')
+            .select('employee_id')
+            .eq('attendance_type', 'comp_off')
+            .gte('attendance_date', `${year}-01-01`)
+            .lte('attendance_date', `${year}-12-31`);
+        if (!manualErr) {
+            (manualRows || []).forEach(row => {
+                counts[row.employee_id] = (counts[row.employee_id] || 0) + 1;
+            });
+        }
+
         return counts;
     }
 
