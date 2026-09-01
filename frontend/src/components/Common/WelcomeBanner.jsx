@@ -1,6 +1,7 @@
 import React from 'react';
 import { FaSyncAlt, FaDownload } from 'react-icons/fa';
 import { QA_BANNER_GRADIENT } from './quickAccessTheme';
+import { getTrustedNow, getTrustedNowIST } from '../../utils/serverTime';
 
 const QUOTES = [
   'Small daily improvements lead to stunning results.',
@@ -17,7 +18,10 @@ const dayOfYear = (d) => Math.floor((d - new Date(d.getFullYear(), 0, 0)) / (100
 const greeting = (hour) => (hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening');
 
 export default function WelcomeBanner({ name, roleLabel, onRefresh, onExport, refreshing = false, headerExtra = null }) {
-  const now = new Date();
+  // Anchored to the trusted server clock, not this device's own clock/timezone — otherwise the
+  // greeting and date shown here can drift from the actual India time the rest of the app uses.
+  const now = getTrustedNow();
+  const istHour = parseInt(getTrustedNowIST().split(' ')[1].split(':')[0], 10);
   const quote = QUOTES[dayOfYear(now) % QUOTES.length];
 
   return (
@@ -51,7 +55,7 @@ export default function WelcomeBanner({ name, roleLabel, onRefresh, onExport, re
       <div style={{ position: 'relative', zIndex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.75)', textTransform: 'uppercase', letterSpacing: 0.6 }}>
-            {greeting(now.getHours())}
+            {greeting(istHour)}
           </span>
           {roleLabel && (
             <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: 'rgba(255,255,255,0.18)', borderRadius: 20, padding: '2px 10px' }}>
@@ -61,7 +65,7 @@ export default function WelcomeBanner({ name, roleLabel, onRefresh, onExport, re
         </div>
         <h3 style={{ color: '#fff', fontWeight: 800, fontSize: 24, margin: 0 }}>Welcome back, {name || 'there'}!</h3>
         <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-          <span>{now.toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</span>
+          <span>{now.toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' })}</span>
           <span style={{ opacity: 0.5 }}>·</span>
           <span style={{ fontStyle: 'italic' }}>"{quote}"</span>
         </div>

@@ -3,9 +3,38 @@ import { FaSignInAlt, FaSignOutAlt, FaSyncAlt, FaClock } from 'react-icons/fa';
 import BreakWidget from './BreakWidget';
 import TicketBadge from './TicketBadge';
 import { QA } from './quickAccessTheme';
+import { getTrustedNow } from '../../utils/serverTime';
 
-const fmtClock = (d) => d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-const fmtDate = (d) => d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+// timeZone pinned to India — otherwise this renders in whatever timezone the OS happens to be
+// set to, independent of (and in addition to) the device's clock itself.
+const fmtClock = (d) => d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
+const fmtDate = (d) => d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+
+// Fallback formatter for attendance.clock_in/clock_out when the backend hasn't already
+// provided clock_in_display/clock_out_display. The value here is usually clock_in_ist/
+// clock_out_ist — a naive "YYYY-MM-DD HH:MM:SS" string that IS ALREADY India wall-clock time,
+// not a UTC instant — so it must be read directly rather than passed through `new Date()`,
+// which would interpret those digits against this device's own timezone (wrong the moment the
+// OS timezone isn't India, even though the digits were already correct). Only the rarer
+// raw-UTC fallback (a proper ISO string with a Z/offset) needs an actual timezone conversion.
+const formatIstTimeField = (val) => {
+  if (!val) return null;
+  const s = String(val);
+  const isUtcTagged = /[Zz]$/.test(s) || /[+-]\d{2}:?\d{2}$/.test(s);
+  if (isUtcTagged) {
+    const d = new Date(s);
+    return isNaN(d.getTime())
+      ? null
+      : d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
+  }
+  const timePart = s.replace('T', ' ').split(' ')[1];
+  if (!timePart) return null;
+  let [h, m] = timePart.split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12; if (h === 0) h = 12;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
+};
 
 // Presentational-only card: all attendance state/handlers are owned by the parent
 // dashboard (existing, already-working clock-in/out logic) — this component just
@@ -24,9 +53,12 @@ export default function AttendanceCard({
   footerExtra,
   unlimitedBreaks = false,
 }) {
-  const [now, setNow] = useState(new Date());
+  // Anchored to the trusted server clock (utils/serverTime.js), not this device's own clock —
+  // the employee/admin's laptop time must never be able to move this display, since it's the
+  // same clock the actual clock-in/out timestamps are computed from on the backend.
+  const [now, setNow] = useState(getTrustedNow());
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
+    const id = setInterval(() => setNow(getTrustedNow()), 1000);
     return () => clearInterval(id);
   }, []);
 
@@ -54,11 +86,11 @@ export default function AttendanceCard({
       <div style={{ display: 'flex', gap: 18, fontSize: 12, marginBottom: 14, flexWrap: 'wrap' }}>
         <div>
           <div style={{ opacity: 0.8, fontSize: 10, textTransform: 'uppercase' }}>In</div>
-          <div style={{ fontWeight: 700 }}>{attendance?.clock_in_display || (attendance?.clock_in ? new Date(attendance.clock_in).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--')}</div>
+          <div style={{ fontWeight: 700 }}>{attendance?.clock_in_display || formatIstTimeField(attendance?.clock_in) || '--:--'}</div>
         </div>
         <div>
           <div style={{ opacity: 0.8, fontSize: 10, textTransform: 'uppercase' }}>Out</div>
-          <div style={{ fontWeight: 700 }}>{attendance?.clock_out_display || (attendance?.clock_out ? new Date(attendance.clock_out).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--')}</div>
+          <div style={{ fontWeight: 700 }}>{attendance?.clock_out_display || formatIstTimeField(attendance?.clock_out) || '--:--'}</div>
         </div>
         {attendance?.total_hours_display && (
           <div>

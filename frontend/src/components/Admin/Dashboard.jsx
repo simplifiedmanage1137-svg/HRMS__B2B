@@ -66,7 +66,6 @@ import {
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useNavigate } from 'react-router-dom';
-import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../context/AuthContext';
 import AdminRatings from './AdminRatings';
 import BreakWidget from '../Common/BreakWidget';
@@ -123,7 +122,6 @@ ChartJS.register(
 // ============== MAIN ADMIN DASHBOARD COMPONENT ==============
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const { fetchTodayEvents } = useNotification();
   const { user } = useAuth();
 
   const [stats, setStats] = useState({
@@ -211,16 +209,22 @@ const AdminDashboard = () => {
   const canFilterByTeam = ['admin', 'sub_admin', 'hr'].includes(user?.role);
   const managerIdParam = selectedManagerId !== 'ALL' ? `&manager_id=${selectedManagerId}` : '';
 
-  useEffect(() => {
-    fetchTodayEvents();
-  }, []);
+  // Note: today's birthdays/anniversaries are already fetched once per login by
+  // NotificationContext itself (see its own `user && token` mount effect) — this dashboard
+  // used to also trigger fetchTodayEvents() on its own mount, doubling that request on every
+  // visit to this page (quadrupled again under React StrictMode in dev, since neither call
+  // site cancelled the other's in-flight request).
 
   // Re-fetches everything whenever the "View Team" selection changes (including the
   // initial mount, where selectedManagerId is still 'ALL' — same as the old mount-only
   // effect this replaces).
   useEffect(() => {
-    fetchDashboardData();
-    axios.get(`${API_ENDPOINTS.PERFORMANCE_ANALYTICS}${selectedManagerId !== 'ALL' ? `?manager_id=${selectedManagerId}` : ''}`)
+    // AbortController so React 18 StrictMode's dev-only double-invoke of this effect
+    // cancels the first (throwaway) round of requests instead of letting both complete —
+    // fetchDashboardData/PERFORMANCE_ANALYTICS would otherwise fire twice on every mount.
+    const controller = new AbortController();
+    fetchDashboardData(controller.signal);
+    axios.get(`${API_ENDPOINTS.PERFORMANCE_ANALYTICS}${selectedManagerId !== 'ALL' ? `?manager_id=${selectedManagerId}` : ''}`, { signal: controller.signal })
       .then(r => { if (r.data.success) setPerfAnalytics(r.data.analytics); })
       .catch(() => {});
     // Leave Balances table is loaded on-demand (its own button) — clear it on filter
@@ -228,6 +232,7 @@ const AdminDashboard = () => {
     // newly selected team.
     setLeaveBalancesLoaded(false);
     setEmployeeLeaveBalances([]);
+    return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedManagerId]);
 
@@ -373,15 +378,15 @@ const AdminDashboard = () => {
     }
   }, [leaveSearchTerm, leaveRequests]);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (signal) => {
     try {
       setLoading(true);
       const today = new Date().toISOString().split('T')[0];
 
       const [employeesRes, attendanceRes, leavesRes] = await Promise.all([
-        axios.get(`${API_ENDPOINTS.EMPLOYEES}${selectedManagerId !== 'ALL' ? `?manager_id=${selectedManagerId}` : ''}`),
-        axios.get(`${API_ENDPOINTS.ATTENDANCE_REPORT}?start=${today}&end=${today}${managerIdParam}`),
-        axios.get(`${API_ENDPOINTS.LEAVES}?all=true${managerIdParam}`)
+        axios.get(`${API_ENDPOINTS.EMPLOYEES}${selectedManagerId !== 'ALL' ? `?manager_id=${selectedManagerId}` : ''}`, { signal }),
+        axios.get(`${API_ENDPOINTS.ATTENDANCE_REPORT}?start=${today}&end=${today}${managerIdParam}`, { signal }),
+        axios.get(`${API_ENDPOINTS.LEAVES}?all=true${managerIdParam}`, { signal })
       ]);
 
       // Process employees
@@ -424,6 +429,7 @@ const AdminDashboard = () => {
 
       setLastUpdated(new Date());
     } catch (error) {
+      if (axios.isCancel?.(error) || error.code === 'ERR_CANCELED') return;
       console.error('Error fetching dashboard data:', error);
       setMessage({ type: 'danger', text: error.response?.data?.message || 'Failed to load dashboard data' });
     } finally {

@@ -57,6 +57,11 @@ export const AuthProvider = ({ children }) => {
 
   // On mount: validate / silently refresh the stored access token
   useEffect(() => {
+    // React 18 StrictMode double-invokes mount effects in dev — this AbortController stops
+    // the first (throwaway) invocation's /verify call from completing as a wasted duplicate
+    // request; only the second, real invocation's response is ever acted on.
+    const controller = new AbortController();
+
     const init = async () => {
       const { user: savedUser, token: savedToken, refreshToken: savedRefresh } = loadFromStorage();
 
@@ -69,6 +74,7 @@ export const AuthProvider = ({ children }) => {
         // Try to verify the access token    // Changes by pratik for /verify api
         const res = await axiosInstance.post(API_ENDPOINTS.VERIFY, {}, {
           headers: { Authorization: `Bearer ${savedToken}` },
+          signal: controller.signal,
         });
 
         if (res.data.success) {
@@ -80,24 +86,48 @@ export const AuthProvider = ({ children }) => {
           logout();
         }
       } catch (err) {
-  console.error("AUTH VERIFY FAILED:", err);
-  console.error("STATUS:", err.response?.status);
-  console.error("RESPONSE:", err.response?.data);
+        if (axiosInstance.isCancel?.(err) || err.code === 'ERR_CANCELED') return;
 
-  const refreshed = loadFromStorage();
+        console.error("AUTH VERIFY FAILED:", err);
+        console.error("STATUS:", err.response?.status);
+        console.error("RESPONSE:", err.response?.data);
 
-  if (refreshed.token && refreshed.user) {
-    setUser(refreshed.user);
-    setToken(refreshed.token);
-  } else {
-    logout();
-  }
-} finally {
-  setLoading(false);
-}
+        // A 401/403 here means the backend explicitly rejected the session — and the
+        // axios interceptor's own silent refresh-and-retry (see config/axios.js) already
+        // had its chance to fix this transparently before this promise ever rejected.
+        // Reaching this catch with a 401/403 means the session is genuinely dead: treating
+        // the stale localStorage copy as still-good (the old behavior) let the Dashboard,
+        // Navbar, and every other mount-time fetch proceed with a token the backend had
+        // just rejected, so every one of them independently 401'd right after — the
+        // "many different endpoints failing at once" pattern this was causing.
+        const status = err.response?.status;
+        if (status === 401 || status === 403) {
+          logout();
+        } else {
+          // Couldn't confirm either way (network blip, backend momentarily unreachable) —
+          // keep the existing session optimistically rather than force a logout for a
+          // problem that has nothing to do with the token's validity.
+          const refreshed = loadFromStorage();
+          if (refreshed.token && refreshed.user) {
+            setUser(refreshed.user);
+            setToken(refreshed.token);
+          } else {
+            logout();
+          }
+        }
+      } finally {
+        // Only the invocation whose OWN controller was never aborted should flip `loading`.
+        // Under StrictMode's double-invoke, the first invocation's controller gets aborted by
+        // the synthetic cleanup — if its finally still cleared `loading`, PrivateRoute would
+        // let the app render one tick before the second (real) invocation's /verify result
+        // ever came back, reopening the exact "renders before auth is confirmed" race this
+        // whole effect exists to prevent.
+        if (!controller.signal.aborted) setLoading(false);
+      }
     };
 
     init();
+    return () => controller.abort();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for the interceptor's forced-logout signal

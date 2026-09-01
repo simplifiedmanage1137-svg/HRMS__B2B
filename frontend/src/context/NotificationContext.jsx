@@ -72,7 +72,7 @@ export const NotificationProvider = ({ children }) => {
   }, []);
 
   // Fetch today's events
-  const fetchTodayEvents = useCallback(async () => {
+  const fetchTodayEvents = useCallback(async (signal) => {
     // Don't fetch if no user or token
     if (!user || !token) {
       console.log('⚠️ No user or token, skipping fetch today events');
@@ -82,11 +82,12 @@ export const NotificationProvider = ({ children }) => {
     try {
       setLoading(true);
       console.log('📡 Fetching today events...');
-      
+
       const response = await axios.get(API_ENDPOINTS.TODAY_EVENTS, {
         headers: {
           'Authorization': `Bearer ${token}`
-        }
+        },
+        signal,
       });
       
       console.log('✅ Today events fetched:', response.data);
@@ -137,6 +138,7 @@ export const NotificationProvider = ({ children }) => {
       });
       
     } catch (error) {
+      if (axios.isCancel?.(error) || error.code === 'ERR_CANCELED') return;
       if (error.response?.status === 401) {
         console.log('🔑 Unauthorized - Token might be expired');
         // Don't show error for 401, just log it
@@ -188,9 +190,12 @@ export const NotificationProvider = ({ children }) => {
   // anniversaries don't change within a session; a fresh login/reload is enough
   // to pick up new ones (removed the hourly setInterval to cut idle DB load).
   useEffect(() => {
-    if (user && token) {
-      fetchTodayEvents();
-    }
+    if (!(user && token)) return;
+    // AbortController so React 18 StrictMode's dev-only double-invoke of this effect
+    // cancels the first (throwaway) request instead of both completing.
+    const controller = new AbortController();
+    fetchTodayEvents(controller.signal);
+    return () => controller.abort();
   }, [user?.employeeId, token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const value = {

@@ -9,6 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
+import { getTrustedNow } from '../../utils/serverTime';
 import { Badge, Dropdown, Spinner, Modal, Button } from 'react-bootstrap';
 import EventNotification from '../Common/EventNotification';
 
@@ -44,7 +45,7 @@ const Navbar = () => {
   const [showNotifications, setShowNotifications]   = useState(false);
   const [unreadCount, setUnreadCount]               = useState(0);
   const [employeeName, setEmployeeName]             = useState('');
-  const [currentTime, setCurrentTime]               = useState(new Date());
+  const [currentTime, setCurrentTime]               = useState(getTrustedNow());
   const [pendingRequests, setPendingRequests]       = useState([]);
   const [pendingCount, setPendingCount]             = useState(0);
   const [fetchingNotifications, setFetchingNotifications] = useState(false);
@@ -60,9 +61,10 @@ const Navbar = () => {
   const notificationRef  = useRef(null);
   const bellRef          = useRef(null);
 
-  // clock
+  // clock — anchored to the trusted server clock (utils/serverTime.js), not this device's own
+  // clock/timezone, since that's what the actual clock-in/out timestamps are computed from.
   useEffect(() => {
-    const t = setInterval(() => setCurrentTime(new Date()), 1000);
+    const t = setInterval(() => setCurrentTime(getTrustedNow()), 1000);
     return () => clearInterval(t);
   }, []);
 
@@ -265,8 +267,10 @@ const Navbar = () => {
     return f ? f[1] : 'Dashboard';
   })();
 
-  const timeStr = currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-  const dateStr = currentTime.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  // timeZone pinned to India — otherwise this would render in whatever timezone the OS
+  // happens to be set to (independent of, and in addition to, the device clock itself).
+  const timeStr = currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
+  const dateStr = currentTime.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'Asia/Kolkata' });
 
   const noticeItalic = (activeNotice?.font_style || '').includes('italic');
   const noticeBold   = (activeNotice?.font_style || '').includes('bold');

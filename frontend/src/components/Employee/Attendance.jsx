@@ -23,6 +23,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
+import { getTrustedNow, getTrustedNowIST } from '../../utils/serverTime';
 import { useAuth } from '../../context/AuthContext';
 import { useMobileDevice } from '../../hooks/useMobileDevice';
 import {
@@ -259,22 +260,10 @@ const Attendance = () => {
     return Date.UTC(y, mo - 1, d, h, mi, sec) - IST_OFFSET_MS;
   };
 
-  // Function to get current time in IST format
-  const nowIST = () => {
-    const now = new Date();
-    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-    const istMs = now.getTime() + IST_OFFSET_MS;
-    const ist = new Date(istMs);
-
-    const y = ist.getUTCFullYear();
-    const mo = String(ist.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(ist.getUTCDate()).padStart(2, '0');
-    const h = String(ist.getUTCHours()).padStart(2, '0');
-    const mi = String(ist.getUTCMinutes()).padStart(2, '0');
-    const s = String(ist.getUTCSeconds()).padStart(2, '0');
-
-    return `${y}-${mo}-${d} ${h}:${mi}:${s}`;
-  };
+  // Current time in IST format, anchored to the trusted server clock (see utils/serverTime.js)
+  // rather than this device's own clock — the employee's laptop time must never influence the
+  // "hours worked so far" timer computed from this.
+  const nowIST = () => getTrustedNowIST();
 
   // Format time from IST string "YYYY-MM-DD HH:MM:SS" to display format
   const formatTimeIST = (datetime) => {
@@ -2125,7 +2114,7 @@ const Attendance = () => {
 
     initializeSession();
 
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    const timer = setInterval(() => setCurrentTime(getTrustedNow()), 1000);
     const handleBeforeUnload = (e) => {
       if (activeSession) {
         e.preventDefault();
@@ -2349,7 +2338,7 @@ const Attendance = () => {
             <Col xs={6} md={2}>
               <div className="text-center">
                 <small className="text-muted d-block">Current Time</small>
-                <strong style={{ fontSize: 18 }}>{currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</strong>
+                <strong style={{ fontSize: 18 }}>{currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</strong>
               </div>
             </Col>
             <Col xs={6} md={2}>

@@ -1,5 +1,6 @@
 // src/config/axios.js
 import axios from 'axios';
+import { syncServerTime } from '../utils/serverTime';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
@@ -75,7 +76,13 @@ axiosInstance.interceptors.request.use(
 // ─── response interceptor ────────────────────────────────────────────────────
 
 axiosInstance.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Attendance endpoints (clock-in, clock-out, today's status) return a trusted
+    // `server_time` — resync the client's server-time-offset off it whenever present, so the
+    // attendance timer stays anchored to the backend clock instead of the device clock.
+    if (response?.data?.server_time) syncServerTime(response.data.server_time);
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
 
@@ -93,13 +100,25 @@ axiosInstance.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    const isTokenExpired =
+    // Any 401 from a protected endpoint — not just a cleanly-expired token — is routed
+    // through the same silent refresh-and-retry pipeline. NO_TOKEN/INVALID_TOKEN (e.g. a
+    // corrupted access token, or one signed against a rotated secret) used to fall straight
+    // through to `return Promise.reject(error)` below with no recovery attempt at all, so
+    // every protected call independently 401'd instead of self-healing via the still-valid
+    // refresh token — exactly the "many different endpoints failing at once" symptom this
+    // fixes. Login/refresh calls are excluded: a bad-password 401 from /api/auth/login has
+    // nothing to do with token validity and must never trigger a refresh attempt.
+    const isAuthEndpoint = (originalRequest?.url || '').includes('/api/auth/');
+    const isAuthFailure =
+      !isAuthEndpoint &&
       status === 401 &&
       (code === 'TOKEN_EXPIRED' ||
+        code === 'NO_TOKEN' ||
+        code === 'INVALID_TOKEN' ||
         message === 'Token expired' ||
         message === 'Access token expired');
 
-    if (isTokenExpired && !originalRequest._retry) {
+    if (isAuthFailure && !originalRequest._retry) {
       originalRequest._retry = true;
 
       if (isRefreshing) {

@@ -809,7 +809,11 @@ exports.clockIn = async (req, res) => {
             session_id: sessionId,
             employee_name: `${emp.first_name} ${emp.last_name}`,
             attendance_date: today,
-            is_holiday: holidayCheck.isHoliday
+            is_holiday: holidayCheck.isHoliday,
+            // Trusted server clock, for the frontend to anchor its live timer against instead
+            // of the employee's own device clock (which the request never even sends here —
+            // clock_in above is computed entirely from `now = new Date()` on this server).
+            server_time: now.toISOString()
         };
 
         console.log(`✅ Clock-in successful for ${employee_id}:`, {
@@ -1127,7 +1131,9 @@ exports.clockOut = async (req, res) => {
             total_minutes: totalMinutes,
             total_hours_display: totalHoursDisplay,
             status: status,
-            response_time_ms: totalTime
+            response_time_ms: totalTime,
+            // Trusted server clock — see clockIn's server_time for why the frontend syncs to this.
+            server_time: now.toISOString()
         });
 
     } catch (error) {
@@ -1540,7 +1546,11 @@ exports.getTodayAttendance = async (req, res) => {
             attendance: formattedAttendance,
             active_session: activeSession && activeSession.length > 0 ? activeSession[0] : null,
             has_active_session: activeSession && activeSession.length > 0,
-            today_date: todayStr
+            today_date: todayStr,
+            // Trusted server clock — the frontend syncs its live "hours worked" timer to this
+            // instead of the employee's own device clock. This endpoint is polled on mount and
+            // after every clock action, so it doubles as a frequent resync point.
+            server_time: new Date().toISOString()
         });
     } catch (error) {
         console.error('❌ Error in getTodayAttendance:', error);
