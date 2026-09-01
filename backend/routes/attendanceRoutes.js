@@ -98,6 +98,11 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
     // Admin mark attendance (with Paid Leave / Comp Off balance management)
     router.post('/admin/mark', authenticateToken, requireAdmin, attendanceController.adminMarkAttendance);
 
+    // Company Holidays (HOL) — creating one is HR/Admin only; listing is any authenticated
+    // role, since an employee's own attendance page must also be able to resolve HOL.
+    router.post('/holidays', authenticateToken, requireAdmin, attendanceController.createCompanyHoliday);
+    router.get('/holidays', authenticateToken, attendanceController.listCompanyHolidays);
+
     // Update historical late marks (Admin only)
     router.post('/update-historical-late-marks', authenticateToken, requireAdmin, attendanceController.updateHistoricalLateMarks);
 

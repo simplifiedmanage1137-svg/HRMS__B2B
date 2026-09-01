@@ -18,7 +18,8 @@ import {
   FaHistory,
   FaRegClock,
   FaArrowLeft,
-  FaBirthdayCake
+  FaBirthdayCake,
+  FaUmbrellaBeach
 } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import axios from '../../config/axios';
@@ -387,6 +388,12 @@ const Attendance = () => {
     const isWeekend = record.dayOfWeek === 0 || record.dayOfWeek === 6;
     if (record.isWeeklyOff || (isWeekend && !record.clock_in)) {
       return statusPill('weekend', 'W-Off', <FaMoon size={10} />);
+    }
+
+    // Company holiday (static calendar or HR/Admin's HOL button, see getEmployeeAttendanceReport)
+    // — no clock_in by design, must not fall through to "Not Clocked" below.
+    if (!record.clock_in && record.status === 'holiday') {
+      return statusPill('holiday', record.is_company_holiday ? 'HOL' : 'Holiday', <FaUmbrellaBeach size={10} />);
     }
 
     // No clock_in but the backend already says Present — two cases write this shape:

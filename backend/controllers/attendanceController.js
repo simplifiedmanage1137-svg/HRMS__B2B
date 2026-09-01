@@ -3,6 +3,7 @@ const supabase = require('../config/supabase');
 const { holidays } = require('../data/holidays');
 const { normalizeName, getEmployeeById, getTeamEmployeeIdsByManagerName, getTeamEmployeeIdsByEmployeeId, employeeHasDirectReports } = require('../utils/employeeLookup');
 const { isFlexibleShiftEnabled, getFlexibleShiftStatus } = require('../utils/flexibleShift');
+const CompanyHolidayService = require('../services/companyHolidayService');
 
 // Generate unique session ID
 const generateSessionId = () => {
@@ -1772,6 +1773,76 @@ exports.getAttendanceReport = async (req, res) => {
             };
         }));
 
+        // ── Company Holidays (HOL) ──────────────────────────────────────────────────────
+        // Override any existing non-worked row on a holiday date to HOL, and synthesize a
+        // (never-persisted) HOL entry for any active employee with no row at all that date —
+        // e.g. the holiday was applied before the nightly cron ever created a placeholder row.
+        // An employee who actually clocked in and worked through the holiday keeps their real
+        // status (comp-off eligible), matching the same "real punch beats a placeholder" rule
+        // used everywhere else in this report.
+        const companyHolidays = await CompanyHolidayService.getHolidaysInRange(start, end);
+        if (companyHolidays.length > 0) {
+            const holidayNameByDate = {};
+            companyHolidays.forEach(h => { holidayNameByDate[h.holiday_date] = h.name; });
+            const holidayDates = Object.keys(holidayNameByDate);
+
+            const employeeIdsWithRowByDate = {};
+            holidayDates.forEach(d => { employeeIdsWithRowByDate[d] = new Set(); });
+
+            formattedAttendance.forEach(rec => {
+                const dateKey = rec.attendance_date ? rec.attendance_date.split('T')[0] : rec.attendance_date;
+                if (holidayNameByDate[dateKey] === undefined) return;
+                employeeIdsWithRowByDate[dateKey].add(rec.employee_id);
+                if (!rec.clock_in) {
+                    rec.status = 'holiday';
+                    rec.is_holiday = true;
+                    rec.holiday_name = holidayNameByDate[dateKey];
+                    rec.is_company_holiday = true;
+                }
+            });
+
+            let empQuery = supabase.from('employees')
+                .select('employee_id, first_name, last_name, department, shift_timing, profile_image')
+                .eq('is_active', true);
+            if (employee_id) empQuery = empQuery.eq('employee_id', employee_id);
+            if (teamIds) empQuery = empQuery.in('employee_id', teamIds);
+            const { data: activeEmployeesForHoliday } = await empQuery;
+
+            (activeEmployeesForHoliday || []).forEach(emp => {
+                holidayDates.forEach(dateStr => {
+                    if (employeeIdsWithRowByDate[dateStr].has(emp.employee_id)) return;
+                    formattedAttendance.push({
+                        id: null,
+                        employee_id: emp.employee_id,
+                        attendance_date: dateStr,
+                        clock_in: null,
+                        clock_out: null,
+                        total_hours: 0,
+                        total_minutes: 0,
+                        total_hours_display: '0h 0m',
+                        status: 'holiday',
+                        is_late: false,
+                        late_minutes: 0,
+                        late_display: null,
+                        early_minutes: null,
+                        shift_time_used: emp.shift_timing || null,
+                        is_holiday: true,
+                        holiday_name: holidayNameByDate[dateStr],
+                        attendance_type: null,
+                        comp_off_awarded: false,
+                        comp_off_days: 0,
+                        is_regularized: false,
+                        total_break_minutes: 0,
+                        first_name: emp.first_name || '',
+                        last_name: emp.last_name || '',
+                        department: emp.department || '',
+                        profile_image: emp.profile_image || null,
+                        is_company_holiday: true,
+                    });
+                });
+            });
+        }
+
         let totalWorkingMinutes = 0;
         formattedAttendance.forEach(a => {
             if (a.total_minutes) totalWorkingMinutes += a.total_minutes;
@@ -2065,6 +2136,65 @@ exports.getEmployeeAttendanceReport = async (req, res) => {
                 profile_image: employee.profile_image || null
             };
         }));
+
+        // ── Company Holidays (HOL) ──────────────────────────────────────────────────────
+        // Same rule as getAttendanceReport: override a non-worked row on a holiday date to
+        // HOL, and synthesize one (never persisted) for a holiday date with no row at all —
+        // so this employee's own attendance page can never disagree with the admin report.
+        const companyHolidaysForEmp = await CompanyHolidayService.getHolidaysInRange(start, end);
+        if (companyHolidaysForEmp.length > 0) {
+            const holidayNameByDate = {};
+            companyHolidaysForEmp.forEach(h => { holidayNameByDate[h.holiday_date] = h.name; });
+
+            const datesWithRow = new Set();
+            formattedAttendance.forEach(rec => {
+                const dateKey = rec.attendance_date ? rec.attendance_date.split('T')[0] : rec.attendance_date;
+                if (holidayNameByDate[dateKey] === undefined) return;
+                datesWithRow.add(dateKey);
+                if (!rec.clock_in) {
+                    rec.status = 'holiday';
+                    rec.is_holiday = true;
+                    rec.holiday_name = holidayNameByDate[dateKey];
+                    rec.is_company_holiday = true;
+                }
+            });
+
+            const missingHolidayDates = Object.keys(holidayNameByDate).filter(d => !datesWithRow.has(d));
+            if (missingHolidayDates.length > 0) {
+                const { data: empProfile } = await supabase.from('employees')
+                    .select('first_name, last_name, department, shift_timing, profile_image')
+                    .eq('employee_id', employee_id)
+                    .maybeSingle();
+                missingHolidayDates.forEach(dateStr => {
+                    formattedAttendance.push({
+                        id: null,
+                        employee_id,
+                        attendance_date: dateStr,
+                        clock_in: null,
+                        clock_out: null,
+                        total_hours: 0,
+                        total_minutes: 0,
+                        total_hours_display: '0h 0m',
+                        status: 'holiday',
+                        is_late: false,
+                        late_minutes: 0,
+                        late_display: null,
+                        early_minutes: null,
+                        is_holiday: true,
+                        holiday_name: holidayNameByDate[dateStr],
+                        attendance_type: null,
+                        comp_off_awarded: false,
+                        is_regularized: false,
+                        total_break_minutes: 0,
+                        first_name: empProfile?.first_name || '',
+                        last_name: empProfile?.last_name || '',
+                        department: empProfile?.department || '',
+                        profile_image: empProfile?.profile_image || null,
+                        is_company_holiday: true,
+                    });
+                });
+            }
+        }
 
         let totalWorkingMinutes = 0;
         formattedAttendance.forEach(a => {
@@ -3608,6 +3738,53 @@ exports.adminMarkAttendance = async (req, res) => {
     } catch (error) {
         console.error('❌ adminMarkAttendance error:', error);
         res.status(500).json({ success: false, message: 'Failed to mark attendance', error: error.message });
+    }
+};
+
+// ── Company Holidays (HOL) ────────────────────────────────────────────────────
+// HR/Admin marks a date as a company-wide holiday from the Attendance Reports page. Stored in
+// company_holidays (see services/companyHolidayService.js) — no per-employee attendance rows
+// are created; getAttendanceReport/getEmployeeAttendanceReport resolve HOL for every employee
+// on that date at read time, the same way the static holiday calendar already works.
+const isValidDateStr = (s) => {
+    if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+    const [y, m, d] = s.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+};
+
+// POST /api/attendance/holidays — HR/Admin only (requireAdmin, applied at the route)
+exports.createCompanyHoliday = async (req, res) => {
+    try {
+        const { date, name } = req.body;
+        if (!date || !isValidDateStr(date)) {
+            return res.status(400).json({ success: false, message: 'A valid date (YYYY-MM-DD) is required' });
+        }
+
+        const created = await CompanyHolidayService.create(date, name, req.user?.employeeId);
+        return res.json({
+            success: true,
+            message: `Holiday applied successfully for ${date}.`,
+            holiday: created,
+        });
+    } catch (error) {
+        if (error.code === 'DUPLICATE_HOLIDAY') {
+            return res.status(409).json({ success: false, code: 'DUPLICATE_HOLIDAY', message: error.message });
+        }
+        console.error('❌ createCompanyHoliday error:', error);
+        res.status(500).json({ success: false, message: 'Failed to apply holiday', error: error.message });
+    }
+};
+
+// GET /api/attendance/holidays — any authenticated role (read-only; the report/status
+// endpoints below need every employee's own attendance page to agree with the admin report).
+exports.listCompanyHolidays = async (req, res) => {
+    try {
+        const holidays = await CompanyHolidayService.getAll();
+        res.json({ success: true, holidays });
+    } catch (error) {
+        console.error('❌ listCompanyHolidays error:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch holidays', error: error.message });
     }
 };
 

@@ -748,9 +748,13 @@ const AdminDashboard = () => {
     });
 
     const onLeave = attendanceData.filter(a => a.is_on_leave || a.status === 'on_leave').length;
+    // A company holiday (static calendar or HOL-button, see getAttendanceReport) has no
+    // clock_in and isn't a leave — without excluding it here, every employee on a holiday
+    // would silently count as Absent in this deficit-based total.
+    const holidayCount = attendanceData.filter(a => a.status === 'holiday').length;
     const totalPresent = present + halfDay + working;
 
-    absent = total - totalPresent - onLeave;
+    absent = total - totalPresent - onLeave - holidayCount;
     absent = absent < 0 ? 0 : absent;
 
     setStats({

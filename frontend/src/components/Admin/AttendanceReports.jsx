@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Card, Table, Badge, Form, Row, Col,
-  Button, Spinner, Alert
+  Button, Spinner, Alert, Modal
 } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -91,6 +91,15 @@ const AttendanceReports = () => {
   const dailyTableScrollRef = useRef(null);
   const dailyAutoAdvanceLockRef = useRef(false);
   const [dailyLoadingMore, setDailyLoadingMore] = useState(false);
+
+  // HOL (mark a date as a company-wide holiday) — modal has two steps: pick a date, then
+  // confirm before it's actually applied (per the spec: "show a confirmation before applying").
+  const [showHolModal, setShowHolModal] = useState(false);
+  const [holStep, setHolStep] = useState('pick'); // 'pick' | 'confirm'
+  const [holDate, setHolDate] = useState(getISTDateString());
+  const [holName, setHolName] = useState('');
+  const [holSubmitting, setHolSubmitting] = useState(false);
+  const [holError, setHolError] = useState('');
 
   const currentDate = getISTNow();
   const currentDay = currentDate.getDate();
@@ -615,6 +624,9 @@ const AttendanceReports = () => {
         let compOffDays = 0;
         let overtimeHours = 0;
         let overtimeAmount = 0;
+        // True only for a date HR/Admin marked via the HOL button (company_holidays table) —
+        // distinguishes it from the static calendar's regular "Holiday" label.
+        let isCompanyHoliday = false;
 
         // DB attendance has highest priority — Excel-imported data overrides holiday/weekend
         if (dayAttendance) {
@@ -628,6 +640,7 @@ const AttendanceReports = () => {
 
           const dbStatus = (dayAttendance.status || '').toLowerCase();
           const dbHours  = Number(dayAttendance.total_hours) || 0;
+          isCompanyHoliday = !!dayAttendance.is_company_holiday;
           totalHours = dbHours;
 
           // Special case: employee is actively working right now (not yet clocked out)
@@ -693,7 +706,7 @@ const AttendanceReports = () => {
                       : status === 'half_day' ? `Half Day${h}`
                       : status === 'on_leave' ? 'On Leave'
                       : status === 'weekend'  ? 'Week Off'
-                      : status === 'holiday'  ? 'Holiday'
+                      : status === 'holiday'  ? (isCompanyHoliday ? 'HOL' : 'Holiday')
                       : status === 'comp_off' ? 'Comp Off'
                       : status === 'missing'  ? 'Missing Clock-Out (auto-closed after 15h)'
                       : dbStatus;
@@ -753,8 +766,9 @@ const AttendanceReports = () => {
           is_late: lateMinutes > 0,
           tooltip,
           leave_type: leaveType,
-          is_holiday: !!dayHoliday,
-          holiday_name: dayHoliday?.name,
+          is_holiday: !!dayHoliday || (status === 'holiday'),
+          holiday_name: dayHoliday?.name || (status === 'holiday' ? dayAttendance?.holiday_name : undefined),
+          is_company_holiday: isCompanyHoliday,
           comp_off_awarded: compOffAwarded,
           comp_off_days: compOffDays,
           overtime_hours: overtimeHours,
@@ -984,6 +998,54 @@ const AttendanceReports = () => {
     };
   };
 
+  // ── HOL: mark a date as a company-wide holiday ──────────────────────────────────────
+  const openHolModal = () => {
+    setHolDate(selectedDate || getISTDateString());
+    setHolName('');
+    setHolStep('pick');
+    setHolError('');
+    setShowHolModal(true);
+  };
+
+  const closeHolModal = () => {
+    if (holSubmitting) return;
+    setShowHolModal(false);
+  };
+
+  const submitHoliday = async () => {
+    setHolSubmitting(true);
+    setHolError('');
+    try {
+      const res = await axios.post(API_ENDPOINTS.ATTENDANCE_HOLIDAYS, {
+        date: holDate,
+        name: holName.trim() || undefined,
+      });
+      setShowHolModal(false);
+      setMessage(res.data?.message || `Holiday applied successfully for ${holDate}.`);
+      setMessageType('success');
+      setTimeout(() => setMessage(''), 4000);
+      // Refresh whichever view is currently showing so HOL appears immediately.
+      setRefreshKey(k => k + 1);
+      if (activeView === 'daily' && selectedDate === holDate) {
+        fetchDailyAttendance();
+      }
+    } catch (error) {
+      const code = error.response?.data?.code;
+      const backendMessage = error.response?.data?.message;
+      if (error.response?.status === 403) {
+        setHolError('You do not have permission to create a company holiday.');
+      } else if (code === 'DUPLICATE_HOLIDAY' || error.response?.status === 409) {
+        setHolError(backendMessage || `${holDate} is already marked as a Holiday.`);
+      } else if (!error.response) {
+        setHolError('Could not reach the server. Please check your connection and try again.');
+      } else {
+        setHolError(backendMessage || 'Failed to apply the holiday. Please try again.');
+      }
+    } finally {
+      setHolSubmitting(false);
+    }
+  };
+
   const handleExportExcel = async () => {
     try {
       if (activeView === 'daily') {
@@ -1015,7 +1077,7 @@ const AttendanceReports = () => {
             : record.status === 'half_day' ? 'Half Day' :
               record.status === 'working' ? 'Working' :
                 record.status === 'on_leave' ? 'On Leave' :
-                  record.status === 'holiday' ? 'Holiday' :
+                  record.status === 'holiday' ? (record.is_company_holiday ? 'HOL' : 'Holiday') :
                     record.status === 'weekend' ? 'Weekend Off' : 'Absent'
         }));
 
@@ -1100,7 +1162,7 @@ const AttendanceReports = () => {
               if (dayRecord.status === 'present' || dayRecord.status === 'working') status = 'P';
               else if (dayRecord.status === 'half_day') status = 'HD';
               else if (dayRecord.status === 'on_leave') status = 'L';
-              else if (dayRecord.status === 'holiday') status = 'H';
+              else if (dayRecord.status === 'holiday') status = dayRecord.is_company_holiday ? 'HOL' : 'H';
               else if (dayRecord.status === 'weekend') status = 'W-OFF';
               else status = 'A';
             } else {
@@ -1189,7 +1251,7 @@ const AttendanceReports = () => {
     }
     if (record.status === 'half_day') return <Badge bg="warning" className="px-2 py-1 text-nowrap">Half Day</Badge>;
     if (record.status === 'on_leave') return <Badge bg="purple" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#6f42c1' }}>On Leave</Badge>;
-    if (record.status === 'holiday') return <Badge bg="warning" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#ffc107' }}>Holiday</Badge>;
+    if (record.status === 'holiday') return <Badge bg="warning" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#ffc107' }}>{record.is_company_holiday ? 'HOL' : 'Holiday'}</Badge>;
     if (record.status === 'weekend') return <Badge bg="secondary" className="px-2 py-1 text-nowrap"><FaMoon className="me-1" size={10} /> W-OFF</Badge>;
     return <Badge bg="secondary" className="px-2 py-1 text-nowrap">Absent</Badge>;
   };
@@ -1335,7 +1397,12 @@ const AttendanceReports = () => {
                       const dy  = String(d.getDate()).padStart(2, '0');
                       const ds  = `${yr}-${mo}-${dy}`;
                       const rec = empRecords.find(r => r.date === ds);
-                      const cs  = rec ? (STATUS_CELL[rec.status] || { bg: '#f3f4f6', color: '#6b7280', label: '?' }) : null;
+                      const csBase = rec ? (STATUS_CELL[rec.status] || { bg: '#f3f4f6', color: '#6b7280', label: '?' }) : null;
+                      // HOL (an HR/Admin-declared company holiday) reuses the same styling as a
+                      // regular calendar Holiday, just with a distinct 3-letter label.
+                      const cs = csBase && rec?.is_company_holiday && rec.status === 'holiday'
+                        ? { ...csBase, label: 'HOL' }
+                        : csBase;
                       const isTd = d.toDateString() === new Date().toDateString();
                       return (
                         <td key={i} title={rec?.tooltip} style={{ padding: '2px 1px', textAlign: 'center', background: isTd ? '#eff6ff' : rowBg, borderRight: '1px solid #f3f4f6' }}>
@@ -1600,14 +1667,24 @@ const AttendanceReports = () => {
               ))}
             </Form.Select>
           </div>
-          <Button
-            size="sm"
-            onClick={handleExportExcel}
-            className="text-nowrap rounded-3"
-            style={{ background: DA.primaryGreen, borderColor: DA.primaryGreen }}
-          >
-            <FaFileExcel className="me-2" size={12} /> Export
-          </Button>
+          <div className="d-flex gap-2">
+            <Button
+              size="sm"
+              variant="outline-warning"
+              onClick={openHolModal}
+              className="text-nowrap rounded-3"
+            >
+              <FaUmbrellaBeach className="me-2" size={12} /> HOL
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleExportExcel}
+              className="text-nowrap rounded-3"
+              style={{ background: DA.primaryGreen, borderColor: DA.primaryGreen }}
+            >
+              <FaFileExcel className="me-2" size={12} /> Export
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="mb-3">
@@ -1663,6 +1740,9 @@ const AttendanceReports = () => {
 
             <Col xs={12} lg={4}>
               <div className="d-flex gap-2 justify-content-start justify-content-lg-end">
+                <Button variant="outline-warning" size="sm" onClick={openHolModal} className="text-nowrap">
+                  <FaUmbrellaBeach className="me-2" size={12} /> HOL
+                </Button>
                 <Button variant="success" size="sm" onClick={handleExportExcel} className="w-50 w-lg-auto">
                   <FaFileExcel className="me-2" size={12} /> Export Report
                 </Button>
@@ -1750,7 +1830,7 @@ const AttendanceReports = () => {
                       : statusKey === 'working' ? 'Working'
                       : statusKey === 'half_day' ? 'Half Day'
                       : statusKey === 'on_leave' ? 'On Leave'
-                      : statusKey === 'holiday' ? 'Holiday'
+                      : statusKey === 'holiday' ? (record.is_company_holiday ? 'HOL' : 'Holiday')
                       : statusKey === 'weekend' ? 'Week Off'
                       : 'Absent';
 
@@ -1919,6 +1999,77 @@ const AttendanceReports = () => {
           <span><FaTrophy className="me-1 text-purple" size={10} /> 🎉 Comp-Off</span>
         </p>
       </div>
+
+      {/* HOL — mark a date as a company-wide holiday */}
+      <Modal show={showHolModal} onHide={closeHolModal} centered>
+        <Modal.Header closeButton={!holSubmitting}>
+          <Modal.Title className="fs-6 fw-bold">
+            <FaUmbrellaBeach className="me-2 text-warning" /> Mark Company Holiday
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {holStep === 'pick' ? (
+            <>
+              <Form.Group className="mb-3">
+                <Form.Label className="small fw-semibold">Date</Form.Label>
+                <Form.Control
+                  type="date"
+                  value={holDate}
+                  onChange={(e) => setHolDate(e.target.value)}
+                />
+              </Form.Group>
+              <Form.Group className="mb-2">
+                <Form.Label className="small fw-semibold">Holiday Name (optional)</Form.Label>
+                <Form.Control
+                  type="text"
+                  placeholder="e.g. Unplanned Office Closure"
+                  value={holName}
+                  onChange={(e) => setHolName(e.target.value)}
+                  maxLength={100}
+                />
+              </Form.Group>
+              {holError && <Alert variant="danger" className="py-2 small mb-0">{holError}</Alert>}
+            </>
+          ) : (
+            <div className="text-center py-2">
+              <FaExclamationTriangle className="text-warning mb-2" size={28} />
+              <p className="mb-1">
+                Are you sure you want to mark{' '}
+                <strong>{holDate ? new Date(`${holDate}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : holDate}</strong>{' '}
+                as a Holiday for all employees?
+              </p>
+              <p className="text-muted small mb-0">
+                Every employee will show status <strong>HOL</strong> for this date. No clock-in/out times will be created.
+              </p>
+              {holError && <Alert variant="danger" className="py-2 small mt-3 mb-0">{holError}</Alert>}
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" size="sm" onClick={closeHolModal} disabled={holSubmitting}>
+            Cancel
+          </Button>
+          {holStep === 'pick' ? (
+            <Button
+              variant="warning"
+              size="sm"
+              disabled={!holDate}
+              onClick={() => { setHolError(''); setHolStep('confirm'); }}
+            >
+              Apply
+            </Button>
+          ) : (
+            <>
+              <Button variant="outline-secondary" size="sm" onClick={() => setHolStep('pick')} disabled={holSubmitting}>
+                Back
+              </Button>
+              <Button variant="warning" size="sm" onClick={submitHoliday} disabled={holSubmitting}>
+                {holSubmitting ? <><Spinner size="sm" className="me-2" />Applying…</> : 'Confirm'}
+              </Button>
+            </>
+          )}
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 };

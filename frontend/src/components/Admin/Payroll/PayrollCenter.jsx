@@ -308,6 +308,12 @@ const PayrollCenter = () => {
         const status = (att.status || '').toLowerCase();
         if (status === 'present' || status === 'working') return 'P';
         if (status === 'half_day') return 'HF';
+        // Two holiday conventions can appear here: an admin-calendar Week Off/Holiday mark
+        // is a real DB row with status='absent' + is_holiday=true; a company holiday applied
+        // via the Attendance Reports "HOL" button (getAttendanceReport override/synthesis,
+        // see companyHolidayService.js) carries status='holiday' directly (and has no
+        // clock_in/out at all, real or otherwise). Both must export as HOL, never Absent.
+        if (status === 'holiday') return 'HOL';
         if (status === 'absent') return att.is_holiday ? 'HOL' : 'A';
         if (att.clock_in && !att.clock_out) return 'P';
         if (att.clock_in && att.clock_out) {

@@ -116,6 +116,9 @@ export const API_ENDPOINTS = {
   // Admin mark attendance (Paid Leave / Comp Off)
   ATTENDANCE_ADMIN_MARK: ep('/api/attendance/admin/mark'),
 
+  // Company Holidays (HOL) — HR/Admin only for POST; GET is read-only for any authenticated role
+  ATTENDANCE_HOLIDAYS: ep('/api/attendance/holidays'),
+
   // Attendance Import / Export
   ATTENDANCE_IMPORT_VALIDATE: ep('/api/attendance/import/validate'),
   ATTENDANCE_IMPORT:          ep('/api/attendance/import'),

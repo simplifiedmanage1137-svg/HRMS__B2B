@@ -3,6 +3,7 @@ const { isDateHoliday, getHolidayName } = require('../data/holidays');
 const { getDeductionTotal } = require('./deductionController');
 const { pickBetterAttendanceRow } = require('./attendanceController')._shared;
 const { getCycleDates, parseLocalDate, LATE_FREE_COUNT } = require('../config/payrollCycle');
+const CompanyHolidayService = require('../services/companyHolidayService');
 
 const FIXED_WORKING_DAYS = 22;
 // Helper function to get month name
@@ -34,8 +35,12 @@ const calculateWorkingDaysInCycle = (startDate, endDate, joiningDate = null) => 
     return workingDays;
 };
 
-// Count company holidays (weekdays only) in cycle
-const countHolidaysInCycle = (startDateStr, endDateStr) => {
+// Count company holidays (weekdays only) in cycle. `extraHolidays` is a Map of
+// dateStr -> name for HR/Admin-declared holidays (company_holidays table, see
+// companyHolidayService.js) — additive to the static calendar in data/holidays.js, so a
+// holiday applied via the Attendance Reports "HOL" button is treated exactly like a static
+// one for payroll purposes (a paid day, not counted as absent/loss-of-pay).
+const countHolidaysInCycle = (startDateStr, endDateStr, extraHolidays = new Map()) => {
     const startDate = parseLocalDate(startDateStr);
     const endDate   = parseLocalDate(endDateStr);
     let holidayDays = 0;
@@ -56,6 +61,9 @@ const countHolidaysInCycle = (startDateStr, endDateStr) => {
             if (isDateHoliday(dateStr)) {
                 holidayDays++;
                 holidayNames.push({ date: dateStr, name: getHolidayName(dateStr) });
+            } else if (extraHolidays.has(dateStr)) {
+                holidayDays++;
+                holidayNames.push({ date: dateStr, name: extraHolidays.get(dateStr) });
             }
         }
         currentDate.setDate(currentDate.getDate() + 1);
@@ -145,8 +153,11 @@ const getApprovedLeaves = async (employeeId, startDateStr, endDateStr) => {
     return leaves || [];
 };
 
-// Calculate attendance summary
-const calculateAttendanceSummary = (attendanceRecords, leaves, startDateStr, endDateStr, joiningDate = null) => {
+// Calculate attendance summary. `extraHolidays` — see countHolidaysInCycle above — is a
+// Map of dateStr -> name for HR/Admin-declared holidays, checked alongside the static
+// calendar so a day with no attendance/leave row on a declared holiday credits a paid day
+// instead of falling through to absentDays.
+const calculateAttendanceSummary = (attendanceRecords, leaves, startDateStr, endDateStr, joiningDate = null, extraHolidays = new Map()) => {
     const startDate = parseLocalDate(startDateStr);
     const endDate   = parseLocalDate(endDateStr);
     const joinDate  = joiningDate ? parseLocalDate(joiningDate.toISOString().split('T')[0]) : null;
@@ -253,8 +264,13 @@ const calculateAttendanceSummary = (attendanceRecords, leaves, startDateStr, end
                 halfDays++;
                 presentDays += 0.5;
             } else if (dbStatus === 'absent') {
-                // Admin-marked week_off or holiday (is_holiday=true) → paid, no deduction
-                if (attendance.is_holiday) {
+                // Admin-marked week_off or holiday (is_holiday=true) → paid, no deduction.
+                // Also treat as paid if this date was declared a company holiday via the HOL
+                // button AFTER this attendance row already existed (e.g. a nightly-cron
+                // "absent" placeholder from before the holiday was applied) — the row's own
+                // is_holiday column was never touched, so extraHolidays is the only place
+                // that knows.
+                if (attendance.is_holiday || extraHolidays.has(dateStr)) {
                     presentDays++;
                 } else {
                     absentDays++;
@@ -284,7 +300,7 @@ const calculateAttendanceSummary = (attendanceRecords, leaves, startDateStr, end
                 lateDays++;
                 totalLateMinutes += Number(attendance.late_minutes) || 0;
             }
-        } else if (isDateHoliday(dateStr)) {
+        } else if (isDateHoliday(dateStr) || extraHolidays.has(dateStr)) {
             // Company holiday, no attendance row and no leave record — expected, since
             // cron/absentEmployeeCheck.js explicitly skips marking absences on holidays, so
             // there is usually nothing in attendanceMap for this date at all. This day is
@@ -421,13 +437,18 @@ exports.generateSalarySlip = async (req, res) => {
         const holidayCountEndDateStr = cycle.endDate > todayForCycle
             ? `${todayForCycle.getFullYear()}-${String(todayForCycle.getMonth() + 1).padStart(2, '0')}-${String(todayForCycle.getDate()).padStart(2, '0')}`
             : cycle.endDateStr;
-        const { holidayDays, holidayNames } = countHolidaysInCycle(cycle.startDateStr, holidayCountEndDateStr);
+        // HR/Admin-declared holidays (the Attendance Reports "HOL" button) for this cycle —
+        // additive to the static calendar checked inside countHolidaysInCycle/
+        // calculateAttendanceSummary themselves.
+        const dbHolidaysForCycle = await CompanyHolidayService.getHolidaysInRange(cycle.startDateStr, cycle.endDateStr);
+        const extraHolidaysMap = new Map(dbHolidaysForCycle.map(h => [h.holiday_date, h.name]));
+        const { holidayDays, holidayNames } = countHolidaysInCycle(cycle.startDateStr, holidayCountEndDateStr, extraHolidaysMap);
 
         // ── 5. Calculate attendance summary ──
         const summary = calculateAttendanceSummary(
             attendanceRecords, leaveRecords,
             cycle.startDateStr, cycle.endDateStr,
-            joiningDate
+            joiningDate, extraHolidaysMap
         );
 
         // ── 6. Salary calculation ──
@@ -1309,6 +1330,11 @@ exports.getBulkPayroll = async (req, res) => {
         const cycle = getCycleDates(parseInt(month), parseInt(year));
         const defaultWD = calculateWorkingDaysInCycle(cycle.startDate, cycle.endDate);
 
+        // HR/Admin-declared holidays (the Attendance Reports "HOL" button) for this cycle —
+        // fetched once for every employee below, same as generateSalarySlip.
+        const dbHolidaysForCycle = await CompanyHolidayService.getHolidaysInRange(cycle.startDateStr, cycle.endDateStr);
+        const extraHolidaysMap = new Map(dbHolidaysForCycle.map(h => [h.holiday_date, h.name]));
+
         // Attendance summary per employee for this cycle — reuses the exact same helpers
         // generateSalarySlip uses, so Payroll Preview numbers are guaranteed to match the
         // slip that would actually be generated (single source of truth, not a second calc).
@@ -1321,7 +1347,7 @@ exports.getBulkPayroll = async (req, res) => {
                     getApprovedLeaves(emp.employee_id, cycle.startDateStr, cycle.endDateStr),
                 ]);
                 attendanceByEmployee[emp.employee_id] = calculateAttendanceSummary(
-                    attendanceRecords, leaveRecords, cycle.startDateStr, cycle.endDateStr, joiningDate
+                    attendanceRecords, leaveRecords, cycle.startDateStr, cycle.endDateStr, joiningDate, extraHolidaysMap
                 );
             } catch (attErr) {
                 console.error(`Error computing attendance summary for ${emp.employee_id}:`, attErr);

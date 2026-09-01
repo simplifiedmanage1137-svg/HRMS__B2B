@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const supabase = require('../config/supabase');
 const { syncAttendanceForApprovedLeave } = require('../services/leaveAttendanceSync');
 const { isDateHoliday } = require('../data/holidays');
+const CompanyHolidayService = require('../services/companyHolidayService');
 
 // Helper function to get IST date string
 const getISTDateString = () => {
@@ -11,11 +12,17 @@ const getISTDateString = () => {
     return istTime.toISOString().split('T')[0]; // YYYY-MM-DD format
 };
 
-// Helper function to check if date is weekend or holiday
-const isWeekendOrHoliday = (date) => {
-    const dayOfWeek = new Date(date).getDay();
-    // 0 = Sunday, 6 = Saturday
-    return dayOfWeek === 0 || dayOfWeek === 6;
+// Helper function to check if date is weekend or holiday.
+// NOTE: despite the name, this previously only ever checked weekend — isDateHoliday was
+// imported but never actually consulted here, so a company holiday falling on a weekday
+// (static calendar or, now, one applied via the Attendance Reports "HOL" button) still got
+// every employee marked Absent + an auto-generated Unpaid leave by this nightly job. Now
+// checks both the static calendar and the company_holidays table.
+const isWeekendOrHoliday = async (dateStr) => {
+    const dayOfWeek = new Date(dateStr).getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) return true; // Sunday / Saturday
+    if (isDateHoliday(dateStr)) return true;
+    return !!(await CompanyHolidayService.getHoliday(dateStr));
 };
 
 const isBirthdayToday = (dob, todayStr) => {
@@ -103,8 +110,8 @@ const markAbsentEmployeesAsLeave = async () => {
         const today = getISTDateString();
         console.log(`📅 Processing date: ${today}`);
 
-        // Skip weekends
-        if (isWeekendOrHoliday(today)) {
+        // Skip weekends and holidays (static calendar or HR/Admin-declared via the HOL button)
+        if (await isWeekendOrHoliday(today)) {
             console.log('📅 Skipping weekend/holiday');
             return { success: true, message: 'Skipped weekend/holiday' };
         }

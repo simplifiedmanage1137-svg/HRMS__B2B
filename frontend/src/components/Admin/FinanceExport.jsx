@@ -80,6 +80,11 @@ export default function FinanceExport() {
         else if (r.attendance_type === 'comp_off') { p.present++; p.comp_off++; }
         else if (r.is_holiday && r.holiday_name === 'Week Off') p.weekend++;
         else if (r.is_holiday && r.holiday_name === 'Holiday') p.holiday++;
+        // Any other is_holiday day — a company holiday marked via the Attendance Reports HOL
+        // button carries a custom holiday_name (or status === 'holiday' with no exact Week
+        // Off/Holiday match), so it must still land in the holiday bucket, not fall through
+        // to Absent below.
+        else if (r.is_holiday || s === 'holiday') p.holiday++;
         else if (r.holiday_name === 'Leave') p.on_leave++;
         else if (s === 'present' || s === 'working') p.present++;
         else if (s === 'half_day') { p.present += 0.5; p.half_day++; }
