@@ -25,6 +25,7 @@ const COMPANY = {
         signatoryName: 'Swekcha Tiwari',
         signatoryDesignation: 'HR Manager',
         logoPath: path.join(__dirname, '..', 'assets', 'b2b_logo.png'),
+        stampPath: path.join(__dirname, '..', 'assets', 'b2b_stamp.png'),
     },
     pc: {
         name: 'PropCulture',
@@ -36,6 +37,7 @@ const COMPANY = {
         signatoryName: 'Swekcha Tiwari',
         signatoryDesignation: 'HR Manager',
         logoPath: null,
+        stampPath: null,
     },
 };
 

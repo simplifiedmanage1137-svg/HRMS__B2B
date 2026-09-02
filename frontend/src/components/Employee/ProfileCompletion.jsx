@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Form, Button, Spinner, Alert, ProgressBar, Badge } from 'react-bootstrap';
 import {
   FaUser, FaPhone, FaBriefcase, FaUniversity, FaIdCard,
-  FaHeartbeat, FaFileAlt, FaChevronRight, FaChevronLeft,
-  FaCheckCircle, FaUpload, FaExclamationTriangle
+  FaHeartbeat, FaChevronRight, FaChevronLeft,
+  FaCheckCircle, FaExclamationTriangle
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -23,7 +23,6 @@ const STEPS = [
   { id: 4, label: 'Bank',        icon: <FaUniversity /> },
   { id: 5, label: 'Identity',    icon: <FaIdCard /> },
   { id: 6, label: 'Emergency',   icon: <FaHeartbeat /> },
-  { id: 7, label: 'Documents',   icon: <FaFileAlt /> },
 ];
 
 const BLOOD_GROUPS = ['A+','A-','B+','B-','O+','O-','AB+','AB-'];
@@ -43,7 +42,6 @@ export default function ProfileCompletion({ employee, onSkip }) {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [globalError, setGlobalError] = useState('');
-  const [docWarning, setDocWarning] = useState('');
 
   // ── Skip countdown (shows remaining seconds until re-appearance after skip) ──
   const [skipCountdown, setSkipCountdown] = useState(0);
@@ -85,15 +83,6 @@ export default function ProfileCompletion({ employee, onSkip }) {
     emergency_contact:           employee?.emergency_contact           || '',
   });
 
-  // ── Document files ───────────────────────────────────────────────────────────
-  const [docs, setDocs] = useState({
-    profile_image:        null,
-    aadhar_card:          null,
-    pan_card:             null,
-    appointment_letter:   null,
-    bank_proof:           null,
-  });
-
   // Block keyboard Escape
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') e.preventDefault(); };
@@ -102,12 +91,7 @@ export default function ProfileCompletion({ employee, onSkip }) {
   }, []);
 
   const set = (field) => (e) => {
-    const val = e.target.type === 'file' ? e.target.files[0] : e.target.value;
-    if (e.target.type === 'file') {
-      setDocs(p => ({ ...p, [field]: val }));
-    } else {
-      setForm(p => ({ ...p, [field]: val }));
-    }
+    setForm(p => ({ ...p, [field]: e.target.value }));
     setErrors(p => ({ ...p, [field]: '' }));
   };
 
@@ -151,10 +135,8 @@ export default function ProfileCompletion({ employee, onSkip }) {
       else if (!isPhone(form.emergency_contact))
         errs.emergency_contact = 'Enter a valid 10-digit mobile number';
     }
-    // step 7: all document uploads are optional
-
     return errs;
-  }, [form, docs, employee]);
+  }, [form]);
 
   const next = () => {
     const errs = validate(step);
@@ -166,14 +148,12 @@ export default function ProfileCompletion({ employee, onSkip }) {
 
   // ── Submit ───────────────────────────────────────────────────────────────────
   const submit = async () => {
-    const errs = validate(7);
+    const errs = validate(6);
     if (Object.keys(errs).length) { setErrors(errs); return; }
 
     setSubmitting(true);
     setGlobalError('');
-    setDocWarning('');
 
-    // Step 1: Save profile fields — this MUST succeed
     try {
       await axios.post(API_ENDPOINTS.EMPLOYEE_COMPLETE_PROFILE, {
         ...form,
@@ -187,27 +167,6 @@ export default function ProfileCompletion({ employee, onSkip }) {
       return;
     }
 
-    // Step 2: Upload documents — optional, non-fatal
-    const hasFiles = Object.values(docs).some(Boolean);
-    if (hasFiles) {
-      try {
-        const fd = new FormData();
-        Object.entries(docs).forEach(([key, file]) => {
-          if (file) fd.append(key, file);
-        });
-        await axios.post(
-          API_ENDPOINTS.EMPLOYEE_DOCUMENTS(user.employeeId),
-          fd,
-          { headers: { 'Content-Type': 'multipart/form-data' } }
-        );
-      } catch (err) {
-        // Documents failed but profile is saved — show warning, still complete
-        const detail = err.response?.data?.error || err.response?.data?.message || err.message;
-        setDocWarning(`Profile saved! Documents could not be uploaded (${detail}). You can upload them later from your profile settings.`);
-      }
-    }
-
-    // Step 3: Mark complete in local state regardless of document upload result
     updateUser({ profile_completed: true });
     setSubmitting(false);
     setDone(true);
@@ -222,11 +181,6 @@ export default function ProfileCompletion({ employee, onSkip }) {
           <FaCheckCircle size={56} color="#22c55e" className="mb-3" />
           <h3 className="fw-bold mb-2" style={{ color: '#1e3a5f' }}>Profile Complete!</h3>
           <p className="text-muted mb-4">Welcome aboard, {form.first_name}! Your profile has been saved successfully.</p>
-          {docWarning && (
-            <Alert variant="warning" className="text-start small mb-4">
-              <strong>Note:</strong> {docWarning}
-            </Alert>
-          )}
           <Button
             variant="success"
             size="lg"
@@ -294,7 +248,6 @@ export default function ProfileCompletion({ employee, onSkip }) {
         {step === 4 && <StepBank      form={form} set={set} errors={errors} />}
         {step === 5 && <StepIdentity  form={form} set={set} errors={errors} />}
         {step === 6 && <StepEmergency form={form} set={set} errors={errors} />}
-        {step === 7 && <StepDocuments docs={docs} set={set} errors={errors} employee={employee} />}
       </div>
 
       {/* Footer nav */}
@@ -573,46 +526,5 @@ const StepEmergency = ({ form, set, errors }) => (
         <Form.Control size="sm" value={form.emergency_contact} onChange={set('emergency_contact')} placeholder="10-digit mobile" isInvalid={!!errors.emergency_contact} />
       </Field></TCol>
     </TRow>
-  </>
-);
-
-// ── Step 7: Documents ─────────────────────────────────────────────────────────
-const DOC_FIELDS = [
-  { key: 'profile_image',      label: 'Profile Photo',        required: false, accept: 'image/*',                   hint: 'JPG or PNG, max 5MB — Optional' },
-  { key: 'aadhar_card',        label: 'Aadhaar Card',         required: false, accept: '.pdf,image/*',              hint: 'PDF or image — Optional' },
-  { key: 'pan_card',           label: 'PAN Card',             required: false, accept: '.pdf,image/*',              hint: 'PDF or image — Optional' },
-  { key: 'appointment_letter', label: 'Appointment Letter',   required: false, accept: '.pdf,.doc,.docx,image/*',   hint: 'Optional' },
-  { key: 'bank_proof',         label: 'Bank Proof',           required: false, accept: '.pdf,image/*',              hint: 'Passbook / cancelled cheque — Optional' },
-];
-
-const StepDocuments = ({ docs, set, errors, employee }) => (
-  <>
-    <SectionTitle icon={<FaFileAlt />} title="Upload Documents" />
-    {DOC_FIELDS.map(({ key, label, required, accept, hint }) => {
-      const alreadyUploaded = employee?.[key];
-      return (
-        <div key={key} className="mb-3 p-3 rounded" style={{ border: `1px solid ${errors[key] ? '#ef4444' : '#e2e8f0'}`, background: docs[key] ? '#f0fdf4' : '#fafafa' }}>
-          <div className="d-flex align-items-center justify-content-between mb-2">
-            <div>
-              <span className="small fw-semibold">{label}</span>
-              {required && <span className="text-danger ms-1 small">*</span>}
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>{hint}</div>
-            </div>
-            {alreadyUploaded && !docs[key] && (
-              <Badge bg="success" className="small">Already uploaded</Badge>
-            )}
-            {docs[key] && (
-              <Badge bg="primary" className="small"><FaCheckCircle className="me-1" />{docs[key].name}</Badge>
-            )}
-          </div>
-          <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', border: '1px dashed #cbd5e1', borderRadius: 8, background: '#fff', fontSize: 13 }}>
-            <FaUpload size={13} color="#64748b" />
-            <span style={{ color: '#64748b' }}>{docs[key] ? 'Change file' : alreadyUploaded ? 'Replace file' : 'Choose file'}</span>
-            <input type="file" accept={accept} style={{ display: 'none' }} onChange={set(key)} />
-          </label>
-          {errors[key] && <div className="text-danger mt-1" style={{ fontSize: 11 }}>{errors[key]}</div>}
-        </div>
-      );
-    })}
   </>
 );

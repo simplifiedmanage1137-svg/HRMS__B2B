@@ -147,6 +147,20 @@ const renderBlocks = (doc, blocks) => {
 // of a currency symbol. "Rs." is the safe, universally-renderable equivalent.
 const fmtInr = (n) => `Rs. ${Math.round(n).toLocaleString('en-IN')}`;
 
+// Company seal, stamped near the bottom of the annexure (the offer letter's last page).
+const drawStamp = (doc, company) => {
+    if (!company.stampPath || !fs.existsSync(company.stampPath)) return;
+    const size = 110;
+    ensureSpace(doc, size);
+    const x = doc.page.width - MARGIN - size;
+    const y = doc.y + 10;
+    doc.save();
+    doc.opacity(0.85);
+    doc.image(company.stampPath, x, y, { width: size, height: size });
+    doc.restore();
+    doc.y = y + size;
+};
+
 const renderAnnexure = (doc, data) => {
     doc.addPage();
     const contentWidth = doc.page.width - 2 * MARGIN;
@@ -206,6 +220,8 @@ const renderAnnexure = (doc, data) => {
     doc.font(FONT_BODY).fontSize(8.5).fillColor('#6b7280')
         .text('Figures are indicative and subject to applicable statutory deductions and company payroll policy in effect at the time of payment.',
             MARGIN, doc.y, { width: contentWidth });
+
+    drawStamp(doc, data.company);
 };
 
 const generateOfferLetterPdf = (data) => new Promise((resolve, reject) => {
