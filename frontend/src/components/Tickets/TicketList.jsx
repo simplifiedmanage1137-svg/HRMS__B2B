@@ -178,10 +178,11 @@ function TicketForm({ show, onHide, onCreated, userEmail, userName, userEmployee
   const tagRef = useRef(null);
   const raisedForRef = useRef(null);
 
-  // Load the full employee directory once (for "Raised For" — can be anyone, any department)
+  // Load the full employee directory once (for "Raised For" — can be anyone, any department).
+  // active=true so a deactivated employee can no longer be picked as a ticket's subject.
   useEffect(() => {
     if (!show) return;
-    axios.get(API_ENDPOINTS.EMPLOYEES)
+    axios.get(API_ENDPOINTS.EMPLOYEES, { params: { active: 'true' } })
       .then(r => setAllEmployees(Array.isArray(r.data) ? r.data : (r.data?.data || [])))
       .catch(() => setAllEmployees([]));
   }, [show]);
