@@ -16,7 +16,10 @@ const minExpiry = () => {
     return d.toISOString().split('T')[0];
 };
 
-const EMPTY_FORM = { employee_name: '', designation: '', department: '', employment_type: '', salary: '', reporting_manager: '', reporting_manager_id: '', expiry_date: '', notes: '', email: '' };
+// PF defaults to the same statutory default used across payroll (Payroll > PF/PT tab,
+// salaryController.js) when left blank — pre-filled here so the in-hand preview is accurate
+// from the start instead of silently assuming ₹0 until the admin thinks to change it.
+const EMPTY_FORM = { employee_name: '', designation: '', department: '', employment_type: '', salary: '', pf_amount: '1800', professional_tax_amount: '0', reporting_manager: '', reporting_manager_id: '', expiry_date: '', notes: '', email: '' };
 
 export default function GenerateLinkModal({ show, onHide, onGenerated }) {
     const [form, setForm]       = useState(EMPTY_FORM);
@@ -62,6 +65,14 @@ export default function GenerateLinkModal({ show, onHide, onGenerated }) {
     }, [show]);
 
     const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+    // In-hand salary = Offered Salary - PF - Professional Tax. Blank PF/PT count as ₹0 here
+    // (rather than re-applying the 1800 statutory default) since the field already starts
+    // pre-filled with that default — an explicitly cleared box means "no deduction".
+    const salaryNum = Number(form.salary) || 0;
+    const pfNum = Number(form.pf_amount) || 0;
+    const ptNum = Number(form.professional_tax_amount) || 0;
+    const inHandSalary = Math.max(0, salaryNum - pfNum - ptNum);
 
     // API responses key each manager by `employee_id` (there is no numeric `id` field —
     // see backend/routes/teamRoutes.js). Using `m.id` here would always be undefined,
@@ -236,6 +247,25 @@ export default function GenerateLinkModal({ show, onHide, onGenerated }) {
                             <Form.Group>
                                 <Form.Label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Offered Salary (₹/month) <span style={{ color: '#ef4444' }}>*</span></Form.Label>
                                 <Form.Control size="sm" type="number" min="1" value={form.salary} onChange={e => set('salary', e.target.value)} placeholder="e.g. 45000" required style={{ borderRadius: 8 }} />
+                            </Form.Group>
+                            <Form.Group>
+                                <Form.Label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>PF (₹/month)</Form.Label>
+                                <Form.Control size="sm" type="number" min="0" value={form.pf_amount} onChange={e => set('pf_amount', e.target.value)} placeholder="e.g. 1800" style={{ borderRadius: 8 }} />
+                            </Form.Group>
+                            <Form.Group>
+                                <Form.Label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>PT / Professional Tax (₹/month)</Form.Label>
+                                <Form.Control size="sm" type="number" min="0" value={form.professional_tax_amount} onChange={e => set('professional_tax_amount', e.target.value)} placeholder="e.g. 0" style={{ borderRadius: 8 }} />
+                            </Form.Group>
+                            <Form.Group style={{ gridColumn: '1 / -1' }}>
+                                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: 13, fontWeight: 600, color: '#166534' }}>In-Hand Salary (₹/month)</span>
+                                    <span style={{ fontSize: 16, fontWeight: 800, color: '#166534' }}>₹{inHandSalary.toLocaleString('en-IN')}</span>
+                                </div>
+                                {form.salary && (
+                                    <div style={{ fontSize: 11.5, color: '#9ca3af', marginTop: 4 }}>
+                                        ₹{salaryNum.toLocaleString('en-IN')} − PF ₹{pfNum.toLocaleString('en-IN')} − PT ₹{ptNum.toLocaleString('en-IN')} = ₹{inHandSalary.toLocaleString('en-IN')}
+                                    </div>
+                                )}
                             </Form.Group>
                             <Form.Group>
                                 <Form.Label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Offer Expiry Date <span style={{ color: '#ef4444' }}>*</span></Form.Label>

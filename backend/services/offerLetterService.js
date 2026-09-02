@@ -68,7 +68,6 @@ const resolveInput = (employee, formInput = {}) => {
         probationPeriod: formInput.probationPeriod || null,
         noticePeriod: formInput.noticePeriod || null,
         pfAmount: formInput.pfAmount != null ? Number(formInput.pfAmount) : employee?.pf_amount,
-        ptAmount: formInput.ptAmount != null ? Number(formInput.ptAmount) : employee?.pt_amount,
         professionalTaxAmount: formInput.professionalTaxAmount != null
             ? Number(formInput.professionalTaxAmount) : employee?.professional_tax_amount,
         signatoryName: formInput.signatoryName || null,
@@ -91,7 +90,6 @@ const buildLetterData = (employee, resolved) => {
     const salary = calculateSalaryBreakdown({
         grossMonthly: resolved.monthlyGross,
         pfAmount: resolved.pfAmount,
-        ptAmount: resolved.ptAmount,
         professionalTaxAmount: resolved.professionalTaxAmount,
     });
 

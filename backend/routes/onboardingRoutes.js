@@ -53,7 +53,13 @@ const createEmployeeAccountFromSubmission = async (offer, sub) => {
         department:     offer.department,
         employment_type: offer.employment_type,
         gross_salary:   offer.salary,
-        in_hand_salary: Math.max(0, offer.salary - 200),
+        // In-hand = offered salary minus the PF/Professional Tax the admin set when
+        // generating the offer link (both optional — a link generated before this feature
+        // existed, or with them left blank, has neither, so in-hand falls back to the full
+        // offered salary rather than an arbitrary flat deduction).
+        pf_amount:               offer.pf_amount ?? null,
+        professional_tax_amount: offer.professional_tax_amount ?? null,
+        in_hand_salary: Math.max(0, offer.salary - (Number(offer.pf_amount) || 0) - (Number(offer.professional_tax_amount) || 0)),
         reporting_manager: offer.reporting_manager || null,
         joining_date:   sub.joining_date || now.toISOString().split('T')[0],
         bank_account_name: sub.bank_account_name || null,
@@ -92,6 +98,8 @@ const createEmployeeAccountFromSubmission = async (offer, sub) => {
                 reportingManager: offer.reporting_manager,
                 annualCTC: offer.salary != null ? Math.round(Number(offer.salary) * 12) : null,
                 monthlyGross: offer.salary != null ? Number(offer.salary) : null,
+                pfAmount: offer.pf_amount ?? null,
+                professionalTaxAmount: offer.professional_tax_amount ?? null,
             },
             generatedBy: null,
             generatedByName: 'System (Onboarding Auto-Approval)',
@@ -120,7 +128,8 @@ router.post('/generate', verifyToken, isAdminOrDesktopSupport, async (req, res) 
     try {
         const {
             employee_name, designation, department, employment_type,
-            salary, reporting_manager, reporting_manager_id, expiry_date, notes, email,
+            salary, pf_amount, professional_tax_amount,
+            reporting_manager, reporting_manager_id, expiry_date, notes, email,
         } = req.body;
 
         if (!employee_name?.trim())  return res.status(400).json({ success: false, message: 'Employee name is required' });
@@ -129,6 +138,10 @@ router.post('/generate', verifyToken, isAdminOrDesktopSupport, async (req, res) 
         if (!employment_type)        return res.status(400).json({ success: false, message: 'Employment type is required' });
         if (!salary || isNaN(Number(salary)) || Number(salary) <= 0)
             return res.status(400).json({ success: false, message: 'Valid offered salary is required' });
+        if (pf_amount !== undefined && pf_amount !== '' && (isNaN(Number(pf_amount)) || Number(pf_amount) < 0))
+            return res.status(400).json({ success: false, message: 'PF amount must be 0 or a positive number' });
+        if (professional_tax_amount !== undefined && professional_tax_amount !== '' && (isNaN(Number(professional_tax_amount)) || Number(professional_tax_amount) < 0))
+            return res.status(400).json({ success: false, message: 'Professional Tax amount must be 0 or a positive number' });
         if (!expiry_date) return res.status(400).json({ success: false, message: 'Offer expiry date is required' });
         if (new Date(expiry_date) <= new Date())
             return res.status(400).json({ success: false, message: 'Expiry date must be in the future' });
@@ -149,6 +162,8 @@ router.post('/generate', verifyToken, isAdminOrDesktopSupport, async (req, res) 
             department:    department.trim(),
             employment_type,
             salary:              Number(salary),
+            pf_amount:               (pf_amount === undefined || pf_amount === '') ? null : Number(pf_amount),
+            professional_tax_amount: (professional_tax_amount === undefined || professional_tax_amount === '') ? null : Number(professional_tax_amount),
             reporting_manager:   reporting_manager || null,
             reporting_manager_id: reporting_manager_id || null,
             expiry_date,
@@ -165,6 +180,13 @@ router.post('/generate', verifyToken, isAdminOrDesktopSupport, async (req, res) 
             // — retry without it so link generation keeps working either way.
             const { email: _email, ...payloadWithoutEmail } = insertPayload;
             ({ data, error } = await supabase.from('employee_offer_links').insert([payloadWithoutEmail]).select().single());
+        }
+        if (error && /pf_amount|professional_tax_amount|does not exist|schema cache/i.test(error.message || '')) {
+            // pf_amount/professional_tax_amount not migrated yet on this DB
+            // (scripts/add-offer-link-pf-pt-columns.sql) — retry without them so link
+            // generation still works; the admin can set PF/PT later via Payroll > PF/PT.
+            const { pf_amount: _pf, professional_tax_amount: _pt, ...payloadWithoutPfPt } = insertPayload;
+            ({ data, error } = await supabase.from('employee_offer_links').insert([payloadWithoutPfPt]).select().single());
         }
         if (error) throw error;
 
@@ -208,6 +230,8 @@ router.post('/links/:id/send-email', verifyToken, isAdminOrDesktopSupport, async
             designation:  offer.designation,
             department:   offer.department,
             salary:       offer.salary,
+            pfAmount:     offer.pf_amount,
+            professionalTaxAmount: offer.professional_tax_amount,
             expiryDate:   offer.expiry_date,
             notes:        offer.notes,
         }, ccList);
@@ -364,11 +388,22 @@ router.patch('/links/:id/approve', verifyToken, isAdmin, async (req, res) => {
 // ── GET /api/onboarding/:token — Public: get offer details ────────────────────
 router.get('/:token', async (req, res) => {
     try {
-        const { data, error } = await supabase
+        let { data, error } = await supabase
             .from('employee_offer_links')
-            .select('id, token, employee_name, designation, department, employment_type, salary, reporting_manager, expiry_date, notes, status, generated_by_name, accepted_at, rejected_at, submitted_at, created_at')
+            .select('id, token, employee_name, designation, department, employment_type, salary, pf_amount, professional_tax_amount, reporting_manager, expiry_date, notes, status, generated_by_name, accepted_at, rejected_at, submitted_at, created_at')
             .eq('token', req.params.token)
             .maybeSingle();
+
+        if (error && /pf_amount|professional_tax_amount|does not exist|schema cache/i.test(error.message || '')) {
+            // pf_amount/professional_tax_amount not migrated yet on this DB — this is a
+            // public candidate-facing page, so it must degrade to the pre-PF/PT column list
+            // rather than ever break the offer page entirely.
+            ({ data, error } = await supabase
+                .from('employee_offer_links')
+                .select('id, token, employee_name, designation, department, employment_type, salary, reporting_manager, expiry_date, notes, status, generated_by_name, accepted_at, rejected_at, submitted_at, created_at')
+                .eq('token', req.params.token)
+                .maybeSingle());
+        }
 
         if (error) throw error;
         if (!data) return res.status(404).json({ success: false, message: 'Offer link not found or invalid' });
@@ -586,7 +621,10 @@ router.post('/:token/submit', async (req, res) => {
             designation:   offer.designation, department: offer.department,
             employment_type: offer.employment_type,
             gross_salary:  offer.salary,
-            in_hand_salary: Math.max(0, offer.salary - 200),
+            // Same PF/Professional-Tax-aware formula as createEmployeeAccountFromSubmission
+            // below — this row is only a record of the submission, but must agree with the
+            // actual employees.in_hand_salary that gets created from it moments later.
+            in_hand_salary: Math.max(0, offer.salary - (Number(offer.pf_amount) || 0) - (Number(offer.professional_tax_amount) || 0)),
             reporting_manager: offer.reporting_manager || null,
             joining_date:  joining_date || null,
             bank_account_name: bank_account_name.trim(), account_number: account_number.trim(),

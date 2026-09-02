@@ -114,6 +114,11 @@ const AddEmployee = () => {
 
   const [tempSalaryData, setTempSalaryData] = useState({
     gross_salary: '',
+    // PF defaults to the same statutory default used across payroll (Payroll > PF/PT tab,
+    // salaryController.js) when left blank — pre-filled so the in-hand preview is accurate
+    // from the start.
+    pf_amount: '1800',
+    professional_tax_amount: '0',
     in_hand_salary: ''
   });
 
@@ -165,19 +170,21 @@ const AddEmployee = () => {
     fetchManagers();
   }, []);
 
-  // Calculate in-hand salary whenever gross salary changes
+  // Calculate in-hand salary whenever gross salary, PF, or Professional Tax changes
   useEffect(() => {
     if (tempSalaryData.gross_salary) {
       const gross = parseFloat(tempSalaryData.gross_salary);
       if (!isNaN(gross) && gross > 0) {
-        const inHand = gross - 200;
+        const pf = parseFloat(tempSalaryData.pf_amount) || 0;
+        const pt = parseFloat(tempSalaryData.professional_tax_amount) || 0;
+        const inHand = Math.max(0, gross - pf - pt);
         setTempSalaryData(prev => ({
           ...prev,
           in_hand_salary: inHand.toString()
         }));
       }
     }
-  }, [tempSalaryData.gross_salary]);
+  }, [tempSalaryData.gross_salary, tempSalaryData.pf_amount, tempSalaryData.professional_tax_amount]);
 
   // Handle input changes for personal tab
   const handlePersonalChange = (e) => {
@@ -572,6 +579,8 @@ const AddEmployee = () => {
         shift_timing: tempPersonalData.shift_timing?.trim() || '9:00 AM - 6:00 PM',
         in_hand_salary: parseFloat(tempSalaryData.in_hand_salary) || 0,
         gross_salary: parseFloat(tempSalaryData.gross_salary) || 0,
+        pf_amount: tempSalaryData.pf_amount !== '' ? parseFloat(tempSalaryData.pf_amount) || 0 : null,
+        professional_tax_amount: tempSalaryData.professional_tax_amount !== '' ? parseFloat(tempSalaryData.professional_tax_amount) || 0 : null,
         is_active: true,  // Add this
         can_apply_leave: true,  // Add this to avoid error
         role: 'employee',  // Add this
@@ -1269,6 +1278,38 @@ const AddEmployee = () => {
                   <Col xs={12} md={6}>
                     <Form.Group>
                       <Form.Label className="small fw-semibold text-muted">
+                        PF (₹)
+                      </Form.Label>
+                      <Form.Control
+                        type="number"
+                        name="pf_amount"
+                        value={tempSalaryData.pf_amount}
+                        onChange={handleSalaryChange}
+                        size="sm"
+                        min="0"
+                        placeholder="e.g. 1800"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col xs={12} md={6}>
+                    <Form.Group>
+                      <Form.Label className="small fw-semibold text-muted">
+                        PT / Professional Tax (₹)
+                      </Form.Label>
+                      <Form.Control
+                        type="number"
+                        name="professional_tax_amount"
+                        value={tempSalaryData.professional_tax_amount}
+                        onChange={handleSalaryChange}
+                        size="sm"
+                        min="0"
+                        placeholder="e.g. 0"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col xs={12} md={6}>
+                    <Form.Group>
+                      <Form.Label className="small fw-semibold text-muted">
                         In-hand Salary (₹)
                       </Form.Label>
                       <Form.Control
@@ -1281,7 +1322,7 @@ const AddEmployee = () => {
                         className="bg-light fw-bold text-success"
                       />
                       <Form.Text className="text-muted small d-block">
-                        Auto-calculated (Gross - ₹200)
+                        Auto-calculated (Gross − PF − Professional Tax)
                       </Form.Text>
                     </Form.Group>
                   </Col>
@@ -1290,7 +1331,7 @@ const AddEmployee = () => {
                 {tempSalaryData.gross_salary && (
                   <div className="mb-3 p-2 bg-light rounded small">
                     <FaCalculator className="me-2 text-primary" size={12} />
-                    <strong>Calculation:</strong> ₹{parseFloat(tempSalaryData.gross_salary).toLocaleString()} - ₹200 = ₹{parseFloat(tempSalaryData.in_hand_salary).toLocaleString()}
+                    <strong>Calculation:</strong> ₹{parseFloat(tempSalaryData.gross_salary).toLocaleString()} − PF ₹{(parseFloat(tempSalaryData.pf_amount) || 0).toLocaleString()} − PT ₹{(parseFloat(tempSalaryData.professional_tax_amount) || 0).toLocaleString()} = ₹{parseFloat(tempSalaryData.in_hand_salary || 0).toLocaleString()}
                   </div>
                 )}
               </>

@@ -425,6 +425,23 @@ export default function OfferLinksManager() {
                                         <span style={{ fontSize: 11, color: '#9ca3af' }}>Salary</span>
                                         <span style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>{fmtMoney(selected.salary)}<span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>/month</span></span>
                                     </div>
+                                    {(selected.pf_amount != null || selected.professional_tax_amount != null) && (
+                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            <span style={{ fontSize: 11, color: '#9ca3af' }}>PF / PT</span>
+                                            <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>
+                                                {fmtMoney(selected.pf_amount || 0)} / {fmtMoney(selected.professional_tax_amount || 0)}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {(selected.pf_amount != null || selected.professional_tax_amount != null) && (
+                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            <span style={{ fontSize: 11, color: '#9ca3af' }}>In-Hand</span>
+                                            <span style={{ fontSize: 15, fontWeight: 700, color: '#16a34a' }}>
+                                                {fmtMoney(Math.max(0, Number(selected.salary) - (Number(selected.pf_amount) || 0) - (Number(selected.professional_tax_amount) || 0)))}
+                                                <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>/month</span>
+                                            </span>
+                                        </div>
+                                    )}
                                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                                         <span style={{ fontSize: 11, color: '#9ca3af' }}>Expiry</span>
                                         <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{fmtDate(selected.expiry_date)}</span>

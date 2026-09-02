@@ -653,9 +653,17 @@ const sendManualEmail = async (recipientList, { subject, message, sentByName, cc
 // Sends the generated candidate onboarding link directly to their email, with
 // optional CC (e.g. the hiring manager, another HR member).
 const sendOfferLinkEmail = async (candidateEmail, offerDetails, cc) => {
-    const { link, employeeName, designation, department, salary, expiryDate, notes } = offerDetails || {};
+    const { link, employeeName, designation, department, salary, pfAmount, professionalTaxAmount, expiryDate, notes } = offerDetails || {};
     const frontendUrl = getFront();
     const name = employeeName || 'there';
+
+    // PF/Professional Tax are optional (a link can be generated without them, same as
+    // before this feature existed) — only show the breakdown rows, and the computed
+    // in-hand line, when at least one deduction was actually set.
+    const pf = pfAmount != null ? Number(pfAmount) : 0;
+    const pt = professionalTaxAmount != null ? Number(professionalTaxAmount) : 0;
+    const hasDeductions = pfAmount != null || professionalTaxAmount != null;
+    const inHand = salary != null ? Math.max(0, Number(salary) - pf - pt) : null;
 
     const html = shell('You\'re Invited to Join Us', `
         ${h2(`🎉 Welcome, ${escapeHtml(name)}!`)}
@@ -664,6 +672,9 @@ const sendOfferLinkEmail = async (candidateEmail, offerDetails, cc) => {
             row('Position', escapeHtml(designation), true) +
             row('Department', escapeHtml(department)) +
             (salary ? row('Offered Salary', `₹${Number(salary).toLocaleString('en-IN')}/month`) : '') +
+            (hasDeductions && pfAmount != null ? row('PF', `₹${pf.toLocaleString('en-IN')}/month`) : '') +
+            (hasDeductions && professionalTaxAmount != null ? row('Professional Tax', `₹${pt.toLocaleString('en-IN')}/month`) : '') +
+            (hasDeductions && inHand != null ? row('In-Hand Salary', `₹${inHand.toLocaleString('en-IN')}/month`, true) : '') +
             row('Offer Valid Until', expiryDate ? new Date(expiryDate).toLocaleDateString('en-IN') : '—')
         )}
         ${notes ? para(`<em>${escapeHtml(notes)}</em>`) : ''}

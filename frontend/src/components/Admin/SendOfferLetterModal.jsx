@@ -13,7 +13,7 @@ const EMPTY_FORM = {
     designation: '', department: '', employmentType: '', dateOfJoining: '',
     workLocation: '', reportingManager: '',
     annualCTC: '', probationPeriod: '', noticePeriod: '',
-    pfAmount: '', ptAmount: '', professionalTaxAmount: '',
+    pfAmount: '', professionalTaxAmount: '',
     signatoryName: '', signatoryDesignation: '',
     additionalEmail: '',
 };
@@ -68,7 +68,6 @@ export default function SendOfferLetterModal({ show, employee, onHide, onSent })
                     probationPeriod: d.probationPeriod || (data.company?.defaultProbationPeriod || ''),
                     noticePeriod: d.noticePeriod || (data.company?.defaultNoticePeriod || ''),
                     pfAmount: d.pfAmount ?? '',
-                    ptAmount: d.ptAmount ?? '',
                     professionalTaxAmount: d.professionalTaxAmount ?? '',
                     signatoryName: data.company?.signatoryName || '',
                     signatoryDesignation: data.company?.signatoryDesignation || '',
@@ -104,7 +103,6 @@ export default function SendOfferLetterModal({ show, employee, onHide, onSent })
                 ...form,
                 annualCTC: Number(form.annualCTC),
                 pfAmount: form.pfAmount === '' ? undefined : Number(form.pfAmount),
-                ptAmount: form.ptAmount === '' ? undefined : Number(form.ptAmount),
                 professionalTaxAmount: form.professionalTaxAmount === '' ? undefined : Number(form.professionalTaxAmount),
                 additionalEmail: form.additionalEmail?.trim() || undefined,
             };
@@ -203,11 +201,9 @@ export default function SendOfferLetterModal({ show, employee, onHide, onSent })
                                         <Form.Control size="sm" value={form.probationPeriod} onChange={e => set('probationPeriod', e.target.value)} /></Col>
                                     <Col md={6}><Form.Label className="small mb-0">Notice Period</Form.Label>
                                         <Form.Control size="sm" value={form.noticePeriod} onChange={e => set('noticePeriod', e.target.value)} /></Col>
-                                    <Col md={4}><Form.Label className="small mb-0">PF (₹/month)</Form.Label>
+                                    <Col md={6}><Form.Label className="small mb-0">PF (₹/month)</Form.Label>
                                         <Form.Control size="sm" type="number" min="0" value={form.pfAmount} onChange={e => set('pfAmount', e.target.value)} /></Col>
-                                    <Col md={4}><Form.Label className="small mb-0">PT (₹/month)</Form.Label>
-                                        <Form.Control size="sm" type="number" min="0" value={form.ptAmount} onChange={e => set('ptAmount', e.target.value)} /></Col>
-                                    <Col md={4}><Form.Label className="small mb-0">Professional Tax (₹/month)</Form.Label>
+                                    <Col md={6}><Form.Label className="small mb-0">Professional Tax (₹/month)</Form.Label>
                                         <Form.Control size="sm" type="number" min="0" value={form.professionalTaxAmount} onChange={e => set('professionalTaxAmount', e.target.value)} /></Col>
                                     <Col md={6}><Form.Label className="small mb-0">Authorized Signatory</Form.Label>
                                         <Form.Control size="sm" value={form.signatoryName} onChange={e => set('signatoryName', e.target.value)} /></Col>

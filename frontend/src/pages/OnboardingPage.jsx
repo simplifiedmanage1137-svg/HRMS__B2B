@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Spinner, Alert, Modal, Form, Button } from 'react-bootstrap';
-import { CheckCircle, XCircle, Clock, Briefcase, Building2, DollarSign, User, Calendar, AlertTriangle, PenLine, ShieldCheck } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Briefcase, Building2, DollarSign, User, Calendar, AlertTriangle, PenLine, ShieldCheck, Wallet, Receipt } from 'lucide-react';
 import API_ENDPOINTS from '../config/api';
 
 const fmtMoney = (n) => n ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
@@ -344,6 +344,13 @@ export default function OnboardingPage() {
 }
 
 function OfferCard({ offer }) {
+    // PF/Professional Tax are optional — a link generated before this feature existed (or
+    // with them left blank) has neither, so only show the breakdown when at least one is set.
+    const hasDeductions = offer.pf_amount != null || offer.professional_tax_amount != null;
+    const pf = Number(offer.pf_amount) || 0;
+    const pt = Number(offer.professional_tax_amount) || 0;
+    const inHand = hasDeductions ? Math.max(0, Number(offer.salary) - pf - pt) : null;
+
     return (
         <div style={{ background: '#f8f9ff', border: '1px solid #e0e7ff', borderRadius: 12, padding: '16px 20px', marginBottom: 20 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
@@ -351,6 +358,15 @@ function OfferCard({ offer }) {
                 <InfoItem icon={<Building2 size={16} color="#6366f1" />} label="Department" value={offer.department} />
                 <InfoItem icon={<User size={16} color="#6366f1" />} label="Employment Type" value={offer.employment_type} />
                 <InfoItem icon={<DollarSign size={16} color="#6366f1" />} label="Offered Salary" value={`₹${Number(offer.salary).toLocaleString('en-IN')} / month`} />
+                {hasDeductions && offer.pf_amount != null && (
+                    <InfoItem icon={<Wallet size={16} color="#6366f1" />} label="PF" value={`₹${pf.toLocaleString('en-IN')} / month`} />
+                )}
+                {hasDeductions && offer.professional_tax_amount != null && (
+                    <InfoItem icon={<Receipt size={16} color="#6366f1" />} label="Professional Tax" value={`₹${pt.toLocaleString('en-IN')} / month`} />
+                )}
+                {inHand != null && (
+                    <InfoItem icon={<DollarSign size={16} color="#16a34a" />} label="In-Hand Salary" value={<span style={{ color: '#16a34a' }}>{`₹${inHand.toLocaleString('en-IN')} / month`}</span>} />
+                )}
                 {offer.reporting_manager && <InfoItem icon={<User size={16} color="#6366f1" />} label="Reporting To" value={offer.reporting_manager} />}
                 <InfoItem icon={<Calendar size={16} color="#6366f1" />} label="Offer Valid Until" value={new Date(offer.expiry_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })} />
             </div>

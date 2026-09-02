@@ -623,6 +623,8 @@ router.post('/', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
                     isFlexibleShift: employeeData.isFlexibleShift ?? employeeData.is_flexible_shift ?? false,
                     in_hand_salary: employeeData.in_hand_salary || 0,
                     gross_salary: employeeData.gross_salary || 0,
+                    pf_amount: employeeData.pf_amount != null && employeeData.pf_amount !== '' ? Number(employeeData.pf_amount) : null,
+                    professional_tax_amount: employeeData.professional_tax_amount != null && employeeData.professional_tax_amount !== '' ? Number(employeeData.professional_tax_amount) : null,
                     bank_account_name: employeeData.bank_account_name || null,
                     account_number: employeeData.account_number || null,
                     ifsc_code: employeeData.ifsc_code || null,
@@ -657,6 +659,14 @@ router.post('/', verifyToken, isAdminOrDesktopSupport, async (req, res) => {
 
                 if (error && /isFlexibleShift|does not exist/i.test(error.message || '')) {
                     const { isFlexibleShift, ...safeEmployee } = newEmployee;
+                    ({ data, error } = await supabase
+                        .from('employees')
+                        .insert([safeEmployee])
+                        .select());
+                }
+
+                if (error && /pf_amount|professional_tax_amount|does not exist|schema cache/i.test(error.message || '')) {
+                    const { pf_amount, professional_tax_amount, ...safeEmployee } = newEmployee;
                     ({ data, error } = await supabase
                         .from('employees')
                         .insert([safeEmployee])
