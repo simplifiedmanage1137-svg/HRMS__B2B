@@ -106,9 +106,16 @@ axiosInstance.interceptors.response.use(
     // through to `return Promise.reject(error)` below with no recovery attempt at all, so
     // every protected call independently 401'd instead of self-healing via the still-valid
     // refresh token — exactly the "many different endpoints failing at once" symptom this
-    // fixes. Login/refresh calls are excluded: a bad-password 401 from /api/auth/login has
-    // nothing to do with token validity and must never trigger a refresh attempt.
-    const isAuthEndpoint = (originalRequest?.url || '').includes('/api/auth/');
+    // fixes. Only login/register/refresh are excluded here (a bad-password 401 from
+    // /api/auth/login has nothing to do with token validity) — NOT the whole /api/auth/
+    // prefix, which used to also catch /api/auth/verify. That's the exact call AuthContext
+    // makes on every page load/refresh to validate the stored session: excluding it from
+    // silent refresh meant that the moment the 15-minute access token had expired, a page
+    // refresh saw verify's 401 with no refresh attempt at all and logged the user out —
+    // even though their still-valid 7-day refresh token would have silently renewed it.
+    const AUTH_ENDPOINTS_EXCLUDED_FROM_REFRESH = ['/api/auth/login', '/api/auth/register', '/api/auth/refresh'];
+    const requestUrl = originalRequest?.url || '';
+    const isAuthEndpoint = AUTH_ENDPOINTS_EXCLUDED_FROM_REFRESH.some((p) => requestUrl.includes(p));
     const isAuthFailure =
       !isAuthEndpoint &&
       status === 401 &&
