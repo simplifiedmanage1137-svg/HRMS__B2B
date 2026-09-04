@@ -1076,7 +1076,17 @@ router.get('/', async (req, res) => {
             query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,employee_id.ilike.%${search}%,email.ilike.%${search}%`);
         }
 
-        if (active === 'true') {
+        // Default is now active-only — a deactivated employee must disappear from every
+        // list/dropdown/export/report built on this endpoint the moment they're deactivated,
+        // without every one of those dozens of call sites having to remember to opt in.
+        // Previously the default was the opposite (everyone, unless a caller explicitly
+        // passed ?active=true), which is exactly why deactivated employees kept resurfacing
+        // in places that never thought to ask for the filter. Admin screens that genuinely
+        // need to see deactivated accounts (the Employee List's Inactive tab, viewing a
+        // specific employee's own profile) pass ?active=all explicitly instead.
+        if (active === 'false') {
+            query = query.eq('is_active', false);
+        } else if (active !== 'all') {
             query = query.eq('is_active', true);
         }
 

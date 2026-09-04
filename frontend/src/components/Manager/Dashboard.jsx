@@ -245,11 +245,12 @@ const ManagerDashboard = () => {
     setClockLoading(true);
     setClockMessage({ type: '', text: '' });
     try {
-      const pre = await axios.get(API_ENDPOINTS.ATTENDANCE_TODAY(user.employeeId));
-      const serverSession = pre.data.active_session;
-      if (!serverSession) { setActiveSession(null); clearSession(); await fetchTodayAttendance(); setClockLoading(false); return; }
+      // No pre-check GET before this — attendanceController.clockOut already resolves the
+      // real active session from the DB itself (ignoring a stale frontend session_id), so
+      // sending whatever's in local state and letting the backend validate it is just as
+      // safe and saves a full round-trip on every clock-out.
       const res = await axios.post(API_ENDPOINTS.ATTENDANCE_CLOCK_OUT, {
-        employee_id: user.employeeId, session_id: serverSession.session_id,
+        employee_id: user.employeeId, session_id: activeSession?.session_id || null,
         latitude: null, longitude: null, accuracy: null,
       });
       const t = res.data.clock_out_ist || res.data.clock_out;
@@ -263,7 +264,16 @@ const ManagerDashboard = () => {
       clearSession();
       setClockMessage({ type: 'success', text: res.data.message || 'Clocked out successfully!' });
     } catch (err) {
-      setClockMessage({ type: 'error', text: err.response?.data?.message || 'Failed to clock out' });
+      const message = err.response?.data?.message || 'Failed to clock out';
+      if (message.includes('No active session') || err.response?.data?.already_clocked_out) {
+        // Stale local session state (e.g. already clocked out from another tab/device) —
+        // reset silently instead of showing an error, matching the old pre-check's behavior.
+        setActiveSession(null);
+        clearSession();
+        fetchTodayAttendance();
+      } else {
+        setClockMessage({ type: 'error', text: message });
+      }
     } finally { setClockLoading(false); }
   };
 

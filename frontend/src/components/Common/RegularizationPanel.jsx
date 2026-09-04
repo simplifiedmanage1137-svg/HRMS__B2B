@@ -484,7 +484,7 @@ export default function RegularizationPanel({ embedded = false, onRequestCountCh
         <Card className="border-0 shadow-sm" style={{ borderRadius: 16 }}>
           <Card.Body className="text-center py-5">
             <FaRegClock size={40} className="text-muted mb-3" />
-            <p className="text-muted mb-0">No regularization requests found.</p>
+            <p className="text-muted mb-0">No regularization requests h.</p>
           </Card.Body>
         </Card>
       ) : (

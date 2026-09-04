@@ -317,11 +317,12 @@ const AdminDashboard = () => {
     setSubAdminClockLoading(true);
     setSubAdminClockMessage({ type: '', text: '' });
     try {
-      const pre = await axios.get(API_ENDPOINTS.ATTENDANCE_TODAY(user.employeeId));
-      const serverSession = pre.data.active_session;
-      if (!serverSession) { setSubAdminSession(null); await fetchSubAdminAttendance(); setSubAdminClockLoading(false); return; }
+      // No pre-check GET before this — attendanceController.clockOut already "Always
+      // resolve[s] to the real active session from DB (ignore stale frontend session_id)",
+      // so sending whatever session_id is in local state (or none) and letting the backend
+      // resolve/validate it itself is just as safe and saves a full round-trip.
       const res = await axios.post(API_ENDPOINTS.ATTENDANCE_CLOCK_OUT, {
-        employee_id: user.employeeId, session_id: serverSession.session_id,
+        employee_id: user.employeeId, session_id: subAdminSession?.session_id || null,
         latitude: null, longitude: null, accuracy: null,
       });
       const t = res.data.clock_out_ist || res.data.clock_out;
@@ -333,7 +334,15 @@ const AdminDashboard = () => {
       setSubAdminSession(null);
       setSubAdminClockMessage({ type: 'success', text: res.data.message || 'Clocked out successfully!' });
     } catch (err) {
-      setSubAdminClockMessage({ type: 'error', text: err.response?.data?.message || 'Failed to clock out' });
+      const message = err.response?.data?.message || 'Failed to clock out';
+      if (message.includes('No active session') || err.response?.data?.already_clocked_out) {
+        // Stale local session state (e.g. already clocked out from another tab/device) —
+        // reset silently instead of showing an error, matching the old pre-check's behavior.
+        setSubAdminSession(null);
+        fetchSubAdminAttendance();
+      } else {
+        setSubAdminClockMessage({ type: 'error', text: message });
+      }
     } finally {
       setSubAdminClockLoading(false);
     }

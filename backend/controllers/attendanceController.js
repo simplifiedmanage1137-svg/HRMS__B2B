@@ -2669,17 +2669,21 @@ exports.getTeamAttendanceReport = async (req, res) => {
             });
         }
 
-        // Get team member details
+        // Get team member details — is_active filter is defense-in-depth here (teamEmployeeIds
+        // above already only contains active employees), so a deactivated employee can never
+        // resurface even if this query were ever reached with a stale/unfiltered id list.
         let { data: teamMembers, error: teamError } = await supabase
             .from('employees')
             .select('employee_id, first_name, last_name, department, designation, joining_date, shift_timing, profile_image, "isFlexibleShift"')
-            .in('employee_id', teamEmployeeIds);
+            .in('employee_id', teamEmployeeIds)
+            .eq('is_active', true);
 
         if (teamError && /isFlexibleShift|does not exist/i.test(teamError.message || '')) {
             ({ data: teamMembers, error: teamError } = await supabase
                 .from('employees')
                 .select('employee_id, first_name, last_name, department, designation, joining_date, shift_timing, profile_image')
-                .in('employee_id', teamEmployeeIds));
+                .in('employee_id', teamEmployeeIds)
+                .eq('is_active', true));
         }
 
         if (teamError) throw teamError;

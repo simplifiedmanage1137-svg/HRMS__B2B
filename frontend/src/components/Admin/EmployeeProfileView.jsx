@@ -189,7 +189,10 @@ const EmployeeProfileView = () => {
         let emp = res.data;
         if (!emp || emp.error) {
           // fallback: search by employee_id field
-          const list = await axios.get(API_ENDPOINTS.EMPLOYEES);
+          // Viewing one specific employee's own profile page must work regardless of their
+          // active status (an admin needs this to review/reactivate a deactivated account) —
+          // explicitly ask for everyone, since the backend now defaults to active-only.
+          const list = await axios.get(API_ENDPOINTS.EMPLOYEES, { params: { active: 'all' } });
           const all = Array.isArray(list.data) ? list.data : list.data?.data || [];
           emp = all.find(e => e.employee_id === employeeId);
         }
@@ -204,7 +207,10 @@ const EmployeeProfileView = () => {
       } catch (err) {
         // try fetching all and filtering
         try {
-          const list = await axios.get(API_ENDPOINTS.EMPLOYEES);
+          // Viewing one specific employee's own profile page must work regardless of their
+          // active status (an admin needs this to review/reactivate a deactivated account) —
+          // explicitly ask for everyone, since the backend now defaults to active-only.
+          const list = await axios.get(API_ENDPOINTS.EMPLOYEES, { params: { active: 'all' } });
           const all = Array.isArray(list.data) ? list.data : list.data?.data || [];
           const emp = all.find(e => e.employee_id === employeeId || String(e.id) === String(employeeId));
           if (emp) {

@@ -401,9 +401,18 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
     router.get('/break/team-active', authenticateToken, async (req, res) => {
         const { employeeId, role } = req.user;
         try {
-            let employeeIds = null; // null = admin sees all
+            // A deactivated employee must never resurface here, for admin/hr's company-wide
+            // view or a TL/manager's team-scoped one — always resolve to an explicit active-
+            // employee-id list rather than letting admin/hr's "see all" mean "unscoped".
+            let employeeIds;
 
-            if (!['admin', 'hr'].includes(role)) {
+            if (['admin', 'hr'].includes(role)) {
+                const { data: activeEmps } = await supabase
+                    .from('employees')
+                    .select('employee_id')
+                    .eq('is_active', true);
+                employeeIds = (activeEmps || []).map(e => e.employee_id);
+            } else {
                 // Step 1: get this user's full name
                 const { data: me } = await supabase
                     .from('employees')
@@ -424,33 +433,32 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
                 employeeIds = (allEmps || [])
                     .filter(e => (e.reporting_manager || '').trim().toLowerCase() === myName)
                     .map(e => e.employee_id);
-
-                if (employeeIds.length === 0) return res.json({ success: true, breaks: [] });
             }
+
+            if (employeeIds.length === 0) return res.json({ success: true, breaks: [] });
 
             // Step 3: find active breaks — scoped to today so a stale unclosed break from a
             // past day (e.g. browser closed mid-break) never shows as "still on break" forever.
             const todayStr = new Date().toISOString().split('T')[0];
-            let query = supabase
+            const { data: breaks, error: breakErr } = await supabase
                 .from('employee_breaks')
                 .select('id, employee_id, break_start, break_type, attendance_date')
                 .is('break_end', null)
                 .eq('attendance_date', todayStr)
+                .in('employee_id', employeeIds)
                 .order('break_start', { ascending: true });
-
-            if (employeeIds !== null) query = query.in('employee_id', employeeIds);
-
-            const { data: breaks, error: breakErr } = await query;
             if (breakErr) throw breakErr;
 
-            // Step 4: enrich with employee details
+            // Step 4: enrich with employee details (already active per employeeIds above, but
+            // re-checked here too as defense-in-depth)
             const ids = (breaks || []).map(b => b.employee_id);
             let empMap = {};
             if (ids.length > 0) {
                 const { data: emps } = await supabase
                     .from('employees')
                     .select('employee_id, first_name, last_name, designation, department')
-                    .in('employee_id', ids);
+                    .in('employee_id', ids)
+                    .eq('is_active', true);
                 (emps || []).forEach(e => { empMap[e.employee_id] = e; });
             }
 
@@ -473,9 +481,15 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
     router.get('/break/team-today', authenticateToken, async (req, res) => {
         const { employeeId, role } = req.user;
         try {
-            let employeeIds = null;
+            // See break/team-active above — always resolve to an explicit active-employee-id
+            // list, even for admin/hr's company-wide view, so a deactivated employee's break
+            // history for today can never resurface.
+            let employeeIds;
 
-            if (!['admin', 'hr'].includes(role)) {
+            if (['admin', 'hr'].includes(role)) {
+                const { data: activeEmps } = await supabase.from('employees').select('employee_id').eq('is_active', true);
+                employeeIds = (activeEmps || []).map(e => e.employee_id);
+            } else {
                 const { data: me } = await supabase.from('employees')
                     .select('first_name, last_name')
                     .eq('employee_id', employeeId)
@@ -490,9 +504,9 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
                 employeeIds = (allEmps || [])
                     .filter(e => (e.reporting_manager || '').trim().toLowerCase() === myName)
                     .map(e => e.employee_id);
-
-                if (employeeIds.length === 0) return res.json({ success: true, breaks: [] });
             }
+
+            if (employeeIds.length === 0) return res.json({ success: true, breaks: [] });
 
             // IST day boundaries
             const now = new Date();
@@ -505,18 +519,17 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
                 .select('id, employee_id, break_start, break_end, break_duration_minutes, break_type, attendance_date, break_note')
                 .gte('break_start', startOfDay)
                 .lte('break_start', endOfDay)
+                .in('employee_id', employeeIds)
                 .order('break_start', { ascending: true });
-
-            if (employeeIds !== null) query = query.in('employee_id', employeeIds);
 
             let { data: breaks, error } = await query;
             if (error && /break_note|does not exist|schema cache/i.test(error.message || '')) {
-                let fallbackQuery = supabase.from('employee_breaks')
+                const fallbackQuery = supabase.from('employee_breaks')
                     .select('id, employee_id, break_start, break_end, break_duration_minutes, break_type, attendance_date')
                     .gte('break_start', startOfDay)
                     .lte('break_start', endOfDay)
+                    .in('employee_id', employeeIds)
                     .order('break_start', { ascending: true });
-                if (employeeIds !== null) fallbackQuery = fallbackQuery.in('employee_id', employeeIds);
                 ({ data: breaks, error } = await fallbackQuery);
             }
             if (error) throw error;
@@ -526,7 +539,8 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
             if (ids.length > 0) {
                 const { data: emps } = await supabase.from('employees')
                     .select('employee_id, first_name, last_name, designation, department')
-                    .in('employee_id', ids);
+                    .in('employee_id', ids)
+                    .eq('is_active', true);
                 (emps || []).forEach(e => { empMap[e.employee_id] = e; });
             }
 

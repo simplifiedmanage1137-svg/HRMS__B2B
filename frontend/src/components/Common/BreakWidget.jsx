@@ -550,8 +550,15 @@ export default function BreakWidget({ isClockedIn = false, isClockedOut = false,
         setActing(true); setError('');
         try {
             const res = await axios.post(API_ENDPOINTS.BREAK_START, { break_type: breakType, note });
+            // The button/timer must flip to "on break" the instant this response lands — it
+            // already carries everything needed for that. fetchStatus() below additionally
+            // refreshes used_break_types/session_breaks (which this response doesn't include),
+            // but that's secondary UI (which OTHER break buttons show as "already used") and
+            // is fetched in the background rather than holding the button disabled for it —
+            // the server independently re-validates "already used" on the next start attempt
+            // regardless, so a moment of stale client-side state here can't cause a double-use.
             setActiveBreak(res.data.break);
-            await fetchStatus();
+            fetchStatus();
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to start break');
         } finally { setActing(false); }
@@ -560,9 +567,13 @@ export default function BreakWidget({ isClockedIn = false, isClockedOut = false,
     const handleEnd = async () => {
         setActing(true); setError('');
         try {
-            await axios.post(API_ENDPOINTS.BREAK_END);
+            const res = await axios.post(API_ENDPOINTS.BREAK_END);
             setActiveBreak(null);
-            await fetchStatus();
+            // Apply the totals this response already carries immediately; fetchStatus() below
+            // is only needed for used_break_types/session_breaks and runs in the background —
+            // see handleStart above for why that's safe.
+            if (res.data.total_break_seconds_today != null) setTotalBreakSecondsToday(res.data.total_break_seconds_today);
+            fetchStatus();
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to end break');
         } finally { setActing(false); }

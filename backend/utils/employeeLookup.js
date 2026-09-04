@@ -23,11 +23,16 @@ const getEmployeeById = async (employeeId) => {
     return data;
 };
 
+// Scoped to active employees only — this is the shared primitive behind "who's on my
+// team" everywhere (team attendance report, break widgets, regularization scoping, manager
+// dashboards), so a deactivated employee must drop out of every one of those views the
+// moment they're deactivated, not just the employee list itself.
 const getTeamEmployeeIdsByManagerName = async (managerName) => {
     if (!managerName) return [];
     const { data, error } = await supabase
         .from('employees')
-        .select('employee_id, reporting_manager');
+        .select('employee_id, reporting_manager')
+        .eq('is_active', true);
     if (error || !data) {
         console.error('❌ Error fetching team members for manager:', error);
         return [];
@@ -55,7 +60,8 @@ const employeeHasDirectReports = async (employeeName) => {
     if (!employeeName) return false;
     const { data, error } = await supabase
         .from('employees')
-        .select('employee_id, reporting_manager');
+        .select('employee_id, reporting_manager')
+        .eq('is_active', true);
     if (error || !data) {
         console.error('❌ Error checking direct reports for:', employeeName, error);
         return false;

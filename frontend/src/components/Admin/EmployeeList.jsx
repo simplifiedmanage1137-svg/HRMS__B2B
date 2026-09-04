@@ -705,7 +705,10 @@ const EmployeeList = () => {
   const fetchEmployees = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(API_ENDPOINTS.EMPLOYEES);
+      // This page's whole job is managing both Active and Inactive employees (its own tabs
+      // filter is_active client-side below) — explicitly ask for everyone, since the backend
+      // now defaults to active-only for every other caller of this endpoint.
+      const response = await axios.get(API_ENDPOINTS.EMPLOYEES, { params: { active: 'all' } });
       const data = Array.isArray(response.data) ? response.data
         : Array.isArray(response.data?.data) ? response.data.data : [];
       setEmployees(data);

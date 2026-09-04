@@ -379,8 +379,9 @@ const AddEmployee = () => {
     try {
       console.log('🔍 Generating employee ID for joining date:', tempPersonalData.joining_date);
 
-      // Get all employees to check existing IDs
-      const response = await axios.get(API_ENDPOINTS.EMPLOYEES);
+      // Get all employees (active AND inactive) to check existing IDs — a deactivated
+      // employee's employee_id is still taken and must never be reissued to someone new.
+      const response = await axios.get(API_ENDPOINTS.EMPLOYEES, { params: { active: 'all' } });
       let employees = [];
 
       if (Array.isArray(response.data)) {

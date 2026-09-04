@@ -1467,35 +1467,12 @@ const Attendance = () => {
     setMessage({ type: '', text: '' });
 
     try {
-      console.log('🔍 Checking for incomplete attendance records before clock-in...');
-      const missedResponse = await axios.get(API_ENDPOINTS.ATTENDANCE_MISSED_CLOCKOUTS(user.employeeId));
-      const missedRecords = missedResponse.data.missed_clockouts || [];
-
-      const incompleteRecord = missedRecords.find(r =>
-        !r.has_clock_out &&
-        !r.is_regularized &&
-        !r.regularization_requested &&
-        r.regularization_status !== 'rejected' &&
-        (r.is_today === true || r.has_active_session === true)  // Block for today's OR any active session
-      );
-
-      if (incompleteRecord) {
-        console.log('⚠️ Found incomplete attendance record:', incompleteRecord);
-        setMessage({
-          type: 'warning',
-          text: `You have an incomplete attendance record from ${incompleteRecord.attendance_date}. Please clock out first.`
-        });
-
-        setShowPreviousDayClockOut({
-          show: true,
-          attendance_id: incompleteRecord.id,
-          attendance_date: incompleteRecord.attendance_date,
-          clock_in_time: incompleteRecord.clock_in_ist || incompleteRecord.clock_in
-        });
-        setLoading(false);
-        return;
-      }
-
+      // No separate "check for incomplete records first" round-trip — POST /clock-in already
+      // performs this exact check itself server-side (previous-day incomplete attendance +
+      // active-session checks in attendanceController.clockIn) and returns the same
+      // `has_missed_clockout` + `attendance_date` shape the catch block below already handles.
+      // The old pre-check here just duplicated that call, adding a full extra round-trip to
+      // every single clock-in with no added safety — the backend was always the real guard.
       const response = await axios.post(API_ENDPOINTS.ATTENDANCE_CLOCK_IN, {
         employee_id: user.employeeId,
         latitude: null,
@@ -1538,10 +1515,14 @@ const Attendance = () => {
       saveSessionToStorage(session);
       setHasClockedOutToday(false);
 
-      // Refresh history and missed clock-outs; attendance state is already set from API response above
+      // Refresh history and missed clock-outs in the background — attendance/session state
+      // is already fully set above from the clock-in response itself, so the button/timer
+      // already reflect "clocked in" immediately. These two calls only refresh secondary UI
+      // (the history table, the missed-clockout banner) and both have their own internal
+      // error handling, so there's nothing to await or catch here.
       setHistoryPage(0);
-      await fetchAttendanceHistory(0);
-      await fetchMissedClockOuts();
+      fetchAttendanceHistory(0);
+      fetchMissedClockOuts();
 
     } catch (error) {
       console.error('❌ Clock-in error:', error);
@@ -1554,11 +1535,28 @@ const Attendance = () => {
           text: errorData.message || `You have an incomplete attendance record from ${errorData.attendance_date}.`
         });
 
+        // The backend's has_missed_clockout error only carries attendance_date, not
+        // attendance_id/clock_in_time (clockOutMissed needs attendance_id) — resolve those
+        // here instead, but only in this rare interrupt path rather than on every clock-in.
+        let attendanceId = errorData.attendance_id;
+        let clockInTime = errorData.clock_in_time;
+        if (!attendanceId) {
+          try {
+            const missedResponse = await axios.get(API_ENDPOINTS.ATTENDANCE_MISSED_CLOCKOUTS(user.employeeId));
+            const missedRecords = missedResponse.data.missed_clockouts || [];
+            const match = missedRecords.find(r => r.attendance_date === errorData.attendance_date && !r.has_clock_out);
+            if (match) {
+              attendanceId = match.id;
+              clockInTime = match.clock_in_ist || match.clock_in;
+            }
+          } catch { /* best-effort — the modal still shows the date/message either way */ }
+        }
+
         setShowPreviousDayClockOut({
           show: true,
-          attendance_id: errorData.attendance_id,
+          attendance_id: attendanceId,
           attendance_date: errorData.attendance_date,
-          clock_in_time: errorData.clock_in_time
+          clock_in_time: clockInTime
         });
       } else {
         setMessage({ type: 'danger', text: errorData?.message || error.message });
@@ -1629,9 +1627,11 @@ const Attendance = () => {
       setHasClockedOutToday(true);
       setMissedClockOuts([]);
 
+      // Non-blocking — same reasoning as handleClockIn above: the clock-out itself has
+      // already succeeded and the button/state already reflect it.
       setHistoryPage(0);
-      await fetchAttendanceHistory(0);
-      await fetchMissedClockOuts();
+      fetchAttendanceHistory(0);
+      fetchMissedClockOuts();
 
     } catch (error) {
       console.error('❌ Clock-out error:', error);
