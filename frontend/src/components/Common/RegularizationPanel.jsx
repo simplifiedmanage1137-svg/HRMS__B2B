@@ -14,7 +14,23 @@ import {
 import {
   FaCheckCircle, FaTimesCircle, FaRegClock, FaSearch, FaEye,
   FaSyncAlt, FaInfoCircle, FaUserTie, FaPaperclip, FaBan, FaHistory,
+  FaCheckDouble, FaLayerGroup,
 } from 'react-icons/fa';
+
+// Bulk approve/reject re-use the same single-item endpoints (each already validates
+// status==='pending' and re-checks authorization per request, so it's safe to call in a
+// loop) — run a few at a time rather than all at once, so a 30+ request batch doesn't fire
+// 30 simultaneous writes (each of which recalculates attendance) against the DB at once.
+const BULK_CONCURRENCY = 5;
+const runInBatches = async (items, worker, concurrency = BULK_CONCURRENCY) => {
+  const results = [];
+  for (let i = 0; i < items.length; i += concurrency) {
+    const chunk = items.slice(i, i + concurrency);
+    const chunkResults = await Promise.allSettled(chunk.map(worker));
+    results.push(...chunkResults);
+  }
+  return results;
+};
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 
@@ -109,6 +125,15 @@ export default function RegularizationPanel({ embedded = false, onRequestCountCh
   const [rejectionReason, setRejectionReason] = useState('');
   const [processing, setProcessing] = useState(false);
 
+  // Bulk select/approve/reject — only pending, actionable requests are ever selectable.
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [showBulkApproveModal, setShowBulkApproveModal] = useState(false);
+  const [showBulkRejectModal, setShowBulkRejectModal] = useState(false);
+  const [bulkNotes, setBulkNotes] = useState('');
+  const [bulkRejectionReason, setBulkRejectionReason] = useState('');
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
+
   const fetchRequests = useCallback(async () => {
     try {
       setLoading(true);
@@ -132,6 +157,10 @@ export default function RegularizationPanel({ embedded = false, onRequestCountCh
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter, typeFilter, dateFrom, dateTo, managerId]);
+
+  // A selection made under one filter view shouldn't silently carry over (and act on rows
+  // the admin can no longer see) once the filters change.
+  useEffect(() => { setSelectedIds(new Set()); }, [filter, typeFilter, dateFrom, dateTo, managerId]);
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
@@ -224,6 +253,96 @@ export default function RegularizationPanel({ embedded = false, onRequestCountCh
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
     } catch (error) {
       setMessage({ type: 'danger', text: error.response?.data?.message || 'Failed to cancel request' });
+    }
+  };
+
+  // ── Bulk select / approve / reject ────────────────────────────────────────────
+  const toggleSelectOne = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (selectableIds) => {
+    setSelectedIds(prev => {
+      const allSelected = selectableIds.length > 0 && selectableIds.every(id => prev.has(id));
+      return allSelected ? new Set() : new Set(selectableIds);
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const runBulkApprove = async () => {
+    const ids = [...selectedIds];
+    setBulkProcessing(true);
+    setBulkProgress({ done: 0, total: ids.length });
+    let succeeded = 0;
+    const failures = [];
+    // No approved_clock_in/out/status/break_duration sent — the backend already falls back
+    // to each request's own requested values when they're omitted (see
+    // regularizationController.approveRequest), which is exactly "approve as requested".
+    await runInBatches(ids, async (id) => {
+      try {
+        await axios.put(API_ENDPOINTS.ATTENDANCE_APPROVE_REGULARIZATION(id), { admin_notes: bulkNotes.trim() || undefined });
+        succeeded++;
+      } catch (error) {
+        const req = requests.find(r => r.id === id);
+        failures.push(`${req?.employee_name || id}: ${error.response?.data?.message || 'Failed'}`);
+      } finally {
+        setBulkProgress(p => ({ ...p, done: p.done + 1 }));
+      }
+    });
+
+    setBulkProcessing(false);
+    setShowBulkApproveModal(false);
+    setBulkNotes('');
+    clearSelection();
+    await fetchRequests();
+
+    if (failures.length === 0) {
+      setMessage({ type: 'success', text: `Approved ${succeeded} request${succeeded === 1 ? '' : 's'} successfully.` });
+    } else {
+      setMessage({
+        type: 'warning',
+        text: `Approved ${succeeded} of ${ids.length}. Failed: ${failures.slice(0, 5).join('; ')}${failures.length > 5 ? ` (+${failures.length - 5} more)` : ''}`,
+      });
+    }
+  };
+
+  const runBulkReject = async () => {
+    if (!bulkRejectionReason || bulkRejectionReason.trim().length < 10) return;
+    const ids = [...selectedIds];
+    setBulkProcessing(true);
+    setBulkProgress({ done: 0, total: ids.length });
+    let succeeded = 0;
+    const failures = [];
+    await runInBatches(ids, async (id) => {
+      try {
+        await axios.put(API_ENDPOINTS.ATTENDANCE_REJECT_REGULARIZATION(id), { rejection_reason: bulkRejectionReason.trim() });
+        succeeded++;
+      } catch (error) {
+        const req = requests.find(r => r.id === id);
+        failures.push(`${req?.employee_name || id}: ${error.response?.data?.message || 'Failed'}`);
+      } finally {
+        setBulkProgress(p => ({ ...p, done: p.done + 1 }));
+      }
+    });
+
+    setBulkProcessing(false);
+    setShowBulkRejectModal(false);
+    setBulkRejectionReason('');
+    clearSelection();
+    await fetchRequests();
+
+    if (failures.length === 0) {
+      setMessage({ type: 'success', text: `Rejected ${succeeded} request${succeeded === 1 ? '' : 's'}.` });
+    } else {
+      setMessage({
+        type: 'warning',
+        text: `Rejected ${succeeded} of ${ids.length}. Failed: ${failures.slice(0, 5).join('; ')}${failures.length > 5 ? ` (+${failures.length - 5} more)` : ''}`,
+      });
     }
   };
 
@@ -340,6 +459,27 @@ export default function RegularizationPanel({ embedded = false, onRequestCountCh
         </Row>
       </div>
 
+      {selectedIds.size > 0 && (
+        <div
+          className="d-flex flex-wrap align-items-center gap-2 mb-3"
+          style={{ background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 12, padding: '10px 14px' }}
+        >
+          <FaLayerGroup className="text-indigo" style={{ color: '#4338ca' }} />
+          <span className="small fw-semibold" style={{ color: '#3730a3' }}>
+            {selectedIds.size} request{selectedIds.size > 1 ? 's' : ''} selected
+          </span>
+          <div className="ms-auto d-flex gap-2 flex-wrap">
+            <Button variant="success" size="sm" onClick={() => setShowBulkApproveModal(true)}>
+              <FaCheckCircle className="me-1" size={12} /> Approve Selected
+            </Button>
+            <Button variant="danger" size="sm" onClick={() => setShowBulkRejectModal(true)}>
+              <FaTimesCircle className="me-1" size={12} /> Reject Selected
+            </Button>
+            <Button variant="outline-secondary" size="sm" onClick={clearSelection}>Clear</Button>
+          </div>
+        </div>
+      )}
+
       {filteredRequests.length === 0 ? (
         <Card className="border-0 shadow-sm" style={{ borderRadius: 16 }}>
           <Card.Body className="text-center py-5">
@@ -354,6 +494,21 @@ export default function RegularizationPanel({ embedded = false, onRequestCountCh
               <Table hover className="mb-0" style={{ minWidth: 980 }}>
                 <thead className="bg-light">
                   <tr className="small">
+                    <th className="fw-normal" style={{ width: 36 }}>
+                      {(() => {
+                        const selectableIds = filteredRequests.filter(r => r.status === 'pending' && r.can_act).map(r => r.id);
+                        const allSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.has(id));
+                        return (
+                          <Form.Check
+                            type="checkbox"
+                            checked={allSelected}
+                            disabled={selectableIds.length === 0}
+                            onChange={() => toggleSelectAll(selectableIds)}
+                            title="Select all actionable requests"
+                          />
+                        );
+                      })()}
+                    </th>
                     <th className="fw-normal">Employee</th>
                     <th className="fw-normal d-none d-md-table-cell">Department</th>
                     <th className="fw-normal d-none d-lg-table-cell">Reporting Manager</th>
@@ -366,8 +521,19 @@ export default function RegularizationPanel({ embedded = false, onRequestCountCh
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredRequests.map((request) => (
-                    <tr key={request.id}>
+                  {filteredRequests.map((request) => {
+                    const isSelectable = request.status === 'pending' && request.can_act;
+                    return (
+                    <tr key={request.id} className={selectedIds.has(request.id) ? 'table-active' : ''}>
+                      <td className="small">
+                        {isSelectable && (
+                          <Form.Check
+                            type="checkbox"
+                            checked={selectedIds.has(request.id)}
+                            onChange={() => toggleSelectOne(request.id)}
+                          />
+                        )}
+                      </td>
                       <td className="small">
                         <div className="fw-semibold text-truncate" style={{ maxWidth: '140px' }}>{request.employee_name}</div>
                         <small className="text-muted">{request.employee_id}</small>
@@ -409,7 +575,8 @@ export default function RegularizationPanel({ embedded = false, onRequestCountCh
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </Table>
             </div>
@@ -594,6 +761,70 @@ export default function RegularizationPanel({ embedded = false, onRequestCountCh
           <Button variant="secondary" size="sm" onClick={() => setShowRejectModal(false)}>Cancel</Button>
           <Button variant="danger" size="sm" onClick={handleReject} disabled={processing || rejectionReason.trim().length < 10}>
             {processing ? <Spinner size="sm" animation="border" /> : 'Reject Request'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Bulk approve modal — approves every selected request using its own requested
+          values (regularizationController.approveRequest already falls back to those when
+          no override is sent), with one optional shared note applied to all of them. */}
+      <Modal show={showBulkApproveModal} onHide={() => !bulkProcessing && setShowBulkApproveModal(false)} centered>
+        <Modal.Header closeButton={!bulkProcessing} className="bg-success text-white">
+          <Modal.Title className="h6"><FaCheckDouble className="me-2" /> Approve {selectedIds.size} Regularization Request{selectedIds.size > 1 ? 's' : ''}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {bulkProcessing ? (
+            <div className="text-center py-3">
+              <Spinner animation="border" size="sm" className="mb-2" />
+              <div className="small text-muted">Approving {bulkProgress.done} of {bulkProgress.total}…</div>
+            </div>
+          ) : (
+            <>
+              <Alert variant="warning" className="small py-2">
+                Each request will be approved using its own requested clock-in/out and status —
+                the same as clicking Approve individually. Working hours, late marks, and
+                overtime are recalculated for every one of them.
+              </Alert>
+              <Form.Group>
+                <Form.Label className="fw-semibold small">Notes (Optional, applied to all)</Form.Label>
+                <Form.Control as="textarea" rows={2} value={bulkNotes} onChange={(e) => setBulkNotes(e.target.value)} />
+              </Form.Group>
+            </>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" size="sm" onClick={() => setShowBulkApproveModal(false)} disabled={bulkProcessing}>Cancel</Button>
+          <Button variant="success" size="sm" onClick={runBulkApprove} disabled={bulkProcessing}>
+            {bulkProcessing ? <Spinner size="sm" animation="border" /> : `Approve ${selectedIds.size} Request${selectedIds.size > 1 ? 's' : ''}`}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Bulk reject modal — one shared rejection reason applied to every selected request. */}
+      <Modal show={showBulkRejectModal} onHide={() => !bulkProcessing && setShowBulkRejectModal(false)} centered>
+        <Modal.Header closeButton={!bulkProcessing} className="bg-danger text-white">
+          <Modal.Title className="h6"><FaCheckDouble className="me-2" /> Reject {selectedIds.size} Regularization Request{selectedIds.size > 1 ? 's' : ''}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {bulkProcessing ? (
+            <div className="text-center py-3">
+              <Spinner animation="border" size="sm" className="mb-2" />
+              <div className="small text-muted">Rejecting {bulkProgress.done} of {bulkProgress.total}…</div>
+            </div>
+          ) : (
+            <Form.Group>
+              <Form.Label className="fw-semibold small">
+                Rejection Reason * <span className="text-muted fw-normal">(min 10 characters, applied to all)</span>
+              </Form.Label>
+              <Form.Control as="textarea" rows={3} value={bulkRejectionReason} onChange={(e) => setBulkRejectionReason(e.target.value)} placeholder="Explain why these requests are being rejected…" />
+              <Form.Text className="text-muted">This will be visible to each employee.</Form.Text>
+            </Form.Group>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" size="sm" onClick={() => setShowBulkRejectModal(false)} disabled={bulkProcessing}>Cancel</Button>
+          <Button variant="danger" size="sm" onClick={runBulkReject} disabled={bulkProcessing || bulkRejectionReason.trim().length < 10}>
+            {bulkProcessing ? <Spinner size="sm" animation="border" /> : `Reject ${selectedIds.size} Request${selectedIds.size > 1 ? 's' : ''}`}
           </Button>
         </Modal.Footer>
       </Modal>
