@@ -5,6 +5,7 @@ const path = require('path');
 const attendanceController = require('../controllers/attendanceController');
 const regularizationController = require('../controllers/regularizationController');
 const { isAdminOrFinanceOrDesktopSupport } = require('../middleware/auth');
+const { getEmployeeById, getTeamEmployeeIdsByManagerName } = require('../utils/employeeLookup');
 
 // Same 4MB cap + extension whitelist as the onboarding attachment upload.
 const regularizationUpload = multer({
@@ -668,6 +669,88 @@ module.exports = (supabase, authenticateToken, requireAdmin) => {
             });
         } catch (err) {
             console.error('[break] team-stats error:', err);
+            return res.status(500).json({ success: false, message: err.message });
+        }
+    });
+
+    // GET /api/attendance/team-login-break-report?start=&end=
+    // Backs the "Login & Break Report" export on the Manager Panel. Purely a data-fetch
+    // endpoint — the frontend only calls this when the user clicks Export (never on
+    // page load / date-change) and merges the two arrays into one row per employee/day
+    // itself. Role scoping is deliberately different from /break/team-stats above:
+    // admin and hr get the whole company, but sub_admin ("Manager") is scoped to their
+    // own team here, same as manager (TL) — this report is meant to answer "who reports
+    // to me", not "show me everyone", for both of those roles.
+    router.get('/team-login-break-report', authenticateToken, async (req, res) => {
+        const { employeeId, role } = req.user;
+        const { start, end } = req.query;
+        try {
+            if (!start || !end) {
+                return res.status(400).json({ success: false, message: 'start and end dates are required' });
+            }
+            const startMs = new Date(start).getTime();
+            const endMs = new Date(end).getTime();
+            if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs < startMs) {
+                return res.status(400).json({ success: false, message: 'Invalid date range' });
+            }
+            const MAX_RANGE_DAYS = 92;
+            if ((endMs - startMs) / 86400000 > MAX_RANGE_DAYS) {
+                return res.status(400).json({ success: false, message: `Date range too large — please select ${MAX_RANGE_DAYS} days or fewer.` });
+            }
+
+            let employeeIds;
+            let scope;
+            if (role === 'admin' || role === 'hr') {
+                const { data: allEmps, error } = await supabase.from('employees')
+                    .select('employee_id').eq('is_active', true);
+                if (error) throw error;
+                employeeIds = (allEmps || []).map(e => e.employee_id);
+                scope = 'all';
+            } else {
+                const caller = await getEmployeeById(employeeId);
+                if (!caller) return res.json({ success: true, scope: 'team', team_members: [], attendance: [], breaks: [] });
+                const callerName = `${caller.first_name} ${caller.last_name}`.trim();
+                employeeIds = await getTeamEmployeeIdsByManagerName(callerName);
+                scope = 'team';
+            }
+
+            if (!employeeIds || employeeIds.length === 0) {
+                return res.json({ success: true, scope, team_members: [], attendance: [], breaks: [] });
+            }
+
+            const [teamRes, attendanceRes, breaksRes] = await Promise.all([
+                supabase.from('employees')
+                    .select('employee_id, first_name, last_name, department, designation')
+                    .in('employee_id', employeeIds).eq('is_active', true),
+                supabase.from('attendance')
+                    .select('employee_id, attendance_date, clock_in, clock_in_ist, clock_out, clock_out_ist, total_hours, total_minutes, status, is_regularized, updated_at, created_at')
+                    .in('employee_id', employeeIds).gte('attendance_date', start).lte('attendance_date', end),
+                supabase.from('employee_breaks')
+                    .select('employee_id, attendance_date, break_start, break_end, break_duration_minutes, break_type')
+                    .in('employee_id', employeeIds).gte('attendance_date', start).lte('attendance_date', end),
+            ]);
+            if (teamRes.error) throw teamRes.error;
+            if (attendanceRes.error) throw attendanceRes.error;
+            if (breaksRes.error) throw breaksRes.error;
+
+            // Same duplicate-row rule used by the admin attendance report/exports, so this
+            // report never disagrees with those about which punch is the "real" one.
+            const dedupedMap = {};
+            (attendanceRes.data || []).forEach(record => {
+                const dateKey = record.attendance_date ? record.attendance_date.split('T')[0] : record.attendance_date;
+                const key = `${record.employee_id}-${dateKey}`;
+                dedupedMap[key] = attendanceController._shared.pickBetterAttendanceRow(dedupedMap[key], record);
+            });
+
+            res.json({
+                success: true,
+                scope,
+                team_members: teamRes.data || [],
+                attendance: Object.values(dedupedMap),
+                breaks: breaksRes.data || [],
+            });
+        } catch (err) {
+            console.error('[attendance] team-login-break-report error:', err);
             return res.status(500).json({ success: false, message: err.message });
         }
     });

@@ -1,17 +1,19 @@
 // src/components/Employee/ManagerPanel.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaCalendarAlt, FaClock, FaExclamationTriangle, FaChartBar, FaStar, FaArrowLeft } from 'react-icons/fa';
+import { FaCalendarAlt, FaClock, FaExclamationTriangle, FaChartBar, FaStar, FaArrowLeft, FaFileExcel } from 'react-icons/fa';
 import ManagerLeaveRequests from './ManagerLeaveRequests';
 import ManagerShiftUpdate from './ManagerShiftUpdate';
 import RegularizationPanel from '../Common/RegularizationPanel';
 import SendNotice from '../Admin/SendNotice';
 import TeamAttendanceReport from './TeamAttendanceReport';
 import TeamRating from './TeamRating';
+import LoginBreakReport from './LoginBreakReport';
 
 const TABS = [
   { key: 'leaves', label: 'Team Leaves', icon: <FaCalendarAlt size={13} /> },
   { key: 'attendance', label: 'Team Attendance', icon: <FaChartBar size={13} /> },
+  { key: 'login-break-report', label: 'Login & Break Report', icon: <FaFileExcel size={13} /> },
   { key: 'shifts', label: 'Team Shifts', icon: <FaClock size={13} /> },
   { key: 'regularization', label: 'Regularizations', icon: <FaClock size={13} /> },
   { key: 'rating', label: 'Team Rating', icon: <FaStar size={13} /> },
@@ -63,6 +65,7 @@ const ManagerPanel = () => {
       <div>
         {activeTab === 'leaves' && <ManagerLeaveRequests embedded />}
         {activeTab === 'attendance' && <TeamAttendanceReport />}
+        {activeTab === 'login-break-report' && <LoginBreakReport />}
         {activeTab === 'shifts' && <ManagerShiftUpdate embedded />}
         {activeTab === 'regularization' && <RegularizationPanel embedded />}
         {activeTab === 'rating' && <TeamRating />}

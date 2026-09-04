@@ -260,6 +260,7 @@ export const API_ENDPOINTS = {
   BREAK_TEAM_ACTIVE:  ep('/api/attendance/break/team-active'),
   BREAK_TEAM_TODAY:   ep('/api/attendance/break/team-today'),
   BREAK_TEAM_STATS:   ep('/api/attendance/break/team-stats'),
+  TEAM_LOGIN_BREAK_REPORT: ep('/api/attendance/team-login-break-report'),
 
   // Geofence
   GEOFENCE_LIST:   ep('/api/geofence/list'),
